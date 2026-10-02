@@ -7,7 +7,9 @@ import { businessesRoute } from "./routes/businesses";
 import { creditRoute } from "./routes/credit";
 import { platformRoute } from "./routes/platform";
 import { sweepReconnections } from "./reconnection/queue";
+import { sweepUnsettledCollections } from "./store-collections";
 import { sweepDirectPayments } from "./direct-payments/validation";
+import { backfillPayerReferences } from "./direct-payments/payer-reference";
 import { releaseQueuedForCredit, sweepTopUps } from "./credit/topups";
 import { paymentsRoute } from "./routes/payments";
 import { paymentRequestsRoute } from "./routes/payment-requests";
@@ -23,6 +25,8 @@ import { sweepApiCounters } from "./routes/v1/middleware";
 import { prunePanelLinks } from "./links/prune";
 import { internalError } from "./routes/v1/envelope";
 import { landingPublicRoute } from "./routes/landing";
+import { storeRoute } from "./routes/store";
+import { cashPointsRoute } from "./routes/cash-points";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -59,6 +63,11 @@ app.route("/credit", creditRoute);
 app.route("/platform", platformRoute);
 app.route("/direct-payments", directPaymentsRoute);
 app.route("/support", supportRoute);
+/* cash-at-stores: the shopkeeper's area (D2) — its own actor, its own
+   guard, inside CORS like every browser door */
+app.route("/store", storeRoute);
+/* cash-at-stores D23: *Puntos de pago*, the business's side of the cash */
+app.route("/cash-points", cashPointsRoute);
 /* landing-page D5/D6: the landing page's two public doors — the request
    and the beacon. Inside CORS, unlike /v1: the page's script calls the
    request door from the landing's origin (ALLOWED_ORIGINS, D14). */
@@ -100,9 +109,18 @@ export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledController, env: Bindings, ctx: ExecutionContext) {
     ctx.waitUntil(
-      sweepReconnections(env).then((report) => {
-        if (report.claimed) console.log("reconnection sweep:", JSON.stringify(report));
-      }),
+      /* cash-at-stores T072: a cash payment a dead request left unsettled,
+         or settled without its cash-book movement, is finished first, so
+         its action joins the queue this same minute. Speaks only when it
+         did something. */
+      sweepUnsettledCollections(env)
+        .then((report) => {
+          if (report.settled || report.movements || report.failed) console.log("store collection sweep:", JSON.stringify(report));
+        })
+        .then(() => sweepReconnections(env))
+        .then((report) => {
+          if (report.claimed) console.log("reconnection sweep:", JSON.stringify(report));
+        }),
     );
     /* prepaid-credit D8: the release runs before the direct sweep, so a
        business that just topped up sees its queue move this same minute */
@@ -114,6 +132,14 @@ export default {
         .then(() => sweepDirectPayments(env))
         .then((report) => {
           if (report.claimed) console.log("direct-payment sweep:", JSON.stringify(report));
+        })
+        /* payment-without-receipt D5: the references of the links that
+           existed when a business turned the feature on, twenty links per
+           business per minute, oldest first. Speaks only when it assigned
+           something. */
+        .then(() => backfillPayerReferences(env))
+        .then((report) => {
+          if (report.assigned) console.log("payer reference backfill:", JSON.stringify(report));
         })
         /* automated-collections-api D8: the webhook retries ride the
            same trigger, chained after the verdicts that produce them so

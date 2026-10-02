@@ -2,6 +2,7 @@ import {
   IntegrationError,
   type CapabilityName,
   type CustomerDebtAnswer,
+  type CustomerSearchAnswer,
   type IntegrationCapabilities,
   type OpenInvoice,
   type ReceivablesPage,
@@ -17,6 +18,7 @@ import {
 } from "./client";
 import { debtFor, nothingOwedIsProven } from "./debt";
 import { wisphubFor, type WispHubAddress } from "./factory";
+import { paymentActions } from "./actions";
 
 /* The WispHub adapter's side of two core capabilities
    (constitution IX, cobros-in-links D18): `receivables`, a block of the
@@ -29,7 +31,16 @@ import { wisphubFor, type WispHubAddress } from "./factory";
    path, a cursor's insides or a `WispHubError`. */
 
 /* What this adapter can do, as the session names it (D13) */
-export const WISPHUB_CAPABILITY_NAMES = ["receivables", "customerDebt"] as const satisfies readonly CapabilityName[];
+export const WISPHUB_CAPABILITY_NAMES = [
+  "receivables",
+  "customerDebt",
+  /* payment-without-receipt D4 */
+  "customersWithPhone",
+  /* cash-at-stores D8, D9: the counter's search, and the actions a
+     confirmed payment runs */
+  "customerSearch",
+  "paymentActions",
+] as const satisfies readonly CapabilityName[];
 
 type AdapterEnv = { WISPHUB_BASE_URL?: string };
 
@@ -158,6 +169,16 @@ function translate(e: WispHubError): IntegrationError {
   );
 }
 
+/* A read whose failures leave as the core's two words */
+async function translated<T>(read: () => Promise<T>, what: string): Promise<T> {
+  try {
+    return await read();
+  } catch (e) {
+    if (e instanceof WispHubError) throw translate(e);
+    throw new IntegrationError("INTEGRATION_UNAVAILABLE", `${what}: ${String(e)}`);
+  }
+}
+
 /* One block of open invoices, live (D3): one `pendingInvoicesPage`
    call on a fresh client, so the block has its own operation budget
    (provider-latency D1). It never reads `readPendingInvoices`, the
@@ -257,6 +278,9 @@ async function customerDebt(
   const pending = { invoices, complete: true, source: "live" as const };
   const debt = debtFor(record, pending);
   const answer = {
+    /* cash-at-stores D8: from the record this operation already read —
+       never its phone */
+    customer: { providerCustomerId: String(record.wisphubId), name: record.name, zone: record.zone },
     totalCents: debt.totalCents,
     invoiceCents: debt.invoiceCents,
     carriedBalanceCents: debt.carriedBalanceCents,
@@ -275,6 +299,31 @@ async function customerDebt(
   return { state: "unconfirmed" };
 }
 
+/* cash-at-stores D8, D24: the counter's search — the Links search's own
+   provider question (`searchCustomers`: the four `__contains` filters on
+   nombre, apellido, usuario and telefono, measured case- and
+   accent-insensitive 2026-09-20), read live with no fallback to
+   Devolada's links. The merge of four filters can exceed `limit`; the
+   first `limit` are kept and `more` says the rest exist. The phone is a
+   search key and never leaves this function (FR-017). */
+async function customerSearch(
+  integration: WispHubAddress,
+  env: AdapterEnv,
+  text: string,
+  limit: number,
+): Promise<CustomerSearchAnswer> {
+  const found = await translated(() => wisphubFor(integration, env).searchCustomers(text, limit), "customer search");
+  return {
+    rows: found.customers.slice(0, limit).map((c) => ({
+      usuario: c.usuario,
+      name: c.name,
+      zone: c.zone,
+      providerCustomerId: String(c.wisphubId),
+    })),
+    more: found.customers.length > limit || found.more.length > 0,
+  };
+}
+
 /* Both capabilities, for one business's integration. Each call builds a
    fresh client, so each block and each debt has its own budget. */
 export function wisphubCapabilities(integration: WispHubAddress, env: AdapterEnv): IntegrationCapabilities {
@@ -285,5 +334,16 @@ export function wisphubCapabilities(integration: WispHubAddress, env: AdapterEnv
     customerDebt: {
       of: (usuario) => customerDebt(integration, env, usuario),
     },
+    /* payment-without-receipt D4: the filter's words and its paging are
+       the client's; here WispHub's failures become the core's two */
+    customersWithPhone: {
+      of: (phone) => translated(() => wisphubFor(integration, env).customersWithPhone(phone), "customers by phone"),
+      phoneOf: (usuario) =>
+        translated(async () => (await wisphubFor(integration, env).getCustomer(usuario))?.phone ?? null, "customer phone"),
+    },
+    customerSearch: {
+      find: (text, limit) => customerSearch(integration, env, text, limit),
+    },
+    paymentActions: paymentActions(integration, env),
   };
 }

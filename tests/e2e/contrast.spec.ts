@@ -1,7 +1,16 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { ADMIN, PAGO } from "../../playwright.config";
-import { stubAdminApi, stubOperatorReaderApi, stubPagoClosed, stubPorCobrarSearch } from "./stubs";
+import { ADMIN, PAGO, RED } from "../../playwright.config";
+import {
+  stubAdminApi,
+  stubAdminStoreApi,
+  stubCashPointsApi,
+  stubOperatorReaderApi,
+  stubOperatorStoresApi,
+  stubPagoClosed,
+  stubPorCobrarSearch,
+  stubRedApi,
+} from "./stubs";
 
 /* docs/legacy/polish/dark-and-contrast.spec.md, the half a token file cannot
    prove. contrast-lint measures the palette; this measures the pixels —
@@ -138,5 +147,151 @@ for (const theme of ["light", "dark"] as const) {
       (v) => `${v.id}: ${v.nodes.map((n) => n.failureSummary?.split("\n").slice(-1)[0]).join(" | ")}`,
     );
     expect(readable, `Lector in ${theme}`).toEqual([]);
+  });
+}
+
+/* cash-at-stores US1–US5 (T033, T040, T051, T060, T083, T113): every new screen, measured where
+   its inks land — the store app's counter and cash book on the phone, and
+   the panel's Tiendas tab, cash rows in Pagos and Puntos de pago. The
+   statuses there (Entrega pendiente, En disputa, Tienda suspendida, the
+   correction's warning) are icon + text; only a browser can say whether
+   their colours met the surfaces under them, in either theme. */
+const storeScreens: {
+  name: string;
+  url: string;
+  stub: (page: Page) => Promise<void>;
+  open?: (page: Page) => Promise<void>;
+  ready: string;
+}[] = [
+  {
+    name: "Cobrar: búsqueda",
+    url: `${RED}/`,
+    stub: (page) => stubRedApi(page),
+    open: async (page) => {
+      await page.getByLabel("Buscar cliente").fill("guadalupe");
+    },
+    ready: "Guadalupe Reyes Hernández",
+  },
+  { name: "Cobrar: adeudo", url: `${RED}/cobro/greyes@wifiplus`, stub: (page) => stubRedApi(page), ready: "Total a cobrar" },
+  { name: "Cobrar: pago registrado", url: `${RED}/cobros/pay-1`, stub: (page) => stubRedApi(page), ready: "DV-7K2Q9M" },
+  { name: "Cobrar: avisando al negocio", url: `${RED}/cobros/pay-1`, stub: (page) => stubRedApi(page, { collection: "queued" }), ready: "Estamos avisando al negocio" },
+  { name: "Entrar", url: `${RED}/entrar`, stub: async () => {}, ready: "Olvidé mi contraseña" },
+  { name: "Recuperar", url: `${RED}/recuperar`, stub: async () => {}, ready: "Volver a entrar" },
+  { name: "Invitación", url: `${RED}/invitacion/tok-1`, stub: (page) => stubRedApi(page), ready: "Abarrotes Lupita" },
+  {
+    name: "Tienda suspendida",
+    url: `${RED}/`,
+    stub: async (page) => {
+      /* T096: the screen as the app reaches it — the session answers that
+         the store is suspended (FR-014) */
+      await page.route("**/auth/me", (route) =>
+        route.request().resourceType() === "document"
+          ? route.fallback()
+          : route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ success: false, error: { code: "STORE_SUSPENDED" } }) }),
+      );
+    },
+    ready: "Tu tienda está suspendida",
+  },
+  {
+    name: "Cuenta de otro tipo",
+    url: `${RED}/`,
+    stub: async (page) => {
+      /* T083: a business member signed in on the store app (FR-013) */
+      await page.route("**/auth/me", (route) =>
+        route.request().resourceType() === "document"
+          ? route.fallback()
+          : route.fulfill({ contentType: "application/json", body: JSON.stringify({ success: true, data: { type: "business" } }) }),
+      );
+    },
+    ready: "Esta cuenta no es de una tienda",
+  },
+  { name: "Entregas", url: `${RED}/caja/entregas?businessId=business-1`, stub: (page) => stubRedApi(page), ready: "«Faltaron $200 en el sobre»" },
+  { name: "Movimientos de un negocio", url: `${RED}/movimientos?businessId=business-1&kind=collection`, stub: (page) => stubRedApi(page), ready: "Ver todos" },
+  /* At this suite's 1280px the store app is its desktop layout (D32): the
+     side menu, and the hand-overs beside the cash */
+  { name: "Mi caja", url: `${RED}/caja`, stub: (page) => stubRedApi(page), ready: "WiFi Plus dice:" },
+  {
+    /* T113: one screen on a phone, so the tab bar's inks stay measured */
+    name: "Cobrar en el teléfono",
+    url: `${RED}/`,
+    stub: (page) => stubRedApi(page),
+    open: async (page) => {
+      await page.setViewportSize({ width: 375, height: 812 });
+    },
+    ready: "Cobras para",
+  },
+  { name: "Registrar entrega", url: `${RED}/caja/entrega?businessId=business-1`, stub: (page) => stubRedApi(page), ready: "La entrega quedará pendiente" },
+  { name: "Movimientos", url: `${RED}/movimientos`, stub: (page) => stubRedApi(page), ready: "Corrección de Devolada" },
+  {
+    name: "Pagos con efectivo",
+    url: ADMIN,
+    stub: stubAdminStoreApi,
+    open: async (page) => {
+      await page.getByRole("button", { name: /Mario Pérez Castañeda/ }).click();
+    },
+    ready: "Cargo por servicio en tienda",
+  },
+  {
+    name: "Tiendas",
+    url: `${ADMIN}/operador`,
+    stub: stubOperatorStoresApi,
+    open: async (page) => {
+      await page.getByRole("tab", { name: "Tiendas" }).click();
+      await page.getByRole("button", { name: /WiFi Plus · tiene/ }).click();
+    },
+    ready: "Registrar corrección",
+  },
+  { name: "Reglas de tiendas", url: `${ADMIN}/operador`, stub: stubOperatorStoresApi, ready: "Vista previa con datos de ejemplo" },
+  {
+    name: "Puntos de pago",
+    url: `${ADMIN}/puntos-de-pago`,
+    stub: stubCashPointsApi,
+    open: async (page) => {
+      await page.getByRole("button", { name: "Ver entregas" }).first().click();
+    },
+    ready: "«Faltaron $200 en el sobre»",
+  },
+  {
+    name: "Confirmar entrega",
+    url: `${ADMIN}/puntos-de-pago`,
+    stub: stubCashPointsApi,
+    open: async (page) => {
+      await page.getByRole("button", { name: "Confirmar" }).click();
+    },
+    ready: "Sí, lo recibí",
+  },
+];
+
+for (const theme of ["light", "dark"] as const) {
+  test.describe(`cash-at-stores: real contrast in ${theme}`, () => {
+    for (const screen of storeScreens) {
+      test(`${screen.name} has no contrast violations`, async ({ page }) => {
+        await page.emulateMedia({ colorScheme: theme });
+        await screen.stub(page);
+        await page.goto(screen.url);
+        await screen.open?.(page);
+        await expect(page.getByText(screen.ready).first()).toBeVisible();
+        /* T084: an outcome fades in (`reveal`, opacity only); its inks are
+           measured once it has landed, not halfway. A waiting region's
+           breath dips to `--opacity-breath` and back for as long as it
+           waits (design-foundations D16); axe would read whichever instant
+           it landed on, so the breath is held at its first frame, full ink,
+           as every breathing screen is measured before its breath starts. */
+        await page.evaluate(() => {
+          for (const a of document.getAnimations()) {
+            if (a.effect?.getComputedTiming().iterations === Infinity) {
+              a.pause();
+              a.currentTime = 0;
+            } else a.finish();
+          }
+        });
+
+        const results = await new AxeBuilder({ page }).withRules(["color-contrast", "target-size"]).analyze();
+        const readable = results.violations.map(
+          (v) => `${v.id}: ${v.nodes.map((n) => n.failureSummary?.split("\n").slice(-1)[0]).join(" | ")}`,
+        );
+        expect(readable, `${screen.name} in ${theme}`).toEqual([]);
+      });
+    }
   });
 }

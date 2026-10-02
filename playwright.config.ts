@@ -13,10 +13,13 @@ import { defineConfig, devices } from "@playwright/test";
 const ADMIN_PORT = 4174;
 const PAGO_PORT = 4175;
 const LANDING_PORT = 4176;
+/* cash-at-stores D29: the store app, phone-first */
+const RED_PORT = 4177;
 
 export const ADMIN = `http://localhost:${ADMIN_PORT}`;
 export const PAGO = `http://localhost:${PAGO_PORT}`;
 export const LANDING = `http://localhost:${LANDING_PORT}`;
+export const RED = `http://localhost:${RED_PORT}`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -59,6 +62,17 @@ export default defineConfig({
          keeps the server in the foreground, where this config owns it. */
       command: `PUBLIC_API_URL=${LANDING} pnpm --filter @devolada/landing build && pnpm --filter @devolada/landing preview --port ${LANDING_PORT} --host --ignore-lock`,
       url: LANDING,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    {
+      /* cash-at-stores D29: the store app joins for the same questions
+         the payer's page answers here — a counter on a 360px phone,
+         touch targets of 48 and 64px, contrast in both themes. Built with
+         no VITE_API_URL, so its calls are same-origin and the stubs
+         intercept them like the admin's. */
+      command: `pnpm --filter @devolada/red build && pnpm --filter @devolada/red preview --port ${RED_PORT} --strictPort`,
+      url: RED,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

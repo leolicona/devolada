@@ -6,12 +6,34 @@ import { accessRequestReceived as accessRequestReceivedSchema } from "../../apps
 import {
   customerDebtResponse,
   customersResponse,
+  directPaymentStatusResponse,
   linkStatusResponse,
   proofReadingResponse,
 } from "../../apps/api/src/routes/direct-payments/schema";
 import { paymentRequestsResponse } from "../../apps/api/src/routes/payment-requests/schema";
+import { myInvitationsResponse } from "../../apps/api/src/routes/businesses/schema";
 import { settingsResponse } from "../../apps/api/src/routes/settings/schema";
-import { proofResponse, unmatchedTransfersResponse } from "../../apps/api/src/routes/payments/schema";
+import { feedResponse, proofResponse, unmatchedTransfersResponse } from "../../apps/api/src/routes/payments/schema";
+import {
+  cashboxResponse,
+  collectionReceiptResponse,
+  collectionStatusResponse,
+  declareHandoverResponse,
+  recordCollectionResponse,
+  storeLedgerResponse,
+  storeHandoversResponse,
+  invitationPreviewResponse,
+  storeMeResponse,
+  storeQuoteResponse,
+  storeSearchResponse,
+} from "../../apps/api/src/routes/store/schema";
+import { cashPointsResponse, handoverHistoryResponse } from "../../apps/api/src/routes/cash-points/schema";
+import {
+  DEFAULT_RECEIPT_TEMPLATE,
+  platformLedgerResponse,
+  settingsListResponse,
+  storesListResponse,
+} from "../../apps/api/src/routes/platform/schema";
 import {
   benchListResponse,
   benchReceiptDetail,
@@ -62,6 +84,8 @@ export const businessActor = {
   platformOperator: false,
   credit: { balanceCents: 10000, step: "ok" },
   observing: false,
+  /* cash-at-stores D7, D23: a business that never had cash at stores */
+  storeChannel: { on: false, since: null },
 };
 
 const at = Date.UTC(2026, 7, 14, 20, 30);
@@ -415,6 +439,9 @@ export async function stubAdminApi(page: Page): Promise<void> {
   /* links-on-demand-search D13: nothing to be told, which is what every
      business sees once the one-time cleanup has been dismissed */
   await apiRoute(page, "**/direct-payments/prune-notice", null);
+  /* bug: invitee-lands-own-business: the shell asks for the invitations
+     sent to the person signed in — none, which is what nearly everyone sees */
+  await apiRoute(page, "**/businesses/invitations/mine", myInvitationsResponse.parse({ invitations: [] }));
   await apiRoute(page, "**/direct-payments/links", createdLink);
   await apiRoute(page, "**/v1/payment-links", apiPaymentLink);
 }
@@ -552,6 +579,64 @@ export async function stubPagoApi(page: Page): Promise<void> {
   await apiRoute(page, "**/direct-payments/links/*", paymentLink);
   await apiRoute(page, "**/direct-payments/links/*/proof", { proofId: "link-1/proof-1" });
   await apiRoute(page, "**/direct-payments/links/*/read", proofReading);
+}
+
+/* payment-without-receipt US2 (T051): the same link with the payer's own
+   reference (contracts/payment-page.md), a returning payer's two banks and
+   the business's usual ones — parsed, like every fixture here, so the
+   stub cannot carry a shape the server would never send. Proven, so step 2
+   opens straight on the bank and the day: those are the controls whose
+   sizes, focus and contrast only a browser can measure. */
+export const referenceLink = linkStatusResponse.parse({
+  ...paymentLink,
+  timezone: "America/Mexico_City",
+  payerReference: { digits: "2345678", fromPhone: true, proven: true, previousDigits: null },
+  learnedBanks: ["AZTECA", "NUBANK"],
+  bankOrder: ["BBVA MEXICO", "AZTECA", "NUBANK"],
+});
+
+/* Registered after stubPagoApi: Playwright tries the newest route first.
+   confirmation-hierarchy US5 (T041): the same link paid by a debit card or
+   by a phone, the two kinds that show their bank beside the number */
+export async function stubPagoReference(page: Page, kind: "clabe" | "card" | "phone" = "clabe"): Promise<void> {
+  const collectAccount =
+    kind === "card"
+      ? { kind, value: "4152313412345678", bank: "BBVA MEXICO" }
+      : kind === "phone"
+        ? { kind, value: "5512345678", bank: "NU MEXICO" }
+        : referenceLink.collectAccount;
+  await apiRoute(page, "**/direct-payments/links/*", linkStatusResponse.parse({ ...referenceLink, collectAccount }));
+}
+
+/* confirmation-hierarchy US5 (T052): a payer back on a link with a
+   reference whose attempt, confirmed by their own reference, is the one
+   the link names — the page opens on the confirmed view */
+export const confirmedOwn = directPaymentStatusResponse.parse({
+  status: "confirmed",
+  validationAttempts: 1,
+  nextValidationAt: null,
+  error: null,
+  trackingKey: "MBAN01002609290012345678",
+  senderBank: "AZTECA",
+  transferDate: "2026-09-29",
+  claimedAmountCents: 51400,
+  referenceNumber: "2345678",
+  referenceSource: "own",
+  senderTail: null,
+  searchedDays: ["2026-09-29"],
+  ask: null,
+  tieBreak: null,
+  usedBy: null,
+  folio: "DV-OWN",
+});
+
+export async function stubPagoConfirmedOwn(page: Page): Promise<void> {
+  await apiRoute(
+    page,
+    "**/direct-payments/links/*",
+    linkStatusResponse.parse({ ...referenceLink, inReview: { directPaymentId: "dp-1", status: "validating" } }),
+  );
+  await apiRoute(page, "**/direct-payments/*/status", confirmedOwn);
 }
 
 /* automated-collections-api D6 / FR-031 (US1 scenarios 3 and 4): the one
@@ -723,4 +808,233 @@ export async function stubOperatorReaderApi(page: Page): Promise<void> {
   await page.route("**/platform/reader/bench/b1/file", (route) =>
     route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from(ONE_PIXEL_PNG, "base64") }),
   );
+}
+
+/* ---- cash-at-stores: the store app and the panel's new screens ----
+
+   Every fixture parses with the API's own schema (constitution III), so a
+   stub cannot hand the browser a shape the API never sends — a phone in a
+   search row fails here, at `.parse`, not in a screenshot. */
+
+const storeAt = Date.UTC(2026, 9, 1, 20, 35);
+
+export const storeMe = storeMeResponse.parse({
+  type: "store",
+  storeId: "store-1",
+  name: "Abarrotes Lupita",
+  businessName: "WiFi Plus",
+});
+
+export const storeSearch = storeSearchResponse.parse({
+  rows: [
+    { usuario: "greyes@wifiplus", name: "Guadalupe Reyes Hernández", zone: "Centro" },
+    { usuario: "gruiz@wifiplus", name: "Gabriel Ruiz", zone: null },
+  ],
+  more: true,
+  integration: "ok",
+});
+
+export const storeQuote = storeQuoteResponse.parse({
+  state: "owes",
+  usuario: "greyes@wifiplus",
+  name: "Guadalupe Reyes Hernández",
+  zone: "Centro",
+  debtCents: 79800,
+  invoiceCents: 49900,
+  carriedBalanceCents: 29900,
+  feeCents: 1500,
+  totalCents: 81300,
+  reconnectsFromCents: 79800,
+});
+
+export const storeCollection = (outcome: "reconnected" | "queued" = "reconnected") =>
+  collectionStatusResponse.parse({
+    id: "pay-1",
+    folio: "DV-7K2Q9M",
+    createdAt: storeAt,
+    businessName: "WiFi Plus",
+    customerName: "Guadalupe Reyes Hernández",
+    amountCents: 50000,
+    feeCents: 1500,
+    class: "short",
+    remainingCents: 29800,
+    outcome,
+    /* T071: the verdict decided a reconnection (the threshold is lenient here) */
+    reconnects: true,
+  });
+
+export const storeReceipt = collectionReceiptResponse.parse({
+  text: "Comprobante de pago · WiFi Plus\n\nFolio: DV-7K2Q9M",
+  waLink: "https://wa.me/?text=Comprobante",
+  hasPhone: false,
+});
+
+export const storeCashbox = cashboxResponse.parse({
+  businesses: [
+    {
+      businessId: "business-1",
+      businessName: "WiFi Plus",
+      heldCents: 435000,
+      feesSinceHandoverCents: 4500,
+      feesSince: storeAt - 7 * 86_400_000,
+      lastHandover: { cents: 150000, status: "disputed", at: storeAt - 3 * 86_400_000, note: "Faltaron $200 en el sobre" },
+      pendingHandover: null,
+    },
+  ],
+});
+
+export const storeLedger = storeLedgerResponse.parse({
+  rows: [
+    { id: "l1", kind: "collection", cents: 50000, at: storeAt, businessId: "business-1", businessName: "WiFi Plus", folio: "DV-7K2Q9M", customerName: "Guadalupe Reyes Hernández", feeCents: 1500, reason: null },
+    { id: "l2", kind: "handover", cents: -150000, at: storeAt - 86_400_000, businessId: "business-1", businessName: "WiFi Plus", folio: null, customerName: null, feeCents: null, reason: null },
+    { id: "l3", kind: "correction", cents: -5000, at: storeAt - 2 * 86_400_000, businessId: "business-1", businessName: "WiFi Plus", folio: "DV-3M8P1Q", customerName: null, feeCents: null, reason: "Se capturó $50 de más" },
+  ],
+  nextCursor: "next",
+});
+
+/* The store app, signed in, at every screen of the counter and the cash
+   book. `collection` picks the result screen's outcome: `queued` keeps it
+   waiting, which is what the motion layer measures. */
+/* cash-at-stores T080: the store's own hand-overs, a dispute among them */
+export const storeHandovers = storeHandoversResponse.parse({
+  businessName: "WiFi Plus",
+  handovers: [
+    { id: "h2", cents: 150000, status: "confirmed", declaredAt: storeAt - 2 * 86_400_000, resolvedAt: storeAt - 86_400_000, note: null },
+    { id: "h1", cents: 200000, status: "disputed", declaredAt: storeAt - 9 * 86_400_000, resolvedAt: storeAt - 8 * 86_400_000, note: "Faltaron $200 en el sobre" },
+  ],
+  nextCursor: null,
+});
+
+export async function stubRedApi(page: Page, opts: { collection?: "reconnected" | "queued" } = {}): Promise<void> {
+  await apiRoute(page, "**/auth/me", storeMe);
+  /* `*` never crosses a slash: this is the search, never the debt */
+  await apiRoute(page, "**/store/customers*", storeSearch);
+  await apiRoute(page, "**/store/customers/debt*", storeQuote);
+  await apiRoute(page, "**/store/collections", recordCollectionResponse.parse({ id: "pay-1", folio: "DV-7K2Q9M" }));
+  await apiRoute(page, "**/store/collections/pay-1", storeCollection(opts.collection));
+  await apiRoute(page, "**/store/collections/pay-1/receipt", storeReceipt);
+  await apiRoute(page, "**/store/cashbox", storeCashbox);
+  await apiRoute(page, "**/store/ledger*", storeLedger);
+  await apiRoute(page, "**/store/handovers", declareHandoverResponse.parse({ id: "h9", status: "pending" }));
+  await apiRoute(page, "**/store/handovers?*", storeHandovers);
+  await apiRoute(
+    page,
+    "**/store/invitations/*",
+    invitationPreviewResponse.parse({ state: "open", storeName: "Abarrotes Lupita", phoneTail: "5678" }),
+  );
+}
+
+/* A business that has had cash at stores (D7): Pagos offers the channel
+   filter and the menu shows Puntos de pago */
+export const storeChannelActor = { ...businessActor, storeChannel: { on: true, since: storeAt - 30 * 86_400_000 } };
+
+/* cash-at-stores T051: a cash row among the SPEI ones, with its fee and a
+   correction, parsed by the changed contract */
+export const storeFeed = feedResponse.parse({
+  ...feed,
+  payments: [
+    {
+      ...feed.payments[1],
+      id: "ch-cash",
+      folio: "DV-CASH01",
+      channel: "store",
+      customerName: "Mario Pérez Castañeda",
+      storeName: "Abarrotes Lupita",
+      receivedCents: 49900,
+      askedCents: 49900,
+      serviceFeeCents: 0,
+      storeFeeCents: 1500,
+      corrections: [{ cents: -5000, reason: "Se capturó $50 de más", author: "operador@devolada.app", at: at + 60_000 }],
+      createdAt: at + 120_000,
+    },
+    ...feed.payments,
+  ],
+});
+
+export async function stubAdminStoreApi(page: Page): Promise<void> {
+  await stubAdminApi(page);
+  await apiRoute(page, "**/auth/me", storeChannelActor);
+  await apiRoute(page, "**/payments/feed*", storeFeed);
+}
+
+export const cashPoints = cashPointsResponse.parse({
+  channelOn: true,
+  stores: [
+    {
+      storeId: "s1",
+      storeName: "Abarrotes Lupita",
+      address: "Av. Benito Juárez 1250, Col. Centro, Tlaquepaque",
+      storeStatus: "active",
+      heldCents: 435000,
+      lastConfirmed: { cents: 150000, at: storeAt - 7 * 86_400_000 },
+      pending: { id: "h1", cents: 200000, declaredAt: storeAt },
+    },
+    {
+      storeId: "s2",
+      storeName: "Papelería El Sol",
+      address: "Calle 5 de Mayo 40",
+      storeStatus: "suspended",
+      heldCents: 30000,
+      lastConfirmed: null,
+      pending: null,
+    },
+  ],
+});
+
+export const handoverHistory = handoverHistoryResponse.parse({
+  handovers: [
+    { id: "h0", storeId: "s1", cents: 150000, status: "disputed", note: "Faltaron $200 en el sobre", declaredAt: storeAt - 86_400_000, resolvedAt: storeAt - 80_000_000, resolvedBy: "owner@isp.mx" },
+    { id: "h-1", storeId: "s1", cents: 150000, status: "confirmed", note: null, declaredAt: storeAt - 7 * 86_400_000, resolvedAt: storeAt - 7 * 86_400_000, resolvedBy: "owner@isp.mx" },
+  ],
+  nextCursor: null,
+});
+
+export async function stubCashPointsApi(page: Page): Promise<void> {
+  await stubAdminStoreApi(page);
+  await apiRoute(page, "**/cash-points", cashPoints);
+  await apiRoute(page, "**/cash-points/stores/*/history*", handoverHistory);
+  await apiRoute(page, "**/cash-points/handovers/*/confirm", { id: "h1", status: "confirmed" });
+  await apiRoute(page, "**/cash-points/handovers/*/dispute", { id: "h1", status: "disputed" });
+}
+
+export const platformStores = storesListResponse.parse({
+  stores: [
+    {
+      id: "s1",
+      name: "Abarrotes Lupita",
+      address: "Av. Benito Juárez 1250, Col. Centro, Tlaquepaque",
+      shopkeeperName: "Guadalupe Reyes",
+      phone: "5512345678",
+      status: "active",
+      createdAt: storeAt,
+      collectsFor: [{ businessId: "business-1", businessName: "WiFi Plus", heldCents: 435000 }],
+    },
+    { id: "s2", name: "Papelería El Sol", address: "Calle 5 de Mayo 40", shopkeeperName: "Rosa Díaz", phone: "5587654321", status: "invited", createdAt: storeAt, collectsFor: [] },
+    { id: "s3", name: "Farmacia Luz", address: "Calle Hidalgo 3", shopkeeperName: "Luis Pérez", phone: "5511112222", status: "suspended", createdAt: storeAt, collectsFor: [] },
+  ],
+});
+
+export const platformStoreLedger = platformLedgerResponse.parse({
+  heldCents: 435000,
+  nextCursor: null,
+  rows: [
+    { id: "l1", kind: "collection", cents: 50000, at: storeAt, businessId: "business-1", businessName: "WiFi Plus", folio: "DV-7K2Q9M", customerName: "Guadalupe Reyes", feeCents: 1500, reason: null, paymentId: "p1", authorEmail: null },
+    { id: "l3", kind: "correction", cents: -5000, at: storeAt - 1, businessId: "business-1", businessName: "WiFi Plus", folio: "DV-3M8P1Q", customerName: null, feeCents: null, reason: "Se capturó $50 de más", paymentId: "p0", authorEmail: "operador@devolada.app" },
+  ],
+});
+
+export const storeSettings = settingsListResponse.parse({
+  settings: [
+    { key: "store_fee_cents", type: "cents", birth: "1500", current: "1500", history: [] },
+    { key: "store_receipt_template", type: "template", birth: DEFAULT_RECEIPT_TEMPLATE, current: DEFAULT_RECEIPT_TEMPLATE, history: [] },
+  ],
+});
+
+export async function stubOperatorStoresApi(page: Page): Promise<void> {
+  await stubAdminApi(page);
+  await apiRoute(page, "**/auth/me", { ...businessActor, platformOperator: true });
+  await apiRoute(page, "**/platform/settings", storeSettings);
+  await apiRoute(page, "**/platform/provider-quota", null);
+  await apiRoute(page, "**/platform/stores", platformStores);
+  await apiRoute(page, "**/platform/stores/*/ledger/*", platformStoreLedger);
 }

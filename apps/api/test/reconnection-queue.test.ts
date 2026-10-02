@@ -222,7 +222,8 @@ describe("US-C04: a rejected key is not the store's fault", () => {
     await sweepReconnections(env);
     const paused = await reload(db, charge.id);
     expect(paused.actionAttempts).toBe(1); /* unchanged */
-    expect(paused.actionError).toBe("WISPHUB_AUTH_FAILED");
+    /* cash-at-stores D9: the core's word, translated at the adapter */
+    expect(paused.actionError).toBe("INTEGRATION_AUTH_FAILED");
     expect(paused.actionOutcome).toBe("queued");
     expect(Math.round((paused.nextAttemptAt!.getTime() - Date.now()) / MINUTE)).toBe(30);
 
@@ -239,7 +240,7 @@ describe("US-C04: a rejected key is not the store's fault", () => {
     await sweepReconnections(env);
     const counted = await reload(db, charge.id);
     expect(counted.actionAttempts).toBe(2);
-    expect(counted.actionError).toBe("WISPHUB_UNAVAILABLE");
+    expect(counted.actionError).toBe("INTEGRATION_UNAVAILABLE");
     /* D6's split, proven: two failures, two columns */
     expect(counted.lastError).toBe("PROVIDER_LATE");
   });
@@ -258,7 +259,7 @@ describe("US-C03: the sweep only touches what is due", () => {
     });
 
     const quiet = await sweepReconnections(env);
-    expect(quiet).toEqual({ claimed: 0, reconnected: 0, stillQueued: 0, failed: 0 });
+    expect(quiet).toEqual({ claimed: 0, reconnected: 0, registered: 0, stillQueued: 0, failed: 0 });
 
     /* Due now: the sweep claims it and leases it two minutes ahead (D4) */
     await db

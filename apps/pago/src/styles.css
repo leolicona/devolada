@@ -1,1 +1,92 @@
 @import "@devolada/ui/styles.css";
+
+/* ---- confirmation-hierarchy D19, D20 (spec FR-033): step 1's motion on a
+   link with a reference, in the page's vocabulary — entries cross-fade with
+   a small rise, the reference's box glows once, the example types itself.
+   Durations and the curve are the tokens'; the stagger is
+   `--duration-instant` per section (proposal E drew 70ms, which is no
+   token, and D17 adds none) and 1.5 × `--duration-slow` per value of the
+   example (the 600ms proposal E drew). Nothing spins or bounces. ---- */
+
+@keyframes step-rise {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--space-1) * 1.5));
+  }
+}
+
+.step-enter {
+  animation: step-rise var(--duration-normal) var(--easing-default) both;
+  animation-delay: calc(var(--duration-instant) * var(--enter-step, 0));
+}
+
+/* One glow of the focus colour after the sections land */
+@keyframes reference-glow {
+  50% {
+    box-shadow: var(--shadow-focus);
+  }
+}
+
+.reference-glow {
+  animation: reference-glow var(--duration-slow) var(--easing-default) 1 both;
+  animation-delay: calc(var(--duration-instant) * 6);
+}
+
+/* D20: a value revealed left to right in steps, as if typed — the text is
+   in the DOM all along; only what is drawn of it changes */
+@keyframes example-type {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.example-value {
+  animation: example-type var(--duration-slow) steps(8, end) both;
+  animation-delay: calc(var(--duration-slow) * 1.5 * var(--example-step, 0));
+}
+
+/* The reference's row is marked last, with the focus colour */
+@keyframes example-mark {
+  from {
+    box-shadow: none;
+  }
+}
+
+.example-reference {
+  box-shadow: var(--shadow-focus);
+  animation: example-mark var(--duration-normal) var(--easing-default) both;
+  animation-delay: calc(var(--duration-slow) * 1.5 * 4);
+}
+
+/* contracts/payment-page.md "Motion": the confirmed check draws itself
+   once, on the slow duration, while the outcome cross-fades in.
+   The dash is the check's stroke length in the icon's 24-unit box (√8 +
+   √32 ≈ 8.5, rounded up), a geometry of the glyph, not a size. */
+@keyframes check-draw {
+  from {
+    stroke-dashoffset: 9;
+  }
+}
+
+.check-draw svg path {
+  stroke-dasharray: 9;
+  animation: check-draw var(--duration-slow) var(--easing-default) both;
+}
+
+/* Reduced motion (constitution VI): no keyframe at all — every value
+   shows at once and nothing rises, glows or draws. The design system's
+   blanket rule shortens durations but keeps delays, which with `both`
+   would hold a value hidden for its delay; naming no animation is what
+   shows it. */
+@media (prefers-reduced-motion: reduce) {
+  .step-enter,
+  .reference-glow,
+  .example-value,
+  .example-reference,
+  .check-draw svg path {
+    animation: none;
+  }
+}

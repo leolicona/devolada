@@ -2,7 +2,7 @@ import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { extractions, validations } from "../db/schema";
 import type { Bindings } from "../env";
-import { apiCepProvider } from "./provider/apicep";
+import { apiCepProvider, observeQuota } from "./provider/apicep";
 import { ProviderFailure, type ReceiptInput, type TransferInput } from "./provider/types";
 import {
   accountValue,
@@ -508,6 +508,8 @@ export async function validate(
             paymentRef: body.paymentRef ?? null,
           })
           .returning({ id: validations.id });
+        /* payment-without-receipt D19: a 429 says how many calls remain too */
+        await observeQuota(db, err.extra.telemetry);
 
         /* two-eyes-receipt D12: apiCEP's one named OCR failure
            (`status: "error"` with `missingFields`) is not a failure of
@@ -597,6 +599,8 @@ export async function validate(
       paymentRef: body.paymentRef ?? null,
     })
     .returning({ id: validations.id });
+  /* payment-without-receipt D19: the operator's view of the quota */
+  await observeQuota(db, verdict.telemetry);
 
   /* cep-bundle-match D5: the platform's own top-ups keep today's path — a
      record belongs to the business that received the money, and a top-up
@@ -654,17 +658,24 @@ export async function validate(
         gateTrackingKey(verdict.reading?.trackingKey) !== "ok";
   const recorded = verdict.status === "valid" && claveless && businessId !== null;
   /* bug: single-cep-unreadable (D19): no record says why — the check the
-     cadena failed, or a `valid` with no CEP details at all */
-  const single = recorded
-    ? verdict.cep
-      ? await storeSingleRecord(db, owner, verdict.cep)
-      : { record: null, why: "no CEP details" }
-    : null;
+     cadena failed, or a `valid` with no CEP details at all.
+     payment-without-receipt D13 widens spec 013's D5: EVERY `valid` of a
+     business keeps its record, clave searches included, so every
+     confirmation from now on teaches the account it came from (the
+     learned accounts are a query over these, D12). Only a clave-less one
+     is handed to the lifecycle's matcher (`record` below); the platform's
+     own top-ups still keep none. */
+  const single =
+    verdict.status === "valid" && businessId !== null
+      ? verdict.cep
+        ? await storeSingleRecord(db, owner, verdict.cep)
+        : { record: null, why: "no CEP details" }
+      : null;
   const record: CepRecord | null = single?.record ?? null;
   const recordWhy = single?.why ?? null;
   /* A single that confirms with nothing on the receipt to compare (D9)
      leaves no trail, so the log is where its reason survives */
-  if (recordWhy) console.warn(`validation ${row.id}: single CEP unreadable (${recordWhy})`);
+  if (recorded && recordWhy) console.warn(`validation ${row.id}: single CEP unreadable (${recordWhy})`);
 
   /* two-eyes-receipt D5: the comparison, at minute zero.
 

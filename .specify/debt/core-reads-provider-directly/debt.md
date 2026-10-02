@@ -118,3 +118,26 @@ call `wisphubFor` again.
   on purpose so the vocabulary is renamed once, here, not split.
 - Related: `wisphub-host-is-platform-wide`, another WispHub-only
   assumption, about the provider's address.
+- *2026-10-01, `specs/018-cash-at-stores` D9 (T017):* the **action**
+  anchors are paid. The three action call sites — the first attempt in
+  `direct-payments/validation.ts` (`settleConfirmed`), *Ejecutar ahora* and
+  *Reintentar* in `routes/payments/handler.ts`, and the sweep in
+  `reconnection/queue.ts` — call the integration's `paymentActions`
+  capability; `attemptReconnection` is imported only by the adapter's own
+  `wisphub/actions.ts`, and its failures reach the core as
+  `INTEGRATION_AUTH_FAILED` / `INTEGRATION_UNAVAILABLE` (the panel reads
+  both, and still reads the `WISPHUB_*` codes of older rows). The **read**
+  anchors stay open: `validation.ts` still builds `wisphubFor` and reads
+  `readPendingInvoices` / `debtFor` for the debt, and
+  `routes/payments/handler.ts` imports `pendingVersion` from
+  `wisphub/cache`. Cash at stores adds no new leak: its routes and the cash
+  book import nothing from the adapter (T061's grep).
+- *2026-10-01, `specs/018-cash-at-stores` T070 (`/speckit-converge`):* the
+  sentence above was not true when written — the store counter turned the
+  capability's `providerCustomerId` into a number to fit `ensureLink`'s
+  `wisphubId: number`. Paid the same day: `ensureLink` now takes the
+  integration's id as text (`providerCustomerId`), the store route hands
+  it over untouched, and the one numeric conversion left sits in the
+  panel's link door (`routes/direct-payments/handler.ts`), which already
+  reads WispHub directly and is an anchor of this debt. The column keeps
+  its name, `wisphub_customer_id`.

@@ -40,6 +40,28 @@
                         and 4417 (11:40:47), built by `cep-bundle.mjs`. Point
                         APICEP_STORAGE_ORIGIN at this server too, or the API
                         never downloads it (D16)
+     payment-without-receipt T008 — a payer's own reference (seven
+     digits, first 1–9) picks by what it ends in:
+       "…11"          → valid on the day asked, from tail 8301, credited
+                        07:11:20, with its cdaChain (the account is learned)
+       "…22"          → valid only on the day BEFORE the first day asked
+                        for that reference: not found at the confirmation,
+                        found by the neighbouring-days round (D14)
+       "…33"          → several: two CEPs from one account (tail 8301),
+                        credited 07:11 and 07:13 — the earliest confirms
+       "…44"          → several: two CEPs from two accounts, tails 8301
+                        and 4417, claves ending …0412 and …977I — a learned
+                        account, or one answer to the tie-break, picks
+                        (confirmation-hierarchy quickstart: `9771` must fit
+                        …977I, O read as 0 and I as 1)
+       "…55"          → several: two CEPs from two accounts, tails 8301 and
+                        4417, claves that share their last four (…5510) —
+                        the characters leave both, the digits decide
+       "…66"          → one CEP, tail 8301, clave ending …3O10 — a single
+                        match on a typed reference is asked too (FR-009);
+                        `3010` must fit it
+       any other seven digits → not found (the ladder: check the data, then
+                        the clave)
      anything else    → valid, LIQUIDADO, with Banxico's clave in
                         `cepDetails.trackingKey` (the caller adopts it — D14)
                         and the beneficiary's account in
@@ -71,7 +93,7 @@
    (~1.3 s). */
 
 import { createServer } from "node:http";
-import { sandboxBundle } from "./cep-bundle.mjs";
+import { SENDER_4417, SENDER_8301, sandboxBundle, sandboxBundleOf, sandboxCdaChain } from "./cep-bundle.mjs";
 
 const PORT = Number(process.env.PORT ?? 8789);
 
@@ -157,6 +179,8 @@ function reply(body) {
         code: 422,
         json: { error: "Referencia duplicada en Banxico (requiere clave de rastreo) (mock)" },
       };
+    const payer = payerScenario(claim, body.beneficiary);
+    if (payer) return payer;
     /* cep-bundle-match D1: several transfers share this reference */
     if (claim.referenceNumber === "4417000")
       return {
@@ -279,6 +303,110 @@ function reply(body) {
   };
 }
 
+/* ---- payment-without-receipt T008: a payer's own reference ---- */
+
+const pesos = (amount) => (typeof amount === "number" ? amount.toFixed(2) : "3.00");
+const dayBefore = (iso) => {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+};
+/* "…22": the first day each reference was asked — the day the payer gave */
+const firstAsked = new Map();
+/* the transfers of a several answer, kept for its download */
+const payerBundles = new Map();
+
+/* `n` ends the clave: a number for 012's scenarios, the four characters a
+   tie-break answer reads for confirmation-hierarchy's (quickstart) */
+const payerTransfer = (reference, day, creditTime, senderAccount, claim, beneficiary, n = 0) => ({
+  clave: `MOCKREF${reference}${day.replace(/-/g, "")}${n}`.slice(0, 30),
+  operationDay: day,
+  creditDay: day,
+  creditTime,
+  senderAccount,
+  amount: pesos(claim.amount),
+  beneficiary: beneficiaryAccountOf(beneficiary) ?? undefined,
+});
+
+const notFound = () => ({
+  code: 200,
+  headers: headers200(1300),
+  json: { validationId: crypto.randomUUID(), status: "invalid", validation: { banxicoConfirmed: false, cepPreviouslyValidated: null } },
+});
+
+function validFor(t, claim, beneficiary) {
+  return {
+    code: 200,
+    headers: headers200(6500),
+    json: {
+      validationId: crypto.randomUUID(),
+      status: "valid",
+      validation: {
+        banxicoConfirmed: true,
+        cepStatus: "LIQUIDADO",
+        cepPreviouslyValidated: false,
+        cepDetails: {
+          ...cepDetails({ ...claim, trackingKey: t.clave, date: t.operationDay }, beneficiary),
+          processingTime: t.creditTime,
+          cdaChain: sandboxCdaChain(t),
+          senderAccountType: "40",
+          senderAccount: t.senderAccount,
+          certificateNumber: "00001000000999999999",
+        },
+      },
+    },
+  };
+}
+
+function severalFor(transfers) {
+  const id = crypto.randomUUID();
+  payerBundles.set(id, transfers);
+  return {
+    code: 200,
+    headers: headers200(4400),
+    json: {
+      validationId: crypto.randomUUID(),
+      status: "invalid",
+      validation: { banxicoConfirmed: true, cepPreviouslyValidated: null },
+      downloads: { cepPdf: `http://localhost:${PORT}/mock-bundle.zip?id=${id}` },
+    },
+  };
+}
+
+function payerScenario(claim, beneficiary) {
+  const reference = claim.referenceNumber;
+  if (!/^[1-9]\d{6}$/.test(reference) || reference === "4417000" || reference === "9999999") return null;
+  const day = claim.date ?? mexicoCityToday();
+  if (!firstAsked.has(reference)) firstAsked.set(reference, day);
+  switch (reference.slice(-2)) {
+    case "11":
+      return validFor(payerTransfer(reference, day, "07:11:20", SENDER_8301, claim, beneficiary), claim, beneficiary);
+    case "22":
+      return day === dayBefore(firstAsked.get(reference))
+        ? validFor(payerTransfer(reference, day, "21:58:04", SENDER_8301, claim, beneficiary), claim, beneficiary)
+        : notFound();
+    case "33":
+      return severalFor([
+        payerTransfer(reference, day, "07:11:20", SENDER_8301, claim, beneficiary, 1),
+        payerTransfer(reference, day, "07:13:02", SENDER_8301, claim, beneficiary, 2),
+      ]);
+    case "44":
+      return severalFor([
+        payerTransfer(reference, day, "07:11:20", SENDER_8301, claim, beneficiary, "977I"),
+        payerTransfer(reference, day, "11:40:47", SENDER_4417, claim, beneficiary, "0412"),
+      ]);
+    case "55":
+      return severalFor([
+        payerTransfer(reference, day, "07:11:20", SENDER_8301, claim, beneficiary, "A5510"),
+        payerTransfer(reference, day, "11:40:47", SENDER_4417, claim, beneficiary, "B5510"),
+      ]);
+    case "66":
+      return validFor(payerTransfer(reference, day, "09:02:31", SENDER_8301, claim, beneficiary, "3O10"), claim, beneficiary);
+    default:
+      return notFound();
+  }
+}
+
 /* cep-bundle-match D16: the bundle behind a several answer, one per day
    asked, built on first request. Served as a PDF, as the provider serves
    it: the API must recognise it by its bytes (D3). */
@@ -288,6 +416,13 @@ const mexicoCityToday = () =>
 
 createServer((req, res) => {
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
+  if (req.method === "GET" && url.pathname === "/mock-bundle.zip" && payerBundles.has(url.searchParams.get("id") ?? "")) {
+    const zip = sandboxBundleOf(payerBundles.get(url.searchParams.get("id")));
+    console.log(`  ${new Date().toISOString()} → a payer's bundle of CEPs (${zip.length} bytes)`);
+    res.writeHead(200, { "Content-Type": "application/pdf", "Content-Length": String(zip.length) });
+    res.end(Buffer.from(zip));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/mock-bundle.zip") {
     const day = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get("day") ?? "") ? url.searchParams.get("day") : mexicoCityToday();
     if (!bundles.has(day)) bundles.set(day, sandboxBundle(day));

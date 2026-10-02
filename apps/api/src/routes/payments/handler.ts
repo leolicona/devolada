@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { and, count, desc, eq, gte, inArray, isNull, like, lt, lte, ne, notExists, notInArray, or, sql, sum } from "drizzle-orm";
 import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { businesses, cepRecords, integrationEvents, paymentLinks, payments } from "../../db/schema";
+import { businesses, cepRecords, integrationEvents, paymentLinks, payments, storeLedger, stores, user as userTable } from "../../db/schema";
 import { businessWallClock, nextIsoDate, startOfBusinessDayMs, startOfIsoDateMs } from "../../time/business-day";
 import { effectiveOverTreatment } from "../../direct-payments/classes";
 import { realOnly, type ApiLink } from "../../direct-payments/links";
@@ -13,11 +13,10 @@ import {
   recordDispatch,
   settleDispatch,
 } from "../../integrations/dispatch";
-/* provider-address-per-isp D4 */
-import { wisphubFor } from "../../wisphub/factory";
-import { attemptReconnection } from "../../wisphub/reconnection";
+/* cash-at-stores D9: the business's system by capability, never by name */
+import { capabilitiesOf } from "../../integrations/registry";
 import { pendingVersion } from "../../wisphub/cache";
-import { firstAttemptSchedule } from "../../reconnection/queue";
+import { decidedActionOf, firstAttemptSchedule } from "../../reconnection/queue";
 import { webhookDeliveries } from "../../db/schema";
 import { attemptDelivery, requeueDelivery } from "../../webhooks/queue";
 import { isVerdictEvent } from "../../webhooks/events";
@@ -44,16 +43,6 @@ import type { MatchTrail } from "../../consta/bundle/types";
 
 type Ctx = Context<{ Bindings: Bindings; Variables: Variables }>;
 
-/* Shared with the direct SPEI channel: one folio format, one guard */
-export function makeFolio(): string {
-  /* DV- + 6 uppercase base36 chars; the unique index is the real guard */
-  const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const bytes = crypto.getRandomValues(new Uint8Array(6));
-  let out = "";
-  for (const b of bytes) out += chars[b % 36];
-  return `DV-${out}`;
-}
-
 function businessGuard(c: Ctx) {
   const actor = c.get("actor");
   if (actor.type !== "business") {
@@ -76,6 +65,7 @@ export async function listPaymentFeed(
     q?: string;
     from?: string;
     to?: string;
+    channel?: "spei" | "store";
   },
 ) {
   const ctx = businessGuard(c);
@@ -103,6 +93,8 @@ export async function listPaymentFeed(
     ...(q.cursor ? [lt(payments.createdAt, new Date(q.cursor))] : []),
     ...(q.action ? [eq(payments.actionOutcome, q.action)] : []),
     ...(q.class ? [eq(payments.reconciliationClass, q.class)] : []),
+    /* cash-at-stores D23 (FR-031): the channel chip */
+    ...(q.channel ? [eq(payments.channel, q.channel)] : []),
     /* D4: calendar dates on the BUSINESS's wall clock (settings D5) */
     ...(q.from
       ? [gte(payments.createdAt, new Date(startOfIsoDateMs(actor.timezone, q.from)))]
@@ -123,13 +115,19 @@ export async function listPaymentFeed(
       : []),
   ];
 
-  /* `storeName` stays in the response shape until the payments merge
-     revises charge-feed.spec.md (business-and-memberships D6); with the
-     store network gone it is always null. */
+  /* cash-at-stores D23: `storeName` is filled again — a left join, null on
+     every SPEI row — now that the store network is a channel of the
+     product (it was always null while the network lived elsewhere) */
   const rows = await db
-    .select({ charge: payments, linkUsuario: paymentLinks.customerUsuario, linkSource: paymentLinks.source })
+    .select({
+      charge: payments,
+      linkUsuario: paymentLinks.customerUsuario,
+      linkSource: paymentLinks.source,
+      storeName: stores.name,
+    })
     .from(payments)
     .innerJoin(paymentLinks, eq(paymentLinks.id, payments.paymentLinkId))
+    .leftJoin(stores, eq(stores.id, payments.storeId))
     .where(and(...filters))
     .orderBy(desc(payments.createdAt))
     .limit(PAGE + 1);
@@ -148,6 +146,23 @@ export async function listPaymentFeed(
         })
         .from(integrationEvents)
         .where(inArray(integrationEvents.paymentId, pageIds))
+    : [];
+  /* cash-at-stores D21 (FR-030): the operator's corrections, with their
+     author, for the cash rows on this page */
+  const storeRowIds = page.filter((r) => r.charge.channel === "store").map((r) => r.charge.id);
+  const correctionRows = storeRowIds.length
+    ? await db
+        .select({
+          paymentId: storeLedger.paymentId,
+          cents: storeLedger.cents,
+          reason: storeLedger.reason,
+          author: userTable.email,
+          at: storeLedger.createdAt,
+        })
+        .from(storeLedger)
+        .leftJoin(userTable, eq(userTable.id, storeLedger.authorUserId))
+        .where(and(eq(storeLedger.kind, "correction"), eq(storeLedger.businessId, actor.id), inArray(storeLedger.paymentId, storeRowIds)))
+        .orderBy(storeLedger.createdAt)
     : [];
   const lastAction = new Map<string, "register_and_reconnect" | "register_only">();
   for (const e of eventRows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())) {
@@ -182,7 +197,7 @@ export async function listPaymentFeed(
     success: true,
     data: {
       /* payments-and-classes D6: the feed answers `payments` */
-      payments: page.map(({ charge, linkUsuario, linkSource }) => {
+      payments: page.map(({ charge, linkUsuario, linkSource, storeName }) => {
         const receivedCents = charge.receivedCents ?? charge.amountCents;
         const askedCents =
           charge.invoiceCents + charge.carriedBalanceCents + charge.serviceFeeCents;
@@ -227,7 +242,11 @@ export async function listPaymentFeed(
              API link, whose payment carries the caller's reference
              instead; the feed's own API rows arrive with US1 (T076). */
           customerName: charge.customerName ?? linkUsuario ?? charge.customerRef ?? "",
-          storeName: null,
+          storeName: storeName ?? null,
+          storeFeeCents: charge.storeFeeCents,
+          corrections: correctionRows
+            .filter((r) => r.paymentId === charge.id)
+            .map((r) => ({ cents: r.cents, reason: r.reason ?? "", author: r.author ?? null, at: r.at.getTime() })),
           createdAt: charge.createdAt.getTime(),
           actionDoneAt: charge.actionDoneAt?.getTime() ?? null,
           actionAttempts: charge.actionAttempts,
@@ -240,6 +259,9 @@ export async function listPaymentFeed(
           undecided: undecided?.reason ?? null,
           /* bug: single-cep-unreadable: and whether one transfer or several */
           undecidedSource: undecided?.source ?? null,
+          /* payment-without-receipt D23: the path that confirmed it; absent
+             on every row without one, so a feed of today's rows is today's */
+          ...(charge.referenceSource ? { referenceSource: charge.referenceSource } : {}),
         };
       }),
       nextCursor: rows.length > PAGE ? page[page.length - 1].charge.createdAt.getTime() : null,
@@ -262,7 +284,10 @@ export async function getPaymentProof(c: Ctx, id: string) {
     .select()
     .from(payments)
     .where(and(eq(payments.id, id), eq(payments.businessId, actor.id), realOnly(payments)));
-  if (!row) {
+  /* cash-at-stores D11: a cash row has no proof (`proof_mode = 'none'`),
+     so its door answers as a row with no file does — and the proof
+     schema keeps its two doors */
+  if (!row || row.proofMode === "none") {
     return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
   }
   const [business] = await db.select().from(businesses).where(eq(businesses.id, actor.id));
@@ -436,9 +461,20 @@ async function dispatchObserved(
   extra: Partial<typeof payments.$inferInsert> = {},
 ) {
   const actorId = business.id;
-  const { action, reconnect } = parseHypothesis(
-    row.observedAction ?? "register_and_reconnect:reconnect",
-  );
+  const decided = row.observedAction ?? "register_and_reconnect:reconnect";
+  const { action, reconnect } = parseHypothesis(decided);
+  const actions = capabilitiesOf(integration, c.env).paymentActions;
+  /* Every caller checked the key; an integration without the capability
+     waits in the queue as a row with no key does, and no decision is
+     dispatched (integrations-hub D6) */
+  if (!actions) {
+    const [waiting] = await db
+      .update(payments)
+      .set({ actionOutcome: "queued", nextAttemptAt: now, decidedAction: decided, ...extra })
+      .where(eq(payments.id, row.id))
+      .returning();
+    return waiting;
+  }
   await recordDispatch(db, {
     businessId: actorId,
     integrationId: integration.id,
@@ -446,15 +482,16 @@ async function dispatchObserved(
     class: row.reconciliationClass ?? "exact",
     action,
   });
-  const attempt = await attemptReconnection(
-    wisphubFor(integration, c.env),
+  const attempt = await actions.attempt({
     business,
-    { usuario: row.customerUsuario ?? "", wisphubId: row.wisphubCustomerId ?? "" },
-    row.registeredCents ?? 0,
-    now,
-    { invoiceId: row.wisphubInvoiceId, paymentRegistered: row.paymentRegisteredAt !== null },
+    usuario: row.customerUsuario ?? "",
+    providerCustomerId: row.wisphubCustomerId ?? "",
+    registeredCents: row.registeredCents ?? 0,
+    invoiceId: row.wisphubInvoiceId,
+    paymentRegistered: row.paymentRegisteredAt !== null,
     reconnect,
-  );
+    now,
+  });
   const schedule = firstAttemptSchedule(attempt, now);
   const outcome = outcomeOf(attempt.status, action);
   if (outcome !== "queued") {
@@ -469,6 +506,9 @@ async function dispatchObserved(
       paymentRegisteredAt: attempt.paymentRegistered ? (row.paymentRegisteredAt ?? now) : null,
       nextAttemptAt: schedule.nextAttemptAt,
       actionError: attempt.error,
+      /* bug: queue-retry-forgets-action — the sweep retries this, not
+         the adapter's default */
+      decidedAction: decided,
       ...(outcome === "done" ? { actionDoneAt: now } : {}),
       ...extra,
     })
@@ -613,7 +653,10 @@ export async function retryAction(c: Ctx, id: string) {
   }
 
   /* integrations-hub D6: the operator's retry is a NEW dispatch
-     decision — its own ledger row, acked by the sweep's terminal. */
+     decision — its own ledger row, acked by the sweep's terminal.
+     bug: queue-retry-forgets-action — it runs the decision the row
+     already carries, which is also what the sweep will run; it used to
+     record `register_and_reconnect` whatever the row decided. */
   const integration = await integrationOf(db, actor.id);
   if (integration) {
     await recordDispatch(db, {
@@ -621,7 +664,7 @@ export async function retryAction(c: Ctx, id: string) {
       integrationId: integration.id,
       paymentId: row.id,
       class: row.reconciliationClass ?? "exact",
-      action: "register_and_reconnect",
+      action: decidedActionOf(row).action,
     });
   }
   const [updated] = await db

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ADMIN, PAGO } from "../../playwright.config";
-import { feed, holdApiRoute, proofReading, stubAdminApi, stubPagoApi } from "./stubs";
+import { ADMIN, PAGO, RED } from "../../playwright.config";
+import { declareHandoverResponse } from "../../apps/api/src/routes/store/schema";
+import { feed, holdApiRoute, proofReading, storeCashbox, stubAdminApi, stubPagoApi, stubRedApi } from "./stubs";
 
 /* design-foundations US1 — the questions a simulated DOM cannot answer.
 
@@ -749,5 +750,80 @@ test.describe("feedback-vocabulary-rollout US3: nothing spins, and nothing pulse
     /* And the one movement that IS allowed is present, so this is not a page
        with no animation at all passing by default. */
     expect(names).toContain("breath");
+  });
+});
+
+/* cash-at-stores US1, US5 (T033, T060, T084; constitution VI; /speckit-analyze M3): the
+   store app's waits. A payment whose action is still queued waits on the
+   business's system for minutes, with the customer at the counter; the
+   cash book loads, and a declared hand-over sends. Each wait must breathe
+   at its real duration under reduced motion — a frozen counter reads as a
+   broken one — and nothing on the page may translate, scale or rotate. */
+test.describe("cash-at-stores: the store app's waits breathe, and nothing moves", () => {
+  async function expectBreathing(page: Page): Promise<void> {
+    const breathing = page.locator('[data-motion="breath"]').first();
+    await expect(breathing).toBeVisible();
+    const computed = await breathing.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { name: s.animationName, duration: s.animationDuration };
+    });
+    expect(computed.name).toBe("breath");
+    expect(computed.duration).toBe("2.4s");
+    expect(await runningMovements(page)).toEqual([]);
+  }
+
+  test("a payment waiting on the business breathes on the result screen", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await stubRedApi(page, { collection: "queued" });
+    await page.goto(`${RED}/cobros/pay-1`);
+    await expect(page.getByText("Estamos avisando al negocio")).toBeVisible();
+    await expectBreathing(page);
+  });
+
+  test("the outcome cross-fades in when it lands — opacity only, under reduced motion too (T084)", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await stubRedApi(page);
+    await page.goto(`${RED}/cobros/pay-1`);
+    await expect(page.getByText("Reconectado")).toBeVisible();
+    const reveal = page.locator('[data-motion="reveal"]').first();
+    await expect(reveal).toBeVisible();
+    expect(await reveal.evaluate((el) => getComputedStyle(el).animationName)).toBe("reveal");
+    expect(await runningMovements(page)).toEqual([]);
+  });
+
+  test("Mi caja breathes while it loads", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await stubRedApi(page);
+    const release = await holdApiRoute(page, "**/store/cashbox", storeCashbox);
+    await page.goto(`${RED}/caja`);
+    await expectBreathing(page);
+    release();
+    await expect(page.getByText("WiFi Plus dice:")).toBeVisible();
+  });
+
+  test("a declared hand-over breathes while it sends", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await stubRedApi(page);
+    await page.goto(`${RED}/caja/entrega?businessId=business-1`);
+    await expect(page.getByText("La entrega quedará pendiente")).toBeVisible();
+    const release = await holdApiRoute(page, "**/store/handovers", declareHandoverResponse.parse({ id: "h9", status: "pending" }));
+    await page.getByRole("button", { name: /Registrar entrega de/ }).click();
+    await expectBreathing(page);
+    release();
+  });
+
+  test("with motion allowed, the counter still moves nothing", async ({ page }) => {
+    await stubRedApi(page);
+    await page.goto(`${RED}/`);
+    await page.getByLabel("Buscar cliente").fill("guadalupe");
+    await expect(page.getByText("Guadalupe Reyes Hernández")).toBeVisible();
+    /* the payer's-page rule (constitution VI): nothing spins or bounces —
+       the counter is the same kind of screen */
+    const moving = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("*"))
+        .map((el) => getComputedStyle(el).animationName)
+        .filter((name) => name !== "none" && name !== "breath" && name !== "reveal" && !name.startsWith("enter") && !name.startsWith("leave")),
+    );
+    expect(moving).toEqual([]);
   });
 });

@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import { businesses, invitation, member, organization, user as userTable } from "../../db/schema";
-import { makeAuth } from "../../auth/better";
+import { isStoreUser, makeAuth } from "../../auth/better";
 import { findActor } from "../../auth/middleware";
 import { grantableRoles, isRole, roleCan, ROLE_RANK, type Role } from "../../auth/roles";
 import { grantWelcomeBonus } from "../../credit";
@@ -14,6 +14,7 @@ import type {
   InvitationPreviewResponse,
   InviteMemberRequest,
   MembersResponse,
+  MyInvitationsResponse,
   UpdateMemberRoleRequest,
 } from "./schema";
 
@@ -29,6 +30,12 @@ export async function createBusiness(c: Ctx, body: CreateBusinessRequest) {
   const session = await auth.api.getSession({ headers });
   if (!session) {
     return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 401);
+  }
+  /* cash-at-stores D2 (FR-013): a shopkeeper never creates a business —
+     refused here, before the organization plugin's own refusal would
+     surface as an error this route does not speak */
+  if (await isStoreUser(drizzle(c.env.DB), session.user.id)) {
+    return c.json({ success: false, error: { code: "WRONG_ACTOR" } }, 403);
   }
 
   const org = await auth.api.createOrganization({
@@ -291,6 +298,56 @@ export async function previewInvitation(c: Ctx, invitationId: string) {
     role: roleOf(row.inv.role),
     email: row.inv.email,
     hasAccount: Boolean(account),
+  };
+  return c.json({ success: true, data });
+}
+
+/* bug: invitee-lands-own-business — the invitations sent to the person
+   behind the session. The email was the only door to one: an invitee who
+   already had a business and signed in any other way (the login page, a
+   password recovery, an email that had not arrived) landed in their own
+   business, and nothing ever named the invitation again (measured
+   2026-10-01 on production: one such invitation expired unaccepted).
+   The address is proven — nobody unverified holds a session (better-auth
+   D16) — so this answers what that inbox already holds, the id included.
+   No membership required: the business wizard asks before any exists,
+   which is why the route resolves the session itself, as `createBusiness`
+   does. A business the person already belongs to is not offered again. */
+export async function myInvitations(c: Ctx) {
+  const auth = makeAuth(c.env);
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (!session) {
+    return c.json({ success: false, error: { code: "AUTHENTICATION_ERROR" } }, 401);
+  }
+  if (!session.user.emailVerified) {
+    return c.json({ success: false, error: { code: "EMAIL_NOT_VERIFIED" } }, 403);
+  }
+  const db = drizzle(c.env.DB);
+  /* cash-at-stores D2 (FR-013): a shopkeeper is not a business member */
+  if (await isStoreUser(db, session.user.id)) {
+    return c.json({ success: false, error: { code: "WRONG_ACTOR" } }, 403);
+  }
+  const [rows, memberships] = await Promise.all([
+    db
+      .select({ inv: invitation, businessName: organization.name })
+      .from(invitation)
+      .innerJoin(organization, eq(organization.id, invitation.organizationId))
+      .where(and(eq(invitation.email, session.user.email.toLowerCase()), eq(invitation.status, "pending"))),
+    db.select({ orgId: member.organizationId }).from(member).where(eq(member.userId, session.user.id)),
+  ]);
+  const joined = new Set(memberships.map((m) => m.orgId));
+  const now = Date.now();
+  const data: MyInvitationsResponse = {
+    invitations: rows
+      /* D8: the plugin keeps an expired row `pending`; it cannot be accepted */
+      .filter((r) => r.inv.expiresAt.getTime() > now && !joined.has(r.inv.organizationId))
+      .map((r) => ({
+        id: r.inv.id,
+        businessName: r.businessName,
+        role: roleOf(r.inv.role),
+        expiresAt: r.inv.expiresAt.getTime(),
+      }))
+      .sort((a, b) => a.expiresAt - b.expiresAt),
   };
   return c.json({ success: true, data });
 }

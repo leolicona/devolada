@@ -418,6 +418,11 @@ shows for that customer afterwards.
   the first use of either button and MUST NOT be created merely because the
   customer was shown, listed or read. No background work MAY create a link:
   an operator's act is the only thing that brings one into existence.
+  *Note, 2026-10-01 (`cash-at-stores` D11):* a link is also born **when a
+  store records a cash payment for that customer**. A recorded payment is
+  an act on that customer, and every payment hangs off the customer's own
+  link, so the record ensures the panel link exists. Being shown, listed
+  or read still creates nothing.
 - **FR-009**: The link created on first use MUST be the customer's
   permanent link, identified by usuario, so that a later search, a Cobros
   row or a payment finds the same link.
@@ -426,6 +431,12 @@ shows for that customer afterwards.
   Devolada's own operational fields (when it was created, its own state). It
   MUST NOT store the customer's name, phone or service state: to operate,
   those are always read fresh from WispHub.
+  *Note 2026-09-30 (spec 012, payment-without-receipt D1): a customer's
+  payer reference — the last seven digits of their phone when that phone
+  is one person's — is kept beside the link, in its own table keyed like
+  the link, never on the link row. Those seven digits are the reference
+  itself, shown to the payer and printed on their transfers; the whole
+  phone and the name are still never stored.*
 - **FR-011**: The search text MUST survive navigating to another page and
   back, the browser's back button and a reload, and a search MUST have an
   address that opens on that search.

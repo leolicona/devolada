@@ -42,8 +42,27 @@ export function bankHint(bank: string | null | undefined): { bank: string; hint:
 }
 
 /* "BANORTE" reads as a shout in a sentence; the few names the hints
-   carry get their everyday spelling */
-const LABELS: Partial<Record<Bank, string>> = { BANORTE: "Banorte" };
+   carry get their everyday spelling.
+   payment-without-receipt D21: the confirmation reads back a sentence too
+   ("…desde Banco Azteca, hoy martes 29.") and offers the payer's banks as
+   choices, so the banks payers use most get theirs. A name not listed
+   keeps the vocabulary's own spelling, which is still the right bank. */
+const LABELS: Partial<Record<Bank, string>> = {
+  AZTECA: "Banco Azteca",
+  BAJIO: "BanBajío",
+  BANAMEX: "Banamex",
+  BANCOPPEL: "BanCoppel",
+  BANORTE: "Banorte",
+  BANREGIO: "Banregio",
+  "BBVA MEXICO": "BBVA",
+  "HEY BANCO": "Hey Banco",
+  INBURSA: "Inbursa",
+  "Mercado Pago W": "Mercado Pago",
+  NUBANK: "Nu",
+  SANTANDER: "Santander",
+  SCOTIABANK: "Scotiabank",
+  "SPIN BY OXXO": "Spin by OXXO",
+};
 export function bankLabel(bank: string): string {
   return LABELS[bank as Bank] ?? bank;
 }

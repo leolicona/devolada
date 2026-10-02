@@ -139,7 +139,7 @@ const shots: Shot[] = [
       error: null,
       readingCheck: "agreed",
     },
-    ready: "Banxico no publicó la transferencia",
+    ready: "no pudimos confirmar la transferencia a tiempo",
     widths: [375],
   },
 ];

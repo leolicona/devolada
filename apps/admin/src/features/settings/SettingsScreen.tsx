@@ -43,12 +43,25 @@ function useSaveSettings() {
   });
 }
 
-function SectionCard({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
+function SectionCard({
+  title,
+  id,
+  headingId,
+  children,
+}: {
+  title: string;
+  id?: string;
+  /* For a card whose one control is named by the heading itself */
+  headingId?: string;
+  children: React.ReactNode;
+}) {
   return (
     <Card className="p-6" id={id}>
       {/* scroll-mt keeps the heading clear of the top edge when a deep
           link (the CLABE banner, the wizard, a legacy hash) lands here */}
-      <h3 className="scroll-mt-24 text-base font-semibold">{title}</h3>
+      <h3 id={headingId} className="scroll-mt-24 text-base font-semibold">
+        {title}
+      </h3>
       <div className="mt-4 space-y-4">{children}</div>
     </Card>
   );
@@ -452,6 +465,47 @@ function SpeiCard({ settings, canEditClabe }: { settings: SettingsResponse; canE
   );
 }
 
+/* payment-without-receipt D20 (FR-039): the switch, per business. On,
+   payers pay with their own reference and confirm without a receipt;
+   off is today's flow, exactly, and every reference is kept for when it
+   comes back on. It sits on this page because the page is already the
+   `settings: update` area D20 puts it under — an operator or a viewer
+   never reaches it (useBusinessSettings), and the API answers 403 to
+   one who tries. Saves on toggle, like the integration's switches: a
+   gate should not wait behind a Save button (integrations-hub D4). The
+   heading names the switch, so the card says it once. */
+function ReferenceCard({ settings }: { settings: SettingsResponse }) {
+  const save = useSaveSettings();
+  return (
+    <SectionCard title="Pagar con referencia" id="referencia" headingId="pay-by-reference-title">
+      <div className="flex items-start justify-between gap-4">
+        <p id="pay-by-reference-help" className="text-sm text-ink-soft">
+          Tus clientes pagan con su referencia y confirman sin comprobante. El comprobante sigue
+          disponible.
+        </p>
+        {/* feedback-vocabulary-rollout D1/D4: the wait is announced at the
+            control the owner used */}
+        <Pending active={save.isPending} label="Guardando el pago con referencia.">
+          <Switch
+            id="pay-by-reference"
+            aria-labelledby="pay-by-reference-title"
+            aria-describedby="pay-by-reference-help"
+            checked={settings.payByReference}
+            disabled={save.isPending}
+            onCheckedChange={(v) => save.mutate({ payByReference: v })}
+          />
+        </Pending>
+      </div>
+      {save.isError && (
+        <p role="alert" className="flex items-center gap-2 text-sm font-medium text-error">
+          <TriangleAlert className="size-4 shrink-0" aria-hidden />
+          No pudimos guardar el cambio. Intenta de nuevo.
+        </p>
+      )}
+    </SectionCard>
+  );
+}
+
 /* Política de conciliación (payments-and-classes D1/D2, US-R02): the
    tolerance that still reads "exacto" and what a surplus means. When the
    integration absorbs surplus on its own, the effective treatment is
@@ -662,6 +716,7 @@ export function DirectPaymentSettingsScreen() {
         {data && (
           <div className="mt-4 space-y-4">
             <SpeiCard settings={data} canEditClabe={canClabe} />
+            <ReferenceCard settings={data} />
             <PolicyCard settings={data} />
           </div>
         )}

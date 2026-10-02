@@ -9,9 +9,17 @@ import { defineConfig, devices } from "@playwright/test";
 
 const API_PORT = 8794;
 const ADMIN_PORT = 5174;
+/* cash-at-stores T043: red on its dev port — the one the API's local
+   ALLOWED_ORIGINS (and so the passkey origins) and RED_BASE_URL name */
+const RED_PORT = 5177;
 
 export const API = `http://localhost:${API_PORT}`;
 export const ADMIN = `http://localhost:${ADMIN_PORT}`;
+export const RED = `http://localhost:${RED_PORT}`;
+/* cash-at-stores T043: the store case creates a store the way the
+   operator does, so the demo account is this harness's operator — pinned
+   here, like the suites pin their secrets, never read from a .dev.vars */
+export const OPERATOR_EMAIL = "demo@devolada.app";
 
 export default defineConfig({
   testDir: "./tests/passkey",
@@ -24,7 +32,7 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
     {
-      command: `pnpm --filter @devolada/api db:migrate:local && pnpm --filter @devolada/api exec wrangler dev --port ${API_PORT} --local`,
+      command: `pnpm --filter @devolada/api db:migrate:local && pnpm --filter @devolada/api exec wrangler dev --port ${API_PORT} --local --var PLATFORM_OPERATOR_EMAILS:${OPERATOR_EMAIL}`,
       url: `${API}/health`,
       reuseExistingServer: false,
       timeout: 120_000,
@@ -32,6 +40,12 @@ export default defineConfig({
     {
       command: `VITE_API_URL=${API} pnpm --filter @devolada/admin build --outDir dist-passkey && pnpm --filter @devolada/admin preview --outDir dist-passkey --port ${ADMIN_PORT} --strictPort`,
       url: ADMIN,
+      reuseExistingServer: false,
+      timeout: 180_000,
+    },
+    {
+      command: `VITE_API_URL=${API} pnpm --filter @devolada/red build --outDir dist-passkey && pnpm --filter @devolada/red preview --outDir dist-passkey --port ${RED_PORT} --strictPort`,
+      url: RED,
       reuseExistingServer: false,
       timeout: 180_000,
     },

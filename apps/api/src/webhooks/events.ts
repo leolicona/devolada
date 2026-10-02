@@ -55,7 +55,9 @@ export function paymentFacts(
     /* the receipt's or the typed form's number — a claim, never money
        received (FR-036); the row's own `claimed_amount_cents` */
     claimedCents: payment.claimedAmountCents,
-    proofDoor: payment.proofMode,
+    /* cash-at-stores D11: `none` is a cash row's, which hangs off a panel
+       link and never reaches an API link's webhook or read */
+    proofDoor: payment.proofMode as "receipt" | "transfer",
     /* the verdict fields are absent, not invented, until the verdict */
     receivedCents: verdict ? payment.receivedCents : null,
     match: verdict ? payment.reconciliationClass : null,

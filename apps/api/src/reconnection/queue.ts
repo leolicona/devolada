@@ -3,11 +3,12 @@ import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
 import { businesses, payments } from "../db/schema";
 import { integrationsFor } from "../integrations/store";
-import { settleDispatch } from "../integrations/dispatch";
+import { outcomeOf, parseHypothesis, settleDispatch } from "../integrations/dispatch";
 /* provider-address-per-isp D4: the sweep already loads each business's
-   integration row, so it passes that row — never a platform value. */
-import { wisphubFor } from "../wisphub/factory";
-import { attemptReconnection } from "../wisphub/reconnection";
+   integration row, so it passes that row — never a platform value.
+   cash-at-stores D9: and reaches the business's system by capability,
+   never by provider name (constitution IX). */
+import { capabilitiesOf } from "../integrations/registry";
 
 /* The reconnection queue (reconnection-queue spec). The payment row is the
    queue (D2; business-and-memberships D6 merged the charge twin into it): one cron sweep per minute claims what is due, attempts it,
@@ -33,9 +34,20 @@ const minutes = (n: number) => n * 60 * 1000;
 export type SweepReport = {
   claimed: number;
   reconnected: number;
+  /* bug: queue-retry-forgets-action — registered without reconnecting,
+     because the row's decision said so */
+  registered: number;
   stillQueued: number;
   failed: number;
 };
+
+/* bug: queue-retry-forgets-action — the decision a retry runs. The row's
+   own, written when the dispatch was decided; a row queued before the
+   fix has none, and keeps the reconnect it was always retried with
+   (the fallback `dispatchObserved` already used). */
+export function decidedActionOf(row: { decidedAction: string | null; observedAction: string | null }) {
+  return parseHypothesis(row.decidedAction ?? row.observedAction ?? "register_and_reconnect:reconnect");
+}
 
 /* The first attempt, made inline when the store records the charge
    (charge-record D2). Shares the scheduling rules with the sweep. */
@@ -47,7 +59,8 @@ export function firstAttemptSchedule(
      it was deliberately not restored (partial-payment D5). Neither is
      something the sweep should touch again. */
   if (result.status !== "queued") return { attempts: 1, nextAttemptAt: null };
-  if (result.error === "WISPHUB_AUTH_FAILED") {
+  /* cash-at-stores D9: the core's word for a refused key */
+  if (result.error === "INTEGRATION_AUTH_FAILED") {
     return { attempts: 0, nextAttemptAt: new Date(now.getTime() + minutes(AUTH_RETRY_MINUTES)) };
   }
   return { attempts: 1, nextAttemptAt: new Date(now.getTime() + minutes(BACKOFF_MINUTES[0])) };
@@ -55,7 +68,7 @@ export function firstAttemptSchedule(
 
 export async function sweepReconnections(env: Bindings, now: Date = new Date()): Promise<SweepReport> {
   const db = drizzle(env.DB);
-  const report: SweepReport = { claimed: 0, reconnected: 0, stillQueued: 0, failed: 0 };
+  const report: SweepReport = { claimed: 0, reconnected: 0, registered: 0, stillQueued: 0, failed: 0 };
 
   const due = await db
     .select()
@@ -101,7 +114,8 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
 
   for (const charge of due) {
     const integration = integrationByBusiness.get(charge.businessId);
-    if (!integration?.apiKey) {
+    const actions = integration ? capabilitiesOf(integration, env).paymentActions : undefined;
+    if (!integration?.apiKey || !actions) {
       /* Same shape as a rejected key: nothing to retry until Configuración */
       await db
         .update(payments)
@@ -116,31 +130,53 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
     const business = ispById.get(charge.businessId);
     if (!business) continue; /* unreachable: the FK guarantees it */
 
-    const result = await attemptReconnection(
-      wisphubFor(integration, env),
+    /* bug: queue-retry-forgets-action — the verdict's decision, never
+       the adapter's default */
+    const { action, reconnect } = decidedActionOf(charge);
+    const result = await actions.attempt({
       business,
       /* D8: lookups need the usuario; the numeric id only serves the
          auto-activate PATCH. Charges from before 0006 have no stored
          usuario — the old identifier keeps their (broken) behavior. */
-      {
-        usuario: charge.customerUsuario ?? charge.wisphubCustomerId ?? "",
-        wisphubId: charge.wisphubCustomerId ?? "",
-      },
+      usuario: charge.customerUsuario ?? charge.wisphubCustomerId ?? "",
+      providerCustomerId: charge.wisphubCustomerId ?? "",
       /* What this payment registers against the debt (partial-payment
          D9), stored at confirmation so a retry days later registers the
          same number — not a debt that moved meanwhile. */
-      charge.registeredCents ?? 0,
+      registeredCents: charge.registeredCents ?? 0,
+      invoiceId: charge.wisphubInvoiceId,
+      paymentRegistered: charge.paymentRegisteredAt !== null,
+      reconnect,
       now,
-      {
-        invoiceId: charge.wisphubInvoiceId,
-        paymentRegistered: charge.paymentRegisteredAt !== null,
-      },
-    );
+    });
     /* The payment landing is progress worth keeping even when the
        attempt as a whole did not convert (D8) */
     const paymentRegisteredAt = result.paymentRegistered
       ? (charge.paymentRegisteredAt ?? now)
       : null;
+
+    /* bug: queue-retry-forgets-action — a register-only retry ends when
+       the money lands: `done` under register_only, `withheld` under a
+       threshold's withhold (integrations-hub D7). Both terminal, like a
+       reconnection. */
+    if (result.status === "withheld") {
+      const outcome = outcomeOf(result.status, action);
+      await db
+        .update(payments)
+        .set({
+          actionOutcome: outcome,
+          ...(outcome === "done" ? { actionDoneAt: now } : {}),
+          actionAttempts: charge.actionAttempts + 1,
+          wisphubInvoiceId: result.invoiceId,
+          paymentRegisteredAt,
+          nextAttemptAt: null,
+          actionError: null,
+        })
+        .where(eq(payments.id, charge.id));
+      await settleDispatch(db, charge.id, "acked", null, now);
+      report.registered++;
+      continue;
+    }
 
     if (result.status === "reconnected") {
       await db
@@ -163,7 +199,7 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
     }
 
     /* D5: a rejected key waits without spending an attempt */
-    if (result.error === "WISPHUB_AUTH_FAILED") {
+    if (result.error === "INTEGRATION_AUTH_FAILED") {
       await db
         .update(payments)
         .set({

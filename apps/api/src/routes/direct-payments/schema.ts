@@ -32,6 +32,21 @@ export function isGenericReference(value: string | null | undefined): boolean {
 /* Shareable contract (ARCHITECTURE.md): apps/pago derives types from
    these schemas and its MSW handlers validate against them. */
 
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const bank = z.enum(BANKS);
+
+/* payment-without-receipt D1/D3/D6: a payer's reference — seven digits,
+   the first 1–9. One rule for every schema that carries one. */
+export const PAYER_REFERENCE_PATTERN = /^[1-9]\d{6}$/;
+const payerDigits = z.string().regex(PAYER_REFERENCE_PATTERN);
+
+/* payment-without-receipt D21/D22: the seven digits as a payer reads them,
+   "234 5678" — the page, the share message and the panel group them the
+   same way. Copying takes the digits alone. */
+export function groupReferenceDigits(digits: string): string {
+  return digits.length === 7 ? `${digits.slice(0, 3)} ${digits.slice(3)}` : digits;
+}
+
 /* GET /direct-payments/links/:token (US-D01). `unavailable` means the
    ISP has not configured SPEI (D4): the page points at the store
    network — the customer never transfers into the void. */
@@ -100,6 +115,29 @@ export const linkStatusResponse = z.object({
       status: z.enum(["validating", "queued_for_credit"]),
     })
     .optional(),
+  /* payment-without-receipt D1/D22: the payer's own number — never the
+     concepto, which keeps the name `reference`. Absent or null while the
+     business has the feature off, or before the phone could be counted
+     (D5): the page is then today's page. With `status: "debt"` only. */
+  payerReference: z
+    .object({
+      digits: payerDigits,
+      /* FR-004: said to be the phone's last seven digits only when it is */
+      fromPhone: z.boolean(),
+      /* FR-010: some confirmation of this person already found it */
+      proven: z.boolean(),
+      /* D26/FR-040: this person's previous digits, while their reference
+         changed and they have not yet confirmed with the new one; the page
+         shows the notice and asks which reference they put */
+      previousDigits: payerDigits.nullable(),
+    })
+    .nullable()
+    .optional(),
+  /* D12: this person's banks, most recent first — banks only, never an
+     account (FR-019) */
+  learnedBanks: z.array(bank).max(3).optional(),
+  /* D7: what "Otro banco" lists first — this business's most used banks */
+  bankOrder: z.array(bank).max(5).optional(),
 });
 
 /* POST /direct-payments/links/:token/pay (US-D02). Exactly one proof
@@ -137,18 +175,39 @@ export const payRequest = z
            comes from the CEP and a fresh debt read, so lying here cannot
            buy a cheaper payment (same posture as receiptAmountCents). */
         amountCents: z.number().int().positive().optional(),
+        /* payment-without-receipt D8: "own" — the server writes the link's
+           reference and ignores any sent; "typed" — "Usé otra referencia"
+           (D11); absent — today's typed door */
+        referenceSource: z.enum(["own", "typed"]).optional(),
+        /* confirmation-hierarchy D6 (amending 012 D11, D17): an answer to
+           the tie-break — the sending account's last four digits, the
+           clave's last four characters, or both — on a row that supersedes
+           the one waiting on it. Typed by the payer, never offered; read
+           against the transfers already found and never searched. A typed
+           confirmation carries neither: it searches at once (D5). */
+        senderTail: z.string().trim().regex(/^\d{4}$/).optional(),
+        claveTail: z.string().trim().regex(/^[A-Za-z0-9]{4}$/).optional(),
+        /* D23: what the page preselected, for SC-005 */
+        preselected: z.object({ bank: bank.nullable(), day: isoDate }).optional(),
       })
       /* receipt-triage FR-005: a key is required — the clave or the
          reference. The form never names an account: typed data is
-         checked against the cuenta de cobro (FR-018). */
-      .refine((t) => t.trackingKey || t.referenceNumber, {
+         checked against the cuenta de cobro (FR-018).
+         payment-without-receipt D8: a confirmation with the payer's own
+         reference carries none — the server writes it. */
+      .refine((t) => t.trackingKey || t.referenceNumber || t.referenceSource === "own", {
         message: "trackingKey or referenceNumber is required",
       })
       /* receipt-triage D2 (clarified 2026-09-24): a generic reference is
          no key — the clave is required beside it. The page and this
          schema share `isGenericReference`, so a client that skipped the
-         page meets the same rule as a VALIDATION_ERROR. */
-      .refine((t) => t.trackingKey || !isGenericReference(t.referenceNumber), {
+         page meets the same rule as a VALIDATION_ERROR.
+         payment-without-receipt D11 (analysis I8): a typed reference no
+         person holds — a default-looking one included — goes on as a
+         shared reference, tied by an exclusive learned account or by the
+         tie-break the server asks after the search (confirmation-hierarchy
+         D5, D6), never by a clave demanded first. */
+      .refine((t) => t.trackingKey || t.referenceSource != null || !isGenericReference(t.referenceNumber), {
         message: "a generic referenceNumber needs a trackingKey",
       })
       .optional(),
@@ -194,7 +253,45 @@ export const payRequest = z
         message: "supersedes only applies to a confirmed transfer",
       });
     }
+    /* payment-without-receipt D17, confirmation-hierarchy D6: either way
+       of answering only ever chooses among what an earlier attempt kept —
+       the refinement 012 gave the characters now covers the digits too */
+    if ((body.transfer?.claveTail || body.transfer?.senderTail) && !body.supersedes) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "senderTail and claveTail only answer a tie-break (supersedes)",
+      });
+    }
   });
+
+/* payment-without-receipt: the refusals of `POST /links/:token/pay` this
+   feature adds, each before anything is created or billed (contracts/
+   payment-page.md). Named here so the page and its fixtures speak them
+   from one list. `REFERENCE_SHARED` is never answered to `own` or
+   `typed` (D9). */
+export const PAY_REFUSALS_WITHOUT_RECEIPT = [
+  /* D8: `own` asked, and the link has no reference (feature off, or not
+     born yet) — the page falls back to the receipt step */
+  "REFERENCE_NOT_READY",
+  /* D8: an `own` or `typed` day before today − 30 or after today, in the
+     business's timezone */
+  "TRANSFER_DATE_OUT_OF_RANGE",
+  /* D11 (FR-034): the typed reference is another person's */
+  "REFERENCE_OF_ANOTHER",
+  /* D16 (FR-024): a fourth search-spending correction without a clave or
+     a receipt */
+  "CORRECTIONS_EXHAUSTED",
+  /* confirmation-hierarchy D8 (FR-016): an answer to the tie-break, and
+     the link already holds three answers that fitted nothing in the last
+     24 hours — the whole clave and the receipt are what is left */
+  "TIE_BREAK_EXHAUSTED",
+  /* confirmation-hierarchy D11: an answer to the tie-break on a row that
+     is not waiting on one — another tab answered first, or nothing was
+     asked. Nothing is written or searched; the page re-reads the status.
+     (012's SENDER_TAIL_NEEDED is gone: a typed confirmation searches at
+     once and the tie-break is asked after it, D5.) */
+  "TIE_BREAK_NOT_ASKED",
+] as const;
 
 /* Validation errors the page may show the customer. Internal codes
    (provider down, WispHub down) never travel: the payment simply stays
@@ -412,6 +509,36 @@ export const directPaymentStatusResponse = z.object({
   /* provisional-release D7: on `expired` only — whether the one manual
      retry per clave is still unclaimed */
   retryAvailable: z.boolean().optional(),
+  /* payment-without-receipt D15, as confirmation-hierarchy D9 amends it:
+     what the page asks now, on a validating row with a `referenceSource`;
+     null when it asks nothing. `tie_break` is one screen with two ways to
+     answer (FR-011), where 012 asked the digits and the characters in a
+     row. */
+  ask: z.enum(["check_data", "clave", "tie_break"]).nullable().optional(),
+  /* confirmation-hierarchy D9: with `tie_break` only — which fields the
+     screen shows, whether the last answer fitted nothing, and whether one
+     transfer or several were found (the sentence it opens with, D12).
+     Field names and booleans: nothing of a transfer found ever travels
+     (FR-018). */
+  tieBreak: z
+    .object({
+      ways: z.array(z.enum(["sender_tail", "clave_tail"])).min(1),
+      missed: z.boolean(),
+      several: z.boolean(),
+    })
+    .nullable()
+    .optional(),
+  /* D23: which path this row is — null on a clave, a receipt, and today's
+     typed door */
+  referenceSource: z.enum(["own", "typed"]).nullable().optional(),
+  /* D11: as the payer typed them — their own input, read back (FR-023) */
+  senderTail: z.string().nullable().optional(),
+  /* D14: every day the rounds searched, for the read-back */
+  searchedDays: z.array(isoDate).optional(),
+  /* D24: on TRANSFER_ALREADY_USED (and CEP_ALL_USED on the payer's own
+     reference), the payment that used the transfer — only when it is one
+     of the same person's; null otherwise (FR-013) */
+  usedBy: z.object({ day: isoDate, amountCents: z.number().int() }).nullable().optional(),
 });
 
 /* POST /direct-payments/links/:token/proof (D12) */
@@ -507,6 +634,17 @@ export const customerRow = z.object({
      it is what FR-026 ends. Pressing one creates the link (D8). */
   url: z.string().nullable(),
   waLink: z.string().nullable(),
+  /* payment-without-receipt D1/D6 (FR-006): the customer's reference and
+     whether it is the phone's or assigned — to read, with nothing to do.
+     Null when the customer has no link or no reference yet; absent while
+     the business has the feature off. */
+  payerReference: z
+    .object({
+      digits: payerDigits,
+      origin: z.enum(["phone", "assigned"]),
+    })
+    .nullable()
+    .optional(),
 });
 
 export const customersResponse = z.object({

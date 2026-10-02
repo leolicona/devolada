@@ -1,7 +1,8 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
-import { platformSettings } from "../db/schema";
+import { platformSettings, user } from "../db/schema";
 import { BANKS } from "../direct-payments/banks";
+import { DEFAULT_RECEIPT_TEMPLATE, RECEIPT_TEMPLATE_MAX, RECEIPT_TEMPLATE_MIN, receiptTemplateProblem } from "../receipt/template";
 
 /* operator-panel D1: the keys, their types, their birth values and their
    validation — in code, never in the table. A key with no row answers
@@ -11,7 +12,9 @@ type Def =
   | { type: "cents" | "int"; birth: number; min: number; max: number }
   | { type: "clabe" | "bank" | "phone"; birth: null }
   | { type: "text"; birth: null; min: number; max: number }
-  | { type: "enum"; birth: string; values: readonly string[] };
+  | { type: "enum"; birth: string; values: readonly string[] }
+  /* cash-at-stores D31: multi-line text with placeholders */
+  | { type: "template"; birth: string; min: number; max: number };
 
 export const SETTINGS = {
   validation_fee_cents: { type: "cents", birth: 500, min: 100, max: 5000 },
@@ -37,6 +40,21 @@ export const SETTINGS = {
      so to nobody — set them before the first suspension. */
   support_whatsapp: { type: "phone", birth: null },
   support_email: { type: "text", birth: null, min: 5, max: 120 },
+  /* cash-at-stores D22: the network's fee at the counter — the payer pays
+     it on top of what they apply to the debt and the store keeps it all.
+     One value for every store and every business (FR-008); read at quote
+     and again at record (D14), copied onto `payments.store_fee_cents`. */
+  store_fee_cents: { type: "cents", birth: 1500, min: 0, max: 5000 },
+  /* cash-at-stores D31 (FR-043): the receipt the store sends by WhatsApp,
+     with placeholders `renderReceipt` fills. Applies when a receipt is
+     asked for: receipts are never stored, so there is no older version
+     to keep. */
+  store_receipt_template: {
+    type: "template",
+    birth: DEFAULT_RECEIPT_TEMPLATE,
+    min: RECEIPT_TEMPLATE_MIN,
+    max: RECEIPT_TEMPLATE_MAX,
+  },
 } as const satisfies Record<string, Def>;
 /* Not here: `reader_model`, the operator's reader choice — its value is an
    id from the deploy's list, so it lives in platform/reader-model.ts
@@ -84,6 +102,12 @@ export function validateSetting(
     }
     case "enum":
       return typeof raw === "string" && def.values.includes(raw) ? { ok: true, value: raw } : { ok: false };
+    case "template": {
+      /* cash-at-stores D31: the length, `{folio}`, and only the known
+         placeholders — the same check the panel runs before it saves */
+      const v = typeof raw === "string" ? raw.replace(/\r\n/g, "\n").trim() : "";
+      return receiptTemplateProblem(v) === null ? { ok: true, value: v } : { ok: false };
+    }
   }
 }
 
@@ -119,9 +143,19 @@ export async function setSetting(db: DB, key: SettingKey, value: string, authorU
 /* The panel's read: every key with its current value, its birth value
    and its last five rows (operator-panel D4). */
 export async function listSettings(db: DB) {
+  /* cash-at-stores T085 (FR-008, FR-043): who changed a rule, by name —
+     as the reader model's history already says it (readerHistory) */
   const rows = await db
-    .select()
+    .select({
+      id: platformSettings.id,
+      key: platformSettings.key,
+      value: platformSettings.value,
+      authorUserId: platformSettings.authorUserId,
+      authorEmail: user.email,
+      createdAt: platformSettings.createdAt,
+    })
     .from(platformSettings)
+    .leftJoin(user, eq(user.id, platformSettings.authorUserId))
     .where(inArray(platformSettings.key, SETTING_KEYS))
     .orderBy(desc(platformSettings.createdAt), desc(platformSettings.id));
   return SETTING_KEYS.map((key) => {
@@ -135,6 +169,7 @@ export async function listSettings(db: DB) {
       history: history.map((r) => ({
         value: r.value,
         authorUserId: r.authorUserId,
+        authorEmail: r.authorEmail ?? null,
         createdAt: r.createdAt.getTime(),
       })),
     };

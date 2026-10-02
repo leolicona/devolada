@@ -155,7 +155,9 @@ export function LoginPage() {
           </Button>
         )}
         <div className="flex justify-between text-sm">
-          <Link to="/recover" className="text-link hover:underline">
+          {/* bug: invitee-lands-own-business — the recovery keeps `next`:
+              an invitee who came here from their invitation goes back to it */}
+          <Link to="/recover" search={{ next }} className="text-link hover:underline">
             Olvidé mi contraseña
           </Link>
           <Link to="/signup" search={{ next }} className="text-link hover:underline">
@@ -366,12 +368,17 @@ export function VerifyEmailPage() {
    código + new password. The confirmation copy is identical whether the
    account exists or not — no existence leak. Scenario 7 says "restores
    access": the new password signs the person in right here, instead of
-   sending them to type it once more on the login page. */
+   sending them to type it once more on the login page.
+   bug: invitee-lands-own-business — and it goes on to `next` (D12), not
+   to "/": an invitee who forgot their password used to land in their own
+   business with the invitation forgotten. The address arrives filled in
+   when the invitation page knows it (D14: the invitation's, never typed). */
 export function RecoverPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { next, email: given } = useSearch({ from: "/recover" });
   const [step, setStep] = useState<"email" | "code">("email");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(given ?? "");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -391,15 +398,17 @@ export function RecoverPage() {
       await login(email, password);
     },
     () => {
-      void queryClient.invalidateQueries({ queryKey: ["session"] });
-      void navigate({ to: "/" });
+      /* A new session: whatever a page read before it (the invitation
+         page's "nobody signed in") is stale, as on the código screen */
+      queryClient.clear();
+      void navigate({ to: next ? asRoute(next) : "/" });
     },
     "Revisa que la contraseña tenga 8 caracteres y coincida.",
   );
 
   const backToLogin = (
     <p className="text-center text-sm">
-      <Link to="/login" className="text-link hover:underline">
+      <Link to="/login" search={{ next }} className="text-link hover:underline">
         Volver a iniciar sesión
       </Link>
     </p>

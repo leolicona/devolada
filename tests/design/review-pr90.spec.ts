@@ -185,7 +185,7 @@ const shots: Shot[] = [
       await page.getByLabel("Clave de rastreo").fill("NU3AGKMP3ASP8QQQ4U8J8F0K1E4K");
       await page.getByLabel("Banco desde el que pagaste").selectOption("NUBANK");
       await page.getByRole("button", { name: "Verificar mi pago" }).click();
-      await expect(page.getByText("Validación en proceso")).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText("Seguimos buscando tu transferencia")).toBeVisible({ timeout: 15_000 });
       await page.getByRole("button", { name: "Ver los datos enviados" }).click();
       await page.getByRole("button", { name: "Corregir estos datos" }).click();
       await expect(page.getByLabel("Monto transferido")).toHaveValue("400.00");

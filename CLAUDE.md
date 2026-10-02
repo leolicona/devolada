@@ -7,8 +7,12 @@ collect payments by SPEI: payment link → the payer transfers to the business's
 own CLABE → Banxico validation through Consta → the verdict fires the
 business's own action — for an ISP, the WispHub reconnection through its
 **adapter**; for a business on the `/v1` API, its webhook. Today WispHub is
-the one provider adapter (reconnection, customers, open invoices). The money
-never touches Devolada. Say "business", not "ISP", wherever a rule holds for
+the one provider adapter (reconnection, customers, open invoices). A payer
+can also pay **cash at a store** of Devolada's network: the shopkeeper
+records it in `apps/red`, the payment joins Pagos as `channel: "store"` and
+fires the same action, and the business confirms each hand-over of the cash
+in *Puntos de pago* (spec 018). The SPEI money never touches Devolada; the
+cash stays with the store until it reaches the business. Say "business", not "ISP", wherever a rule holds for
 every business; the ISP is one segment, served first, and the core never
 assumes it (constitution IX). Identifiers, comments and commits are
 **English**; product copy is **es-MX**.
@@ -71,6 +75,7 @@ pnpm --filter @devolada/api dev               # product API + the validation eng
 pnpm --filter @devolada/admin dev             # the business's panel (5174)
 pnpm --filter @devolada/pago dev              # public payment page (5175)
 pnpm --filter @devolada/landing dev           # public landing page (5176; Astro, no client framework)
+pnpm --filter @devolada/red dev               # the shopkeeper's app (5177)
 pnpm --filter @devolada/api sandbox           # apiCEP mock (8789), for validating without a provider token
 
 pnpm --filter @devolada/api db:generate       # drizzle migration from src/db/schema.ts
@@ -114,9 +119,9 @@ suffixed copies). The API's optional secrets, each degrading when unset
 CI order on every PR — none of it may be skipped or quarantined to get green:
 `spec-lint`, `gen-banks --check`, `contrast-lint`, `pending-lint`, typecheck,
 tests, build.
-**Never deploy from a local machine.** Merge to `main` deploys dev — all four
-Workers: API, admin, payment page, landing (the browser and passkey layers
-gate it); a `v*` tag deploys prod, and **the tag is the approval** — there is
+**Never deploy from a local machine.** Merge to `main` deploys dev — all five
+Workers: API, admin, payment page, landing, the store app (the browser and
+passkey layers gate it); a `v*` tag deploys prod, and **the tag is the approval** — there is
 no reviewer click (production-launch D3). A release is
 `git tag vX.Y.Z origin/main && git push origin vX.Y.Z` on a commit whose
 Deploy Dev run is green — the tag job checks and refuses otherwise (D1). A
@@ -140,6 +145,13 @@ apps/landing  the product's front door at the root domain: an Astro static
               headers + CSP); renders the shared atoms at build and ships
               no framework. Requests and counts live in the API
               (`routes/landing/`); the operator reads them in the panel
+apps/red      the shopkeeper's app, phone-first, no offline work (assets
+              Worker); from 1024 px a side menu and two halves
+              (cash-at-stores D32): Cobrar (search → debt → record → folio and the
+              WhatsApp receipt), Caja and Movimientos (the store's cash
+              book, the hand-over). Its own session kind, the store actor
+              (`requireStore`); the cash book is `store_ledger`, written
+              only by `src/store-ledger/` (cash-at-stores D19)
 packages/ui   design tokens + the atoms every surface renders
 ```
 
@@ -181,6 +193,13 @@ Invariants worth knowing before you touch anything:
   `auth/role-matrix.ts` is the one source of truth and must never import server
   code, because the admin imports it. Platform operators come from
   `PLATFORM_OPERATOR_EMAILS` — changing that set is a deploy.
+- **A payer's reference belongs to a person inside one business**: seven
+  digits in `payer_references`, held by customers through
+  `payer_reference_customers` — beside the link, never on it (a link row
+  stays identity-only). The whole phone is never stored, nor a name: they
+  are read live through the integration's `customersWithPhone` and
+  forgotten. Only `direct-payments/payer-reference.ts` writes the holders
+  (payment-without-receipt D1).
 - **`payments` is one row for the whole life of a payment**: proof → validation
   (`validating → confirmed | partial | invalid | unapplied | expired |
   superseded | queued_for_credit`) → the action queue on the same row

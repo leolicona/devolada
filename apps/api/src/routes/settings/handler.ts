@@ -74,6 +74,8 @@ function toSettings(
       overTreatment: business.overTreatment,
       effectiveOverTreatment: effectiveOverTreatment(business, integration),
     },
+    /* payment-without-receipt D20 */
+    payByReference: business.payByReference,
   };
 }
 
@@ -190,6 +192,7 @@ export async function patchSettings(c: Ctx, body: SettingsPatchRequest) {
         : {}),
       ...(body.toleranceCents !== undefined ? { toleranceCents: body.toleranceCents } : {}),
       ...(body.overTreatment !== undefined ? { overTreatment: body.overTreatment } : {}),
+      ...(body.payByReference !== undefined ? { payByReference: body.payByReference } : {}),
       ...accountsPatch,
   };
   /* Since the D2 move a patch can be integration-only — drizzle refuses

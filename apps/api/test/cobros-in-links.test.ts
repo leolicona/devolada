@@ -179,12 +179,20 @@ describe("cobros-in-links US1 (T004): the invoice row carries its period and its
 });
 
 describe("cobros-in-links US1 (T045): the session says what the integration can do (D13)", () => {
-  it("a business with a WispHub key reads both capabilities; one with no integration reads none", async () => {
+  it("a business with a WispHub key reads its capabilities; one with no integration reads none", async () => {
     await seedBusiness({ wisphubApiKey: "wh-key-1" });
     await seedBusiness({ email: "sin@isp.mx" });
 
     const connected = await (await app()).request("/auth/me", await asBusiness(), env);
-    expect((await connected.json()).data.integrationCapabilities).toEqual(["receivables", "customerDebt"]);
+    /* payment-without-receipt D4 adds a third: the customers who share a phone.
+       cash-at-stores D8, D9 add the counter's search and the payment actions */
+    expect((await connected.json()).data.integrationCapabilities).toEqual([
+      "receivables",
+      "customerDebt",
+      "customersWithPhone",
+      "customerSearch",
+      "paymentActions",
+    ]);
 
     const bare = await (await app()).request("/auth/me", await asBusiness("sin@isp.mx"), env);
     expect((await bare.json()).data.integrationCapabilities).toEqual([]);

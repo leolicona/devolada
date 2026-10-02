@@ -1,6 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ADMIN } from "../../playwright.config";
-import { stubAdminApi, stubOperatorReaderApi } from "./stubs";
+import { ADMIN, RED } from "../../playwright.config";
+import {
+  stubAdminApi,
+  stubAdminStoreApi,
+  stubCashPointsApi,
+  stubOperatorReaderApi,
+  stubOperatorStoresApi,
+  stubRedApi,
+} from "./stubs";
 
 /* docs/legacy/polish/responsive.spec.md — US-P03.
 
@@ -251,4 +258,186 @@ test.describe("cep-bundle-match US1/US4: the decision and the unmatched list hol
       expect(dialog.scrollWidth, "the dialog scrolls sideways").toBeLessThanOrEqual(dialog.clientWidth + 1);
     });
   }
+});
+
+/* cash-at-stores US1, US3, US5 (T033, T060, T083, T113; constitution VI; research D26, D32): the
+   store app is a counter on a shopkeeper's phone, and from 1024px on a
+   computer at the counter. At every width it never scrolls sideways,
+   never cuts a customer's name, every control clears 48px, and the
+   decisive *Cobrar* clears 64px. At 1280 the screens below are the
+   desktop layout (D32), so the same measures hold there too. */
+const redScreens: { name: string; url: string; stub?: (page: Page) => Promise<void>; open?: (page: Page) => Promise<void>; ready: string }[] = [
+  {
+    name: "the search",
+    url: `${RED}/`,
+    open: async (page) => {
+      await page.getByLabel("Buscar cliente").fill("guadalupe");
+    },
+    ready: "Guadalupe Reyes Hernández",
+  },
+  { name: "the debt", url: `${RED}/cobro/greyes@wifiplus`, ready: "Total a cobrar" },
+  { name: "the result", url: `${RED}/cobros/pay-1`, ready: "DV-7K2Q9M" },
+  { name: "Mi caja", url: `${RED}/caja`, ready: "WiFi Plus dice:" },
+  { name: "the hand-over", url: `${RED}/caja/entrega?businessId=business-1`, ready: "La entrega quedará pendiente" },
+  { name: "Movimientos", url: `${RED}/movimientos`, ready: "Corrección de Devolada" },
+  /* T083: the ways in, the screens a session ends on, and the narrowed
+     cash book — their links clear 48px too */
+  { name: "Movimientos of one business", url: `${RED}/movimientos?businessId=business-1&kind=collection`, ready: "Ver todos" },
+  { name: "the hand-overs", url: `${RED}/caja/entregas?businessId=business-1`, ready: "«Faltaron $200 en el sobre»" },
+  { name: "the sign-in", url: `${RED}/entrar`, ready: "Olvidé mi contraseña" },
+  { name: "the recovery", url: `${RED}/recuperar`, ready: "Volver a entrar" },
+  { name: "the invitation", url: `${RED}/invitacion/tok-1`, ready: "Abarrotes Lupita" },
+  {
+    name: "the suspended store",
+    url: `${RED}/`,
+    stub: async (page) => {
+      /* T096: the screen as the app reaches it — the session answers that
+         the store is suspended (FR-014) */
+      await page.route("**/auth/me", (route) =>
+        route.request().resourceType() === "document"
+          ? route.fallback()
+          : route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ success: false, error: { code: "STORE_SUSPENDED" } }) }),
+      );
+    },
+    ready: "Tu tienda está suspendida",
+  },
+  {
+    name: "the wrong account",
+    url: `${RED}/`,
+    stub: async (page) => {
+      await page.route("**/auth/me", (route) =>
+        route.request().resourceType() === "document"
+          ? route.fallback()
+          : route.fulfill({ contentType: "application/json", body: JSON.stringify({ success: true, data: { type: "business" } }) }),
+      );
+    },
+    ready: "Esta cuenta no es de una tienda",
+  },
+];
+
+test.describe("cash-at-stores US1/US5: the store app at 360/768/1280", () => {
+  for (const size of [PHONE, TABLET, DESKTOP]) {
+    for (const screen of redScreens) {
+      test(`${screen.name} fits ${size.width}px with 48px targets`, async ({ page }) => {
+        await page.setViewportSize(size);
+        await stubRedApi(page);
+        await screen.stub?.(page);
+        await page.goto(screen.url);
+        await screen.open?.(page);
+        await expect(page.getByText(screen.ready).first()).toBeVisible();
+        await expectNoHorizontalScroll(page);
+        await expectNothingClipped(page);
+        await expectTouchTargets(page, 48);
+      });
+    }
+  }
+
+  test("Cobrar is the decisive action: 64px on a phone", async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await stubRedApi(page);
+    await page.goto(`${RED}/cobro/greyes@wifiplus`);
+    const collect = page.getByRole("button", { name: /^Cobrar \$/ });
+    await expect(collect).toBeVisible();
+    const box = await collect.boundingBox();
+    expect(box!.height, "Cobrar's height").toBeGreaterThanOrEqual(64);
+    /* the tabs a thumb reaches carry the same weight */
+    const tab = await page.getByRole("navigation", { name: "Secciones, barra inferior" }).getByRole("link", { name: "Caja" }).boundingBox();
+    expect(tab!.height, "a tab's height").toBeGreaterThanOrEqual(64);
+  });
+});
+
+/* cash-at-stores US1, US5 (T113; research D32): on a computer the sections
+   are a side menu and *Cobrar* and *Mi caja* are two halves side by side,
+   each at least a phone's width. Below 1024px the tabs stay. */
+test.describe("cash-at-stores US1/US5: the store app on a computer (D32)", () => {
+  for (const size of [{ width: 1024, height: 800 }, DESKTOP]) {
+    test(`the side menu replaces the tabs, and Mi caja shows the hand-overs beside the cash, at ${size.width}px`, async ({ page }) => {
+      await page.setViewportSize(size);
+      await stubRedApi(page);
+      await page.goto(`${RED}/caja`);
+      const history = page.getByRole("list", { name: "Entregas a WiFi Plus" });
+      await expect(history).toBeVisible();
+      const side = page.getByRole("navigation", { name: "Secciones", exact: true });
+      await expect(side).toBeVisible();
+      await expect(page.getByRole("navigation", { name: "Secciones, barra inferior" })).toBeHidden();
+      await expect(side.getByRole("link", { name: "Caja" })).toHaveAttribute("aria-current", "page");
+      const cash = await page.getByRole("link", { name: /Efectivo que tienes/ }).boundingBox();
+      const list = await history.boundingBox();
+      expect(list!.x, "the hand-overs sit to the right of the cash").toBeGreaterThanOrEqual(cash!.x + cash!.width);
+    });
+
+    test(`Cobrar: the search beside the debt, each half a phone's width, at ${size.width}px`, async ({ page }) => {
+      await page.setViewportSize(size);
+      await stubRedApi(page);
+      await page.goto(`${RED}/cobro/greyes@wifiplus`);
+      const collect = page.getByRole("button", { name: /^Cobrar \$/ });
+      await expect(collect).toBeVisible();
+      const search = await page.getByLabel("Buscar cliente").boundingBox();
+      /* the right half is the quote's own region, named by the customer */
+      const debt = await page.getByRole("region", { name: "Guadalupe Reyes Hernández" }).boundingBox();
+      const button = await collect.boundingBox();
+      expect(debt!.x, "the debt sits to the right of the search").toBeGreaterThanOrEqual(search!.x + search!.width);
+      /* D32: at 1024 each half is about 350px, a phone's width */
+      expect(search!.width, "the search half").toBeGreaterThanOrEqual(340);
+      expect(debt!.width, "the debt half").toBeGreaterThanOrEqual(340);
+      expect(button!.height, "Cobrar stays the decisive 64px").toBeGreaterThanOrEqual(64);
+    });
+  }
+
+  test("below 1024px the tabs stay and there is no side menu", async ({ page }) => {
+    await page.setViewportSize({ width: 1023, height: 800 });
+    await stubRedApi(page);
+    await page.goto(`${RED}/caja`);
+    await expect(page.getByText("Efectivo que tienes").first()).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Secciones, barra inferior" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Secciones", exact: true })).toBeHidden();
+  });
+});
+
+/* cash-at-stores T040, T051, T060: the panel's new screens hold at the
+   widths they are used at — Tiendas on the operator's desktop and tablet,
+   Pagos with a cash row and Puntos de pago down to the phone. */
+test.describe("cash-at-stores US2/US4/US5: the panel's new screens", () => {
+  for (const size of [TABLET, DESKTOP]) {
+    test(`Tiendas and a store's cash book fit ${size.width}px`, async ({ page }) => {
+      await page.setViewportSize(size);
+      await stubOperatorStoresApi(page);
+      await page.goto(`${ADMIN}/operador`);
+      await page.getByRole("tab", { name: "Tiendas" }).click();
+      await page.getByRole("button", { name: /WiFi Plus · tiene/ }).click();
+      await expect(page.getByText("Registrar corrección").first()).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      await expectNothingClipped(page);
+    });
+  }
+
+  for (const size of [PHONE, TABLET, DESKTOP]) {
+    test(`Puntos de pago fits ${size.width}px`, async ({ page }) => {
+      await page.setViewportSize(size);
+      await stubCashPointsApi(page);
+      await page.goto(`${ADMIN}/puntos-de-pago`);
+      await page.getByRole("button", { name: "Ver entregas" }).first().click();
+      await expect(page.getByText("«Faltaron $200 en el sobre»")).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      await expectNothingClipped(page);
+    });
+
+    test(`a cash row in Pagos fits ${size.width}px`, async ({ page }) => {
+      await page.setViewportSize(size);
+      await stubAdminStoreApi(page);
+      await page.goto(ADMIN);
+      await page.getByRole("button", { name: /Mario Pérez Castañeda/ }).click();
+      await expect(page.getByText("Cargo por servicio en tienda")).toBeVisible();
+      await expectNoHorizontalScroll(page);
+      await expectNothingClipped(page);
+    });
+  }
+
+  test("the channel filter clears 44px on a phone", async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await stubAdminStoreApi(page);
+    await page.goto(ADMIN);
+    await expect(page.getByRole("group", { name: "Canal" })).toBeVisible();
+    await expectTouchTargets(page, 44, 'section[aria-label="Filtros"]');
+  });
 });

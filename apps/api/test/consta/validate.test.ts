@@ -7,7 +7,7 @@ import { deriveShapeRules } from "../../src/consta/extraction/shape";
 import type { Reading } from "../../src/consta/extraction/reader";
 import { consta, ConstaError, type ConstaRequest } from "../../src/consta";
 import type { Bindings } from "../../src/env";
-import { cepBundles, cepRecords } from "../../src/db/schema";
+import { providerQuota, cepBundles, cepRecords } from "../../src/db/schema";
 import { MAX_BUNDLE_BYTES, readPendingBundle } from "../../src/consta/bundle/store";
 import {
   buildBundleZip,
@@ -594,6 +594,23 @@ describe("The failure taxonomy (D9, D14–D16)", () => {
     expect(rows[0].providerHttpStatus).toBe(200);
     expect(rows[0].providerMs).toBe(6500);
     expect(rows[0].quotaRemaining).toBe(767);
+  });
+
+  it("payment-without-receipt US4 (D19, FR-038): the header upserts the platform's quota row, and a later answer overwrites it", async () => {
+    const { key } = await seedOwner();
+    mockApiCep(settledResponse, undefined, { headers: { "X-RateLimit-Remaining": "767" } });
+    await postValidate(key, directRequest);
+    expect(await db().select().from(providerQuota)).toEqual([
+      { provider: "apicep", remaining: 767, observedAt: expect.any(Date) },
+    ]);
+    mockApiCep(settledResponse, undefined, { headers: { "X-RateLimit-Remaining": "612" } });
+    await postValidate(key, directRequest);
+    const [row] = await db().select().from(providerQuota);
+    expect(row.remaining).toBe(612);
+    /* no header, no observation: the last one stands */
+    mockApiCep(settledResponse);
+    await postValidate(key, directRequest);
+    expect((await db().select().from(providerQuota))[0].remaining).toBe(612);
   });
 });
 
@@ -2723,11 +2740,14 @@ describe("cep-bundle-match US1: several matches, read and kept by the engine", (
     const [logged] = await db().select().from(validations);
     expect(logged).toMatchObject({ trackingKey: T2.clave, referenceNumber: "9784417", status: "valid" });
 
-    /* a search by clave is the payer's own: no record */
+    /* a search by clave is the payer's own: nothing for the matcher to
+       decide (no `record` on the verdict) — and since
+       payment-without-receipt D13 its CEP is kept all the same, so the
+       confirmation teaches the account it came from */
     mockApiCep(validAnswer(T1));
     const byItsClave = await postValidate(key, byClave(T1.clave));
     expect(byItsClave.data.record).toBeUndefined();
-    expect(await records()).toHaveLength(1);
+    expect((await records()).map((r) => r.clave).sort()).toEqual([T1.clave, T2.clave].sort());
   });
 
   /* bug: single-cep-unreadable (D4 amended 2026-09-29, D19) — on dev a

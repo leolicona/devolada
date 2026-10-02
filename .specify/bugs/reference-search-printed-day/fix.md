@@ -78,5 +78,10 @@ in". They asserted the defect.
   own bug.
 - **A payer who typed the wrong day** is no longer rescued by the next-day
   alternate. Spec 012, scenario 5 (neighbouring calendar days) covers it.
+  *2026-09-30: built by payment-without-receipt D14 (tasks T025) — round 3
+  of a row searched by a payer's reference asks the day before and the day
+  after the day given (never after today, never the operation day), in
+  `runValidation` (`neighbourDays`); rows without a `reference_source`
+  keep asking the printed day alone, as this fix left them.*
 - **The several-matches ZIP** is still read as `not_found`
   (`reference-finds-other-transfer`, spec 012).

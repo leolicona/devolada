@@ -22,6 +22,8 @@ export const businessActor = {
   platformOperator: false,
   credit: { balanceCents: 10000, step: "ok" },
   observing: false,
+  /* cash-at-stores D7, D23: a business that never had cash at stores */
+  storeChannel: { on: false, since: null },
 } as const;
 
 export const ok = (data: unknown, status = 200) =>
@@ -124,6 +126,9 @@ export const handlers = {
   logout: (r: () => Response) => http.post("/auth/sign-out", () => r()),
   invitationPreview: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/businesses/invitations/:id/preview", ({ params }) => r(String(params.id))),
+  /* bug: invitee-lands-own-business: the invitations sent to me */
+  myInvitations: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/businesses/invitations/mine", () => r()),
   acceptInvitationNew: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/businesses/invitations/:id/accept-new", async ({ params, request }) => r(String(params.id), await request.json())),
   resendInvitation: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
@@ -182,6 +187,34 @@ export const handlers = {
       r(String(params.readingId), await request.json()),
     ),
   benchFile: (r: (id: string) => Response) => http.get("/platform/reader/bench/:id/file", ({ params }) => r(String(params.id))),
+  /* payment-without-receipt D19 (US4): the provider's remaining calls,
+     on the operator's Reglas tab */
+  providerQuota: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/platform/provider-quota", () => r()),
+  /* cash-at-stores US2: the operator's Tiendas tab and the switch */
+  patchBusiness: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.patch("/platform/businesses/:id", async ({ params, request }) => r(String(params.id), await request.json())),
+  platformStores: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/platform/stores", () => r()),
+  createStore: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/platform/stores", async ({ request }) => r(await request.json())),
+  patchStore: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.patch("/platform/stores/:id", async ({ params, request }) => r(String(params.id), await request.json())),
+  resendStoreInvitation: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/platform/stores/:id/invitation", ({ params }) => r(String(params.id))),
+  storeLedger: (r: (id: string, businessId: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/platform/stores/:id/ledger/:businessId", ({ params }) => r(String(params.id), String(params.businessId))),
+  storeCorrection: (r: (id: string, businessId: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/platform/stores/:id/ledger/:businessId/corrections", async ({ params, request }) =>
+      r(String(params.id), String(params.businessId), await request.json()),
+    ),
+  /* cash-at-stores US5: Puntos de pago */
+  cashPoints: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/cash-points", () => r()),
+  confirmHandover: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/cash-points/handovers/:id/confirm", ({ params }) => r(String(params.id))),
+  disputeHandover: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
+    http.post("/cash-points/handovers/:id/dispute", async ({ params, request }) => r(String(params.id), await request.json())),
+  handoverHistory: (r: (storeId: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/cash-points/stores/:storeId/history", ({ params }) => r(String(params.storeId))),
 };
 
 export const sessionUser = { id: "user-1", name: "Leo", email: "demo@devolada.app", emailVerified: true };
@@ -190,7 +223,20 @@ export const sessionUser = { id: "user-1", name: "Leo", email: "demo@devolada.ap
    event, and every render of /links asks for it. Answering `null` by
    default — "this business has nothing to be told" — keeps it out of
    every other suite's arrangement; the tests that care about the notice
-   override it with `handlers.pruneNotice(...)`. */
+   override it with `handlers.pruneNotice(...)`.
+
+   payment-without-receipt D19: the provider quota, likewise — every
+   render of /operador's Reglas tab asks for it, and `null` is what the
+   operator sees before any answer carried the header. The tests that
+   care override it with `handlers.providerQuota(...)`.
+
+   bug: invitee-lands-own-business: every render of the shell, the
+   business wizard and the chooser asks for the invitations sent to the
+   person signed in.
+   None is what nearly everyone sees; the tests that care override it with
+   `handlers.myInvitations(...)`. */
 export const server = setupServer(
   http.get("/direct-payments/prune-notice", () => ok(null)),
+  http.get("/platform/provider-quota", () => ok(null)),
+  http.get("/businesses/invitations/mine", () => ok({ invitations: [] })),
 );

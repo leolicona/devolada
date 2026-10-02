@@ -2,7 +2,8 @@ import { z } from "zod";
 
 /* Shareable contract (ARCHITECTURE.md): the admin derives types from
    these schemas and MSW handlers validate against them. Store-channel
-   shapes retired to devolada-red. */
+   shapes retired to devolada-red with the pivot, and cash returned as a
+   channel of this feed with cash-at-stores (D23). */
 
 /* payments-and-classes D4: every lifecycle status is a filter — the feed
    is where a payment shows itself, whatever became of it. */
@@ -41,6 +42,8 @@ export const feedQuery = z.object({
      inclusive on both ends; the server owns the midnight boundary. */
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  /* cash-at-stores D23 (FR-031): cash, SPEI, or both when absent */
+  channel: z.enum(["spei", "store"]).optional(),
 });
 
 /* cep-bundle-match D10: why a search without a clave did not decide */
@@ -49,8 +52,10 @@ export const MATCH_REASONS = ["all_used", "no_signal", "too_close", "none_fit", 
 export const feedCharge = z.object({
   id: z.string(),
   folio: z.string(),
-  /* 'spei' = direct payment (direct-payment D6); one channel today */
-  channel: z.enum(["spei"]),
+  /* 'spei' = direct payment (direct-payment D6); 'store' = cash a store
+     recorded (cash-at-stores D11, D23). A reader tells them apart by this
+     field, never by `proofMode` (data-model). */
+  channel: z.enum(["spei", "store"]),
   /* automated-collections-api D8/FR-026: which door the link came
      through. An API payment's `actionOutcome` is its verdict webhook's
      delivery, so the badge must speak the webhook's words, never
@@ -100,6 +105,16 @@ export const feedCharge = z.object({
   customerName: z.string(),
   /* null for channel = 'spei': no store handled this money */
   storeName: z.string().nullable(),
+  /* cash-at-stores D23: the network fee the payer paid at the counter —
+     the store's money, never the business's. Null on a SPEI row.
+     Defaulted so fixtures born before it still parse. */
+  storeFeeCents: z.number().int().nullable().default(null),
+  /* cash-at-stores D21 (FR-030): the operator's corrections in the store's
+     cash book for this payment — amount, reason, author and date. Empty
+     on every SPEI row. */
+  corrections: z
+    .array(z.object({ cents: z.number().int(), reason: z.string(), author: z.string().nullable(), at: z.number().int() }))
+    .default([]),
   createdAt: z.number().int(),
   actionDoneAt: z.number().int().nullable(),
   actionAttempts: z.number().int(),
@@ -120,6 +135,12 @@ export const feedCharge = z.object({
      several — "varias coincidencias" is false for one. Null beside a null
      `undecided`; defaulted so fixtures born before it still parse. */
   undecidedSource: z.enum(["several", "single"]).nullable().default(null),
+  /* payment-without-receipt D8/D11/D23: the path that confirmed it — the
+     payer's own reference, or one typed under "Usé otra referencia" (012's
+     "No puse la referencia", renamed by confirmation-hierarchy FR-007).
+     Null on a clave, a receipt, and every row of a business with the
+     feature off. The panel says it in text beside the StatusBadge. */
+  referenceSource: z.enum(["own", "typed"]).nullable().optional(),
 });
 
 export const feedResponse = z.object({
@@ -144,7 +165,33 @@ export const feedResponse = z.object({
 
 /* cep-bundle-match FR-013: why a candidate was not the one. `farther`: it
    was inside the time window, and another was nearer (D6). */
-export const MATCH_WHY = ["used", "tail", "window", "farther", "too_close", "amount", "account", "unreadable"] as const;
+export const MATCH_WHY = [
+  "used",
+  "tail",
+  "window",
+  "farther",
+  "too_close",
+  "amount",
+  "account",
+  "unreadable",
+  /* payment-without-receipt D26: sent from the previous holder's account */
+  "excluded",
+] as const;
+
+/* cep-bundle-match D8; payment-without-receipt D10, D11, D17 add what
+   decided the payer's own reference and a typed one (D23: the success
+   criteria read them from the trail) */
+export const MATCH_BY = [
+  "tail",
+  "time",
+  "both",
+  "none",
+  "clave",
+  "learned_account",
+  "earliest",
+  "sender_tail",
+  "clave_tail",
+] as const;
 
 /* cep-bundle-match D8, FR-013 (contracts/panel.md): how a search without a
    clave was decided, and what happened to every transfer it found. Other
@@ -155,7 +202,7 @@ export const MATCH_WHY = ["used", "tail", "window", "farther", "too_close", "amo
 export const proofMatch = z.object({
   source: z.enum(["several", "single"]),
   decided: z.enum(["chosen", "undecided"]),
-  by: z.enum(["tail", "time", "both", "none", "clave"]).nullable(),
+  by: z.enum(MATCH_BY).nullable(),
   reason: z.enum(MATCH_REASONS).nullable(),
   /* D6: credit − receipt time of the chosen one, whole seconds */
   distanceS: z.number().int().nullable(),

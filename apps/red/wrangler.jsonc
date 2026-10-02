@@ -1,0 +1,22 @@
+{
+  "$schema": "../api/node_modules/wrangler/config-schema.json",
+  "name": "devolada-red",
+  "compatibility_date": "2025-05-01",
+  /* Assets-only worker: serves the built store app (cash-at-stores D1,
+     D29). SPA fallback keeps /invitacion/<token> and /cobros/<id> deep
+     links working. */
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  },
+  "env": {
+    "dev": {
+      "name": "devolada-red-dev",
+      "routes": [{ "pattern": "red.dev.devoladapago.com", "custom_domain": true }]
+    },
+    "prod": {
+      "name": "devolada-red",
+      "routes": [{ "pattern": "red.devoladapago.com", "custom_domain": true }]
+    }
+  }
+}

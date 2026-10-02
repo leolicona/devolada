@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { feedResponse } from "@devolada/api/payments-schema";
 import { settingsResponse } from "@devolada/api/settings-schema";
-import { handlers, businessActor, ok, server } from "./msw";
+import { handlers, businessActor, fail, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
 
@@ -360,6 +360,87 @@ describe("receipt-triage US3: Cuentas para recibir pagos", () => {
     expect(screen.getByText("4111111111111111")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Tarjeta de débito" })).not.toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "CLABE ••••0004" })).toBeDisabled();
+    await expectNoViolations(document.body);
+  });
+});
+
+/* payment-without-receipt D20 (FR-039, contracts/panel.md § The switch):
+   the business turns receipt-free payment on and off. It lives under
+   `settings: update`, and it saves on toggle. */
+describe("payment-without-receipt US1: the switch «Pagar con referencia»", () => {
+  const arrange = (payByReference: boolean, role: "owner" | "admin" = "owner") => {
+    const patches: unknown[] = [];
+    let current = settings({ payByReference });
+    server.use(
+      handlers.session(() => ok({ ...businessActor, role })),
+      handlers.settings(() => ok(current)),
+      handlers.patchSettings((body) => {
+        patches.push(body);
+        current = settings({ ...(body as Record<string, unknown>) });
+        return ok(current);
+      }),
+    );
+    renderApp("/settings/direct-payment");
+    return patches;
+  };
+
+  it("opens off by default, says its one sentence, and turning it on patches payByReference alone", async () => {
+    const patches = arrange(false);
+
+    const toggle = await screen.findByRole("switch", { name: "Pagar con referencia" });
+    expect(screen.getByRole("heading", { name: "Pagar con referencia" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Tus clientes pagan con su referencia y confirman sin comprobante. El comprobante sigue disponible.",
+      ),
+    ).toBeInTheDocument();
+    /* The sentence describes the switch, so a screen reader hears both */
+    expect(toggle).toHaveAccessibleDescription(/confirman sin comprobante/);
+    expect(toggle).not.toBeChecked();
+    await expectNoViolations(document.body);
+
+    await userEvent.click(toggle);
+    expect(patches).toEqual([{ payByReference: true }]);
+    await waitFor(() => expect(toggle).toBeChecked());
+  });
+
+  it("turning it off patches false — every reference is kept on the server, the screen asks nothing more", async () => {
+    const patches = arrange(true);
+    const toggle = await screen.findByRole("switch", { name: "Pagar con referencia" });
+    expect(toggle).toBeChecked();
+    await userEvent.click(toggle);
+    expect(patches).toEqual([{ payByReference: false }]);
+    await waitFor(() => expect(toggle).not.toBeChecked());
+  });
+
+  it("an admin holds `settings: update` too, and changes it", async () => {
+    const patches = arrange(false, "admin");
+    await userEvent.click(await screen.findByRole("switch", { name: "Pagar con referencia" }));
+    expect(patches).toEqual([{ payByReference: true }]);
+  });
+
+  it("an operator never reaches the switch — the page is the `settings: update` area", async () => {
+    server.use(
+      handlers.session(() => ok({ ...businessActor, role: "operator" })),
+      handlers.settings(() => ok(settings())),
+    );
+    const router = renderApp("/settings/direct-payment");
+    await screen.findByRole("heading", { name: "Cuenta" });
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings"));
+    expect(screen.queryByRole("switch", { name: "Pagar con referencia" })).not.toBeInTheDocument();
+  });
+
+  it("a save the server refuses says so, and the switch stays where it was", async () => {
+    server.use(
+      handlers.session(() => ok(businessActor)),
+      handlers.settings(() => ok(settings())),
+      handlers.patchSettings(() => fail("FORBIDDEN", 403)),
+    );
+    renderApp("/settings/direct-payment");
+    const toggle = await screen.findByRole("switch", { name: "Pagar con referencia" });
+    await userEvent.click(toggle);
+    expect(await screen.findByRole("alert")).toHaveTextContent("No pudimos guardar el cambio. Intenta de nuevo.");
+    expect(toggle).not.toBeChecked();
     await expectNoViolations(document.body);
   });
 });

@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { businesses, cepBundles, cepRecords, member } from "../src/db/schema";
+import { account, businesses, cepBundles, cepRecords, member, user as userTable } from "../src/db/schema";
 import { makeAuth } from "../src/auth/better";
 import { listCredentials } from "../src/api-clients/store";
 import type { Bindings } from "../src/env";
-import { app, cookiesOf, json, PASSWORD } from "./helpers";
+import { app, json, sessionOf } from "./helpers";
 import {
   buildBundleZip,
   bundleOf,
@@ -21,27 +21,39 @@ import {
 import { sandboxBundle } from "../sandbox/cep-bundle.mjs";
 
 /* The dev seed (CLAUDE.md): a demo business with its auth twin and an
-   owner membership (business-and-memberships D1/D7 shape), idempotent. */
+   owner membership (business-and-memberships D1/D7 shape), idempotent.
+
+   passwordless-access US2 (D14, D16): the demo holds no password. It
+   signs in with a código from `POST /dev/code`, which mints only for a
+   test address (bug: dev-code-readable). */
+
+const devCode = async (body: unknown, bindings: unknown = env) =>
+  (await app()).request("/dev/code", json(body), bindings as typeof env);
+const codeIn = async (res: Response) => ((await res.json()) as { data: { code: string } }).data.code;
 
 describe("dev seed creates the demo business with its owner", () => {
-  it("US-B02: the demo owner signs in and lands in the demo business", async () => {
+  it("passwordless-access US2: the demo owner is born verified, without a password, and a /dev/code código lands them in the demo business", async () => {
     const seed = await (await app()).request("/dev/seed", { method: "POST" }, env);
     expect(seed.status).toBe(200);
+    expect((await seed.json()).data.admin).toEqual({ email: "demo@devolada.app" });
 
     const db = drizzle(env.DB);
     const [business] = await db.select().from(businesses).where(eq(businesses.email, "demo@devolada.app"));
     const [owner] = await db.select().from(member).where(eq(member.organizationId, business.orgId));
     expect(owner.role).toBe("owner");
+    const [user] = await db.select().from(userTable).where(eq(userTable.email, "demo@devolada.app"));
+    expect(user).toMatchObject({ emailVerified: true, name: "ISP Demo" });
+    expect(await db.select().from(account).where(eq(account.userId, user.id))).toHaveLength(0);
 
+    const minted = await devCode({ email: "demo@devolada.app", type: "sign-in" });
+    expect(minted.status).toBe(200);
     const login = await (await app()).request(
-      "/auth/sign-in/email",
-      json({ email: "demo@devolada.app", password: PASSWORD }),
+      "/auth/sign-in/email-otp",
+      json({ email: "demo@devolada.app", otp: await codeIn(minted) }),
       env,
     );
     expect(login.status).toBe(200);
-    const cookie = cookiesOf(login)
-      .find((c) => c.includes("session_token"))!
-      .split(";")[0];
+    const cookie = sessionOf(login);
     const me = await (await app()).request("/auth/me", { headers: { Cookie: cookie } }, env);
     expect(me.status).toBe(200);
     expect((await me.json()).data).toMatchObject({ type: "business", id: business.id, role: "owner" });
@@ -81,10 +93,11 @@ describe("dev seed creates the demo business with its owner", () => {
     ]);
   });
 
-  it("marries an orphan user to the demo business, keeping the user's password", async () => {
+  it("marries an orphan user to the demo business: verified, and holding no password (passwordless-access US2)", async () => {
     /* The deployed-dev case of 2026-08-15: a Better Auth user with the demo
-       email and no business (left by a failed signup). The seed must give
-       it the business; the password the user set keeps working. */
+       email and no business (left by a failed signup). The seed gives it
+       the business; like every account now, it holds no password, and a
+       código opens it. */
     const auth = makeAuth(env as unknown as Bindings);
     await auth.api.signUpEmail({
       body: { name: "Leo", email: "demo@devolada.app", password: "clave-recuperada-1" },
@@ -93,18 +106,57 @@ describe("dev seed creates the demo business with its owner", () => {
     const seed = await (await app()).request("/dev/seed", { method: "POST" }, env);
     expect(seed.status).toBe(200);
 
+    const db = drizzle(env.DB);
+    const [user] = await db.select().from(userTable).where(eq(userTable.email, "demo@devolada.app"));
+    expect(user.emailVerified).toBe(true);
+    expect(await db.select().from(account).where(eq(account.userId, user.id))).toHaveLength(0);
+
     const login = await (await app()).request(
-      "/auth/sign-in/email",
-      json({ email: "demo@devolada.app", password: "clave-recuperada-1" }),
+      "/auth/sign-in/email-otp",
+      json({ email: "demo@devolada.app", otp: await codeIn(await devCode({ email: "demo@devolada.app" })) }),
       env,
     );
     expect(login.status).toBe(200);
-    const cookie = cookiesOf(login)
-      .find((c) => c.includes("session_token"))!
-      .split(";")[0];
-    const me = await (await app()).request("/auth/me", { headers: { Cookie: cookie } }, env);
+    const me = await (await app()).request("/auth/me", { headers: { Cookie: sessionOf(login) } }, env);
     expect(me.status).toBe(200);
     expect((await me.json()).data).toMatchObject({ type: "business", role: "owner" });
+  });
+});
+
+describe("passwordless-access US2 — POST /dev/code mints a código for a test address only (D14, D15)", () => {
+  it("refuses a real address and a blank one with 403 TEST_ADDRESS_ONLY, and mints nothing", async () => {
+    for (const email of ["ana@negocio.mx", "", "   "]) {
+      const res = await devCode({ email, type: "sign-in" });
+      expect(res.status, email).toBe(403);
+      expect(await res.json(), email).toEqual({ success: false, error: { code: "TEST_ADDRESS_ONLY" } });
+    }
+    expect((await devCode({ type: "sign-in" })).status).toBe(403);
+  });
+
+  it("mints for a `.invalid` address and for the demo's, and each código works once", async () => {
+    for (const email of ["x@journey.invalid", "demo@devolada.app"]) {
+      const otp = await codeIn(await devCode({ email, type: "sign-in" }));
+      expect(otp, email).toMatch(/^\d{6}$/);
+      const enter = () => app().then((a) => a.request("/auth/sign-in/email-otp", json({ email, otp, name: "Prueba" }), env));
+      expect((await enter()).status, email).toBe(200);
+      expect((await enter()).status, email).toBe(400);
+    }
+  });
+
+  it("a fresh código replaces the one before it", async () => {
+    const first = await codeIn(await devCode({ email: "x@journey.invalid" }));
+    let second = await codeIn(await devCode({ email: "x@journey.invalid" }));
+    while (second === first) second = await codeIn(await devCode({ email: "x@journey.invalid" }));
+    const enter = (otp: string) =>
+      app().then((a) => a.request("/auth/sign-in/email-otp", json({ email: "x@journey.invalid", otp, name: "Prueba" }), env));
+    expect((await enter(first)).status).toBe(400);
+    expect((await enter(second)).status).toBe(200);
+  });
+
+  it("GET /dev/last-code is retired, and outside ENVIRONMENT=dev /dev/code does not exist", async () => {
+    expect((await (await app()).request("/dev/last-code?email=x%40journey.invalid", {}, env)).status).toBe(404);
+    const prod = await devCode({ email: "x@journey.invalid" }, { ...(env as unknown as Bindings), ENVIRONMENT: "prod" });
+    expect(prod.status).toBe(404);
   });
 });
 

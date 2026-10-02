@@ -21,11 +21,20 @@ proto.setPointerCapture ??= () => {};
 proto.releasePointerCapture ??= () => {};
 proto.scrollIntoView ??= () => {};
 import { server } from "./msw";
+import * as authClient from "../src/lib/auth-client";
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
   server.resetHandlers();
   cleanup();
+  /* passwordless-access D7: the platform check is asked once per page load.
+     A file that mocks the client has no such memory to forget (and vitest
+     throws on an export its mock does not define). */
+  try {
+    authClient.resetCanVerifyPerson();
+  } catch {
+    /* mocked in this file */
+  }
   /* A test starts from empty or it is not a test (constitution IV).
      Links remembers its search, the customers it saw and the rows the
      operator copied in `sessionStorage` (links-on-demand-search D11),

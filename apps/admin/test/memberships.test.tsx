@@ -1,14 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { settingsResponse } from "@devolada/api/settings-schema";
-import { baFail, baOk, businessActor, fail, handlers, ok, server, sessionUser } from "./msw";
+import { baFail, baOk, baSignedIn, baStatus, baTooMany, businessActor, fail, handlers, ok, server, sessionUser } from "./msw";
 import { renderApp } from "./render";
 
 /* docs/legacy/business/business-and-memberships.spec.md — the UI half of
    scenarios 1, 4–5, 6–9 (US-B01, US-B02, US-B03). The API half lives in
    apps/api/test/business-memberships.test.ts. */
+
+/* passwordless-access US4: the invitation page's key door. The client is
+   stood in for — the ceremony belongs to the browser layer — and starts as
+   a browser without passkey support, which is what happy-dom is. */
+const device = vi.hoisted(() => ({
+  supported: vi.fn(() => false),
+  signInPasskey: vi.fn(async (): Promise<{ data: unknown; error: unknown }> => ({ data: {}, error: null })),
+}));
+vi.mock("@/lib/auth-client", () => ({
+  passkeysSupported: device.supported,
+  canVerifyPerson: async () => false,
+  authClient: { passkey: { addPasskey: vi.fn() }, signIn: { passkey: device.signInPasskey } },
+}));
+beforeEach(() => {
+  device.supported.mockReset().mockReturnValue(false);
+  device.signInPasskey.mockReset().mockResolvedValue({ data: {}, error: null });
+});
 
 const settings = (over: Record<string, unknown> = {}) =>
   settingsResponse.parse({
@@ -265,7 +282,7 @@ const previewOf = (over: Record<string, unknown> = {}) => ({
 });
 const emptyFeed = () => ok({ payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } });
 
-describe("D8 + better-auth D14: the invitation page decides for the invitee", () => {
+describe("D8 + better-auth D14 + passwordless-access US4: the invitation page decides for the invitee", () => {
   it("signed in with the invited address: accepts, activates the business and lands inside", async () => {
     const accepted: unknown[] = [];
     const activated: unknown[] = [];
@@ -290,7 +307,7 @@ describe("D8 + better-auth D14: the invitation page decides for the invitee", ()
     expect(router.state.location.pathname).toBe("/payments");
   });
 
-  it("no account for the invited address: one form — fixed email, name, new password — creates and enters", async () => {
+  it("no account for the invited address: the name alone — no password — creates, then /welcome, then inside (passwordless-access US4)", async () => {
     const born: unknown[] = [];
     let signedIn = false;
     server.use(
@@ -307,31 +324,83 @@ describe("D8 + better-auth D14: the invitation page decides for the invitee", ()
     const router = renderApp("/invitaciones/inv-1");
 
     expect(await screen.findByRole("heading", { name: /te invitaron a wifiplus/i })).toBeInTheDocument();
-    expect(screen.getByText(/como operador\. crea tu contraseña/i)).toBeInTheDocument();
+    expect(screen.getByText("Como operador.")).toBeInTheDocument();
     /* The address is text, never a field (design review identidad-2) */
     expect(screen.getByText("ana@wifiplus.mx")).toBeInTheDocument();
     expect(screen.queryByLabelText("Correo")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^entrar$/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/contraseña/i)).not.toBeInTheDocument();
+    expect(document.querySelector('input[type="password"]')).toBeNull();
+    /* FR-015: no passkey support, no word of it */
+    expect(screen.queryByText(/huella|rostro/i)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /crear cuenta y entrar/i }));
+    expect(await screen.findByText("Escribe tu nombre, al menos 2 letras.")).toBeInTheDocument();
+    expect(born).toEqual([]);
 
     await userEvent.type(screen.getByLabelText("Tu nombre"), "Ana Torres");
-    await userEvent.type(screen.getByLabelText(/crea tu contraseña/i), "devolada123");
     await userEvent.click(screen.getByRole("button", { name: /crear cuenta y entrar/i }));
 
     await screen.findByRole("heading", { name: "Pagos" });
-    expect(born).toEqual([["inv-1", { name: "Ana Torres", password: "devolada123" }]]);
+    expect(born).toEqual([["inv-1", { name: "Ana Torres" }]]);
     expect(router.state.location.pathname).toBe("/payments");
   });
 
-  it("the invited address has an account: the password alone signs in and accepts", async () => {
+  it("the invited address has an account: a código to the invited address signs in, accepts, and lands inside (passwordless-access US4)", async () => {
     let signedIn = false;
     const accepted: unknown[] = [];
+    let codeFor: unknown = null;
+    let entered: unknown = null;
     server.use(
       handlers.getSession(() => HttpResponse.json(signedIn ? { user: { ...sessionUser, email: "ana@wifiplus.mx" } } : null)),
       handlers.invitationPreview(() => ok(previewOf({ hasAccount: true }))),
-      handlers.login(() => {
-        signedIn = true;
-        return baOk();
+      handlers.requestCode((body) => {
+        codeFor = body;
+        return baStatus({ success: true });
       }),
+      handlers.signInCode((body) => {
+        entered = body;
+        signedIn = true;
+        return baSignedIn({ ...sessionUser, email: "ana@wifiplus.mx" });
+      }),
+      http.post("/auth/organization/accept-invitation", async ({ request }) => {
+        accepted.push(await request.json());
+        return HttpResponse.json({ invitation: { organizationId: "org_wifiplus" } });
+      }),
+      http.post("/auth/organization/set-active", () => HttpResponse.json({})),
+      handlers.session(() => (signedIn ? ok(asRole("operator")) : fail("AUTHENTICATION_ERROR", 401))),
+      handlers.feed(emptyFeed),
+    );
+    const router = renderApp("/invitaciones/inv-1");
+
+    expect(await screen.findByText("Como operador.")).toBeInTheDocument();
+    expect(screen.getByText("ana@wifiplus.mx")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Tu nombre")).not.toBeInTheDocument();
+    expect(screen.queryByText(/contraseña/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /olvidé/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /huella o rostro/i })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Enviarme un código" }));
+    expect(codeFor).toEqual({ email: "ana@wifiplus.mx", type: "sign-in" });
+    await userEvent.type(await screen.findByLabelText("Código"), "482913");
+    await userEvent.click(screen.getByRole("button", { name: "Entrar" }));
+
+    await screen.findByRole("heading", { name: "Pagos" });
+    expect(entered).toEqual({ email: "ana@wifiplus.mx", otp: "482913" });
+    expect(accepted).toEqual([{ invitationId: "inv-1" }]);
+    expect(router.state.location.pathname).toBe("/payments");
+  });
+
+  it("where passkeys are supported, the key comes first; the invited account's key accepts on sight (passwordless-access US4)", async () => {
+    device.supported.mockReturnValue(true);
+    let signedIn = false;
+    const accepted: unknown[] = [];
+    device.signInPasskey.mockImplementation(async () => {
+      signedIn = true;
+      return { data: {}, error: null };
+    });
+    server.use(
+      handlers.getSession(() => HttpResponse.json(signedIn ? { user: { ...sessionUser, email: "ana@wifiplus.mx" } } : null)),
+      handlers.invitationPreview(() => ok(previewOf({ hasAccount: true }))),
       http.post("/auth/organization/accept-invitation", async ({ request }) => {
         accepted.push(await request.json());
         return HttpResponse.json({ invitation: { organizationId: "org_wifiplus" } });
@@ -342,13 +411,67 @@ describe("D8 + better-auth D14: the invitation page decides for the invitee", ()
     );
     renderApp("/invitaciones/inv-1");
 
-    expect(await screen.findByText(/como operador\. entra con tu contraseña/i)).toBeInTheDocument();
-    expect(screen.queryByLabelText("Tu nombre")).not.toBeInTheDocument();
-    await userEvent.type(screen.getByLabelText("Contraseña"), "devolada123");
-    await userEvent.click(screen.getByRole("button", { name: /^entrar$/i }));
-
+    const key = await screen.findByRole("button", { name: "Entrar con huella o rostro" });
+    expect(screen.getByText("o con un código")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enviarme un código" })).toBeInTheDocument();
+    await userEvent.click(key);
     await screen.findByRole("heading", { name: "Pagos" });
     expect(accepted).toEqual([{ invitationId: "inv-1" }]);
+  });
+
+  it("a key of another account leads to the «otro correo» state with its switch, and accepts nothing (FR-018)", async () => {
+    device.supported.mockReturnValue(true);
+    let signedIn = false;
+    const accepted: unknown[] = [];
+    device.signInPasskey.mockImplementation(async () => {
+      signedIn = true;
+      return { data: {}, error: null };
+    });
+    server.use(
+      handlers.getSession(() => HttpResponse.json(signedIn ? { user: sessionUser } : null)),
+      handlers.invitationPreview(() => ok(previewOf({ hasAccount: true }))),
+      http.post("/auth/organization/accept-invitation", async ({ request }) => {
+        accepted.push(await request.json());
+        return HttpResponse.json({ invitation: { organizationId: "org_wifiplus" } });
+      }),
+    );
+    renderApp("/invitaciones/inv-1");
+
+    await userEvent.click(await screen.findByRole("button", { name: "Entrar con huella o rostro" }));
+    expect(await screen.findByText(/fue enviada a otro correo/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /entrar con el correo invitado/i })).toBeInTheDocument();
+    expect(accepted).toEqual([]);
+  });
+
+  it("a key that fails says so and leaves the código (FR-012)", async () => {
+    device.supported.mockReturnValue(true);
+    device.signInPasskey.mockResolvedValue({ data: null, error: { code: "AUTH_CANCELLED" } });
+    server.use(
+      handlers.getSession(() => HttpResponse.json(null)),
+      handlers.invitationPreview(() => ok(previewOf({ hasAccount: true }))),
+    );
+    renderApp("/invitaciones/inv-1");
+    await userEvent.click(await screen.findByRole("button", { name: "Entrar con huella o rostro" }));
+    expect(await screen.findByText("No pudimos usar tu huella o rostro. Entra con un código.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enviarme un código" })).toBeInTheDocument();
+  });
+
+  it("a 429 on «Enviarme un código» or on «Entrar» says to wait (FR-027)", async () => {
+    let asked = 0;
+    server.use(
+      handlers.getSession(() => HttpResponse.json(null)),
+      handlers.invitationPreview(() => ok(previewOf({ hasAccount: true }))),
+      handlers.requestCode(() => (++asked === 1 ? baTooMany() : baStatus({ success: true }))),
+      handlers.signInCode(() => baTooMany()),
+    );
+    renderApp("/invitaciones/inv-1");
+    await userEvent.click(await screen.findByRole("button", { name: "Enviarme un código" }));
+    expect(await screen.findByText("Demasiados intentos. Espera un momento e intenta de nuevo.")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Enviarme un código" }));
+    await userEvent.type(await screen.findByLabelText("Código"), "482913");
+    await userEvent.click(screen.getByRole("button", { name: "Entrar" }));
+    expect(await screen.findByText("Demasiados intentos. Espera un momento e intenta de nuevo.")).toBeInTheDocument();
   });
 
   it("signed in with another email: the screen says so and offers to switch", async () => {

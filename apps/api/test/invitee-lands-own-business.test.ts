@@ -2,15 +2,19 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
-import { invitation, organization, verification } from "../src/db/schema";
+import { invitation, organization } from "../src/db/schema";
 import { myInvitationsResponse } from "../src/routes/businesses/schema";
-import { app, seedBusiness, sessionCookieHeader, PASSWORD } from "./helpers";
+import { app, seedBusiness, sentCode, sessionCookieHeader } from "./helpers";
 import { seedActiveStore } from "./store-helpers";
 
 /* bug: invitee-lands-own-business — an invitee who already had a
    business signed in any other way than the email's link and landed in
    their own business; nothing named the invitation again. The panel now
-   reads the invitations addressed to the person behind the session. */
+   reads the invitations addressed to the person behind the session.
+
+   passwordless-access US4: the person with no business yet registers by
+   código (D1), and the código comes from the sender's log, not the table:
+   it is stored hashed (D2). */
 
 /* No network: the invitation email fails closed here (the sender logs
    and moves on), never reaching Resend from a test */
@@ -85,17 +89,19 @@ describe("bug: invitee-lands-own-business — the panel reads the invitations se
     expect(row.status).toBe("accepted");
   });
 
-  it("a person with no business yet — signed up through the código — reads it too (the wizard asks)", async () => {
+  it("a person with no business yet — registered by código — reads it too (the wizard asks)", async () => {
     await invitingBusiness();
     const created = await data(
       await call("demo@devolada.app", "POST", "/businesses/members", { email: "ana@wifiplus.mx", role: "admin" }),
     );
 
-    /* better-auth D16: signup, then the código opens the session */
-    expect((await call(null, "POST", "/auth/business/signup", { name: "Ana", email: "ana@wifiplus.mx", password: PASSWORD })).status).toBe(201);
-    const rows = await drizzle(env.DB).select().from(verification);
-    const otp = /\d{6}/.exec(rows.filter((r) => r.identifier.includes("ana@wifiplus.mx")).at(-1)!.value)![0];
-    const verified = await call(null, "POST", "/auth/email-otp/verify-email", { email: "ana@wifiplus.mx", otp });
+    /* passwordless-access D1: the registration's código opens the session */
+    expect((await call(null, "POST", "/auth/email-otp/send-verification-otp", { email: "ana@wifiplus.mx", type: "sign-in" })).status).toBe(200);
+    const verified = await call(null, "POST", "/auth/sign-in/email-otp", {
+      email: "ana@wifiplus.mx",
+      otp: sentCode("ana@wifiplus.mx"),
+      name: "Ana",
+    });
     expect(verified.status).toBe(200);
     const cookie = verified.headers.get("set-cookie")!.split(";")[0];
 

@@ -8,7 +8,6 @@ import {
   paymentLinks,
   payments,
   session as sessionTable,
-  user as userTable,
   verification,
 } from "../src/db/schema";
 import type { Role } from "../src/auth/roles";
@@ -282,17 +281,6 @@ export function sessionOf(res: Response): string {
   const cookie = cookiesOf(res).find((c) => c.includes("session_token"));
   if (!cookie) throw new Error(`no session cookie in: ${cookiesOf(res).join(" | ")}`);
   return cookie.split(";")[0];
-}
-
-/* The last code "emailed" to an address (spec D4): Better Auth keeps it
-   in the verification table until redeemed. */
-export async function lastCodeFor(email: string): Promise<string> {
-  const rows = await drizzle(env.DB).select().from(verification);
-  const row = rows.filter((r) => r.identifier.includes(email)).at(-1);
-  if (!row) throw new Error(`no code stored for ${email}`);
-  const match = /\d{6}/.exec(row.value);
-  if (!match) throw new Error(`no 6-digit code in: ${row.value}`);
-  return match[0];
 }
 
 /* passwordless-access D14: the last código the sender logged for an

@@ -4,13 +4,17 @@ import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { invitation, member, platformSettings, user as userTable, verification } from "../src/db/schema";
 import { validateSetting } from "../src/platform/settings";
-import { app, json, seedBusiness, seedMember, sessionCookieHeader, PASSWORD } from "./helpers";
+import { app, json, seedBusiness, seedMember, sessionCookieHeader } from "./helpers";
 
 /* The identity round's spec PR (2026-09-02): business-and-memberships
    D5 (born without a CLABE), D8 (48 h, pending list, resend, cancel),
    D11 (every member reads the team), D12 (role change); better-auth
    D14 (the invitation page decides), D15 (our routes' limiter), D16
-   (verification gates the session). US-B01, US-B03, US-S04. */
+   (verification gates the session). US-B01, US-B03, US-S04.
+
+   passwordless-access US4 (D9): accept-new takes a name and no password;
+   the registration is the código door (D1), so its limit is
+   rate-limit.test.ts's and the código it writes is hashed (D2). */
 
 const asUser = async (email: string) => ({ headers: { Cookie: await sessionCookieHeader(email) } });
 const call = async (email: string | null, method: string, path: string, body?: unknown, bindings: unknown = env) => {
@@ -19,11 +23,6 @@ const call = async (email: string | null, method: string, path: string, body?: u
   return (await app()).request(path, { method, headers, body: body ? JSON.stringify(body) : undefined }, bindings);
 };
 const data = async (res: Response) => (await res.json()).data;
-
-const armed = () => {
-  const { AUTH_RATE_LIMIT: _off, ...rest } = env as unknown as Record<string, unknown>;
-  return rest;
-};
 
 describe("US-B03 / D11: every member reads the team; the email rides only for inviters", () => {
   it("a viewer lists names and roles with null emails and no pending list; the owner sees both", async () => {
@@ -139,7 +138,7 @@ describe("US-B03 / D14: the invitation page decides for the invitee", () => {
       hasAccount: false,
     });
 
-    const born = await call(null, "POST", `/businesses/invitations/${created.id}/accept-new`, { name: "Ana", password: PASSWORD });
+    const born = await call(null, "POST", `/businesses/invitations/${created.id}/accept-new`, { name: "Ana" });
     expect(born.status).toBe(201);
     expect(await data(born)).toMatchObject({ type: "business", role: "operator", name: "ISP Demo", emailVerified: true });
     const cookie = born.headers.get("set-cookie");
@@ -163,43 +162,26 @@ describe("US-B03 / D14: the invitation page decides for the invitee", () => {
       await call("demo@devolada.app", "POST", "/businesses/members", { email: "contador@wifiplus.mx", role: "viewer" }),
     );
     expect((await data(await call(null, "GET", `/businesses/invitations/${created.id}/preview`))).hasAccount).toBe(true);
-    expect((await call(null, "POST", `/businesses/invitations/${created.id}/accept-new`, { name: "Xavier", password: PASSWORD })).status).toBe(409);
+    expect((await call(null, "POST", `/businesses/invitations/${created.id}/accept-new`, { name: "Xavier" })).status).toBe(409);
 
     await drizzle(env.DB).update(invitation).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(invitation.id, created.id));
     expect((await data(await call(null, "GET", `/businesses/invitations/${created.id}/preview`))).status).toBe("expired");
-    expect((await call(null, "POST", `/businesses/invitations/${created.id}/accept-new`, { name: "Xavier", password: PASSWORD })).status).toBe(404);
+    expect((await call(null, "POST", `/businesses/invitations/${created.id}/accept-new`, { name: "Xavier" })).status).toBe(404);
     expect((await data(await call(null, "GET", "/businesses/invitations/nope/preview"))).status).toBe("gone");
   });
 });
 
-describe("US-S04 / D15: our own doors have a tope too", () => {
-  it("the sixth signup from one address in a minute answers 429", async () => {
-    for (let i = 0; i < 5; i++) {
-      const res = await (await app()).request(
-        "/auth/business/signup",
-        json({ name: "Cuenta", email: `c${i}@wifiplus.mx`, password: PASSWORD }),
-        armed(),
-      );
-      expect(res.status).toBe(201);
-    }
-    const sixth = await (await app()).request(
-      "/auth/business/signup",
-      json({ name: "Cuenta", email: "c6@wifiplus.mx", password: PASSWORD }),
-      armed(),
-    );
-    expect(sixth.status).toBe(429);
-    expect(sixth.headers.get("x-retry-after")).toBeTruthy();
-  });
-
-  it("the signup still sends its código (D16: the route sends it, not the hook)", async () => {
+describe("passwordless-access US4: a registration request writes one código, hashed (D1, D2)", () => {
+  it("one `sign-in-otp-<email>` row, whose value holds no six digits", async () => {
     const res = await (await app()).request(
-      "/auth/business/signup",
-      json({ name: "Cuenta", email: "nuevo@wifiplus.mx", password: PASSWORD }),
+      "/auth/email-otp/send-verification-otp",
+      json({ email: "nuevo@wifiplus.mx", type: "sign-in" }),
       env,
     );
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200);
     const codes = (await drizzle(env.DB).select().from(verification)).filter((v) => v.identifier.includes("nuevo@wifiplus.mx"));
-    expect(codes).toHaveLength(1);
+    expect(codes.map((c) => c.identifier)).toEqual(["sign-in-otp-nuevo@wifiplus.mx"]);
+    expect(codes[0].value).not.toMatch(/\d{6}/);
   });
 });
 

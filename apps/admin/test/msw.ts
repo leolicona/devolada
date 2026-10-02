@@ -47,13 +47,6 @@ export const baTooMany = () => HttpResponse.json({ message: "Too many requests. 
 
 export const handlers = {
   session: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/auth/me", () => r()),
-  login: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/sign-in/email", () => r()),
-  signup: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/business/signup", () => r()),
-  verifyEmail: (r: (info: { request: Request }) => ReturnType<typeof baOk | typeof baFail> | Promise<ReturnType<typeof baOk | typeof baFail>>) =>
-    http.post("/auth/email-otp/verify-email", ({ request }) => r({ request })),
-  sendCode: (r: (info: { request: Request }) => ReturnType<typeof baOk | typeof baFail> | Promise<ReturnType<typeof baOk | typeof baFail>>) =>
-    http.post("/auth/email-otp/send-verification-otp", ({ request }) => r({ request })),
-  /* better-auth D18: the passkey list and its "Quitar" */
   /* passwordless-access D1, D11, D14: Better Auth's access endpoints, in
      Better Auth's own shapes (envelope-exempt, as `baPost` expects). Each
      handler hands the request over, so a test can read the body it sent. */
@@ -65,13 +58,10 @@ export const handlers = {
     http.post("/auth/update-user", async ({ request }) => r((await request.json()) as Record<string, unknown>)),
   revokeOtherSessions: (r: () => Response | Promise<Response> = () => baStatus({ status: true })) =>
     http.post("/auth/revoke-other-sessions", () => r()),
+  /* better-auth D18: the passkey list and its "Quitar" */
   passkeyList: (r: () => Response) => http.get("/auth/passkey/list-user-passkeys", () => r()),
   passkeyDelete: (r: (body: unknown) => ReturnType<typeof baOk | typeof baFail>) =>
     http.post("/auth/passkey/delete-passkey", async ({ request }) => r(await request.json())),
-  requestReset: (r: () => ReturnType<typeof baOk | typeof baFail>) =>
-    http.post("/auth/email-otp/request-password-reset", () => r()),
-  resetPassword: (r: () => ReturnType<typeof baOk | typeof baFail>) =>
-    http.post("/auth/email-otp/reset-password", () => r()),
   feed: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/payments/feed", ({ request }) => r(new URL(request.url))),
   /* cobros-in-links D1: the Por cobrar view's blocks. The URL carries

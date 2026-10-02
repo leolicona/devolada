@@ -152,7 +152,7 @@ yet, except the código email's wording.
   - `revokeOtherSessions()` → `baPost("/auth/revoke-other-sessions")`.
 
   The password helpers stay until T036 and T046 remove them.
-- [ ] T011 [P] `CodeInput` in `packages/ui/src/components/code-input.tsx`, with `packages/ui/test/code-input.test.tsx` (research D12):
+- [X] T011 [P] `CodeInput` in `packages/ui/src/components/code-input.tsx`, with `packages/ui/test/code-input.test.tsx` (research D12):
   - a labelled input with `inputMode="numeric"`, `autoComplete="one-time-code"`, `maxLength={6}`;
   - digits only (a paste of "482 913" becomes "482913");
   - standard 48 px from the input's `size` variants;
@@ -160,7 +160,7 @@ yet, except the código email's wording.
   - tokens only.
 
   The test covers the filtering, the label and axe.
-- [ ] T012 [P] `PasskeyOffer` in `packages/ui/src/components/passkey-offer.tsx`, with `packages/ui/test/passkey-offer.test.tsx` (research D7, D12), per `contracts/panel-access.md` § `/welcome` step 2:
+- [X] T012 [P] `PasskeyOffer` in `packages/ui/src/components/passkey-offer.tsx`, with `packages/ui/test/passkey-offer.test.tsx` (research D7, D12), per `contracts/panel-access.md` § `/welcome` step 2:
   - **Props**: `deviceWord`, `state` (`idle` | `busy` | `done` | `failed` | `alreadyEnrolled`), `onActivate`, `onSkip`.
   - **It renders**:
     - the title "Entra la próxima vez con tu huella o rostro";
@@ -171,7 +171,7 @@ yet, except the código email's wording.
     - "Este dispositivo ya tiene tu huella o rostro." for `alreadyEnrolled`;
     - "Listo." for `done`.
   - The test covers each state, that `onActivate` runs in the click handler, and axe.
-- [ ] T013 [P] `KeysCard` in `packages/ui/src/components/keys-card.tsx`, with `packages/ui/test/keys-card.test.tsx` (research D11, D12), per `contracts/panel-access.md` § Seguridad:
+- [X] T013 [P] `KeysCard` in `packages/ui/src/components/keys-card.tsx`, with `packages/ui/test/keys-card.test.tsx` (research D11, D12), per `contracts/panel-access.md` § Seguridad:
   - **Props**: `keys` (name, createdAt, backedUp), `loading`, `deviceWord`, `canActivate`, `onRemove(id)`, `onActivate`, `stepUp` (`null`, or `{ email, onSubmit(code), error }`), `onSignOutOthers`, and the result states.
   - **It renders**:
     - the list: name or "Llave de acceso", "Activada el {fecha}", "sincronizada con tu llavero", and a "Quitar" with an accessible name per key;
@@ -181,7 +181,7 @@ yet, except the código email's wording.
     - "Cerrar sesión en los demás dispositivos" and its done line "Listo. Solo este dispositivo sigue con tu sesión abierta.".
   - **It never mentions a password.**
   - The test covers the list, the empty state, the step-up, both actions, and axe.
-- [ ] T014 Export `CodeInput`, `PasskeyOffer` and `KeysCard` from `packages/ui/src/index.ts`, and show each in `packages/ui/src/playground/Showcase.tsx` in both themes (depends on T011–T013).
+- [X] T014 Export `CodeInput`, `PasskeyOffer` and `KeysCard` from `packages/ui/src/index.ts`, and show each in `packages/ui/src/playground/Showcase.tsx` in both themes (depends on T011–T013).
 - [X] T015 MSW handlers in `apps/admin/test/msw.ts` for Better Auth's access endpoints, in Better Auth's own shapes (envelope-exempt, as `baPost` expects):
   - `POST /auth/email-otp/send-verification-otp` → `{ success: true }`;
   - `POST /auth/sign-in/email-otp` → `{ token, user }`, plus an `INVALID_OTP` variant;
@@ -215,7 +215,7 @@ out, then sign in with the key alone.
 
 ### Tests for User Story 1
 
-- [ ] T016 [P] [US1] API tests in `apps/api/test/passwordless-registration.test.ts`, citing `passwordless-access US1`, against `contracts/panel-access.md`. Cover:
+- [X] T016 [P] [US1] API tests in `apps/api/test/passwordless-registration.test.ts`, citing `passwordless-access US1`, against `contracts/panel-access.md`. Cover:
   - **the registration**:
     - `send-verification-otp {type: "sign-in"}` answers 200;
     - `sentCode`, then `sign-in/email-otp {email, otp, name}` answers 200 with a session cookie (`sessionOf`);
@@ -228,13 +228,13 @@ out, then sign in with the key alone.
     - código A, then B: A is refused while B is live, and still refused after B is used (T005's hook);
   - **the stored value** has the shape `<base64url>:<tries>` and does not contain the código (FR-025);
   - **retired doors**: `POST /auth/sign-up/email` and `POST /auth/business/signup` answer 404.
-- [ ] T017 [P] [US1] The email in `apps/api/test/passwordless-email.test.ts`, citing `passwordless-access US1`. Call `sendAuthCode` with a test `RESEND_API_KEY`, intercepting `https://api.resend.com` with `fetchMock`:
+- [X] T017 [P] [US1] The email in `apps/api/test/passwordless-email.test.ts`, citing `passwordless-access US1`. Call `sendAuthCode` with a test `RESEND_API_KEY`, intercepting `https://api.resend.com` with `fetchMock`:
   - the subject and the HTML carry the six digits;
   - the HTML says "Vence en 10 minutos.";
   - the HTML has **no `href` and no `http`** (FR-024).
 
   Without a key, the log line is exactly `[código:sign-in] <email> → <digits>`: the contract `sentCode` reads.
-- [ ] T018 [P] [US1] Component tests in `apps/admin/test/registration.test.tsx`, citing `passwordless-access US1`, with MSW and axe, against `contracts/panel-access.md` § `/signup`:
+- [X] T018 [P] [US1] Component tests in `apps/admin/test/registration.test.tsx`, citing `passwordless-access US1`, with MSW and axe, against `contracts/panel-access.md` § `/signup`:
   - **step 1**: "Tu nombre" and "Correo", each problem named under its field before any request. "Continuar" posts `send-verification-otp` with `{ email, type: "sign-in" }`;
   - **step 2**:
     - it names the address and says "Vence en 10 minutos.";
@@ -245,7 +245,7 @@ out, then sign in with the key alone.
   - **too many tries** (FR-027): a 429 on either step shows "Demasiados intentos. Espera un momento e intenta de nuevo.";
   - **what never appears**: no password field anywhere, no "Ya existe una cuenta", and a description that names no business type (FR-030);
   - **success** navigates to `/welcome?next=…`, keeping a validated `next`.
-- [ ] T019 [P] [US1] Component tests in `apps/admin/test/welcome.test.tsx`, citing `passwordless-access US1`, with MSW and axe. Mock `@/lib/auth-client` (`canVerifyPerson`, `authClient.passkey.addPasskey`). Cover:
+- [X] T019 [P] [US1] Component tests in `apps/admin/test/welcome.test.tsx`, citing `passwordless-access US1`, with MSW and axe. Mock `@/lib/auth-client` (`canVerifyPerson`, `authClient.passkey.addPasskey`). Cover:
   - **a nameless user**: "¿Cómo te llamas?" posts `update-user { name }`, then the offer when `canVerifyPerson()` is true;
   - **when `canVerifyPerson()` is false**, it navigates to `next` without painting the offer;
   - **the offer**:
@@ -256,7 +256,7 @@ out, then sign in with the key alone.
     - `InvalidStateError` shows "Este dispositivo ya tiene tu huella o rostro." and goes on;
   - **no session** sends to `/login?next=…`. An absolute `next` is dropped (better-auth D12);
   - **the nameless guard** (T026): the shell and the wizard send a session whose user has no name to `/welcome?next=<path>`, once.
-- [ ] T020 [US1] The owner's half of `tests/passkey/identity-journey.spec.ts`, citing `passwordless-access US1`, against the real API:
+- [X] T020 [US1] The owner's half of `tests/passkey/identity-journey.spec.ts`, citing `passwordless-access US1`, against the real API:
   - give the context a virtual authenticator: `internal` transport, `hasResidentKey`, `hasUserVerification`, `isUserVerified`;
   - at `/signup`, register `owner-<stamp>@journey.invalid` and read its código with `POST /dev/code`;
   - type it, then on `/welcome` press "Activar huella o rostro";
@@ -266,11 +266,11 @@ out, then sign in with the key alone.
 
 ### Implementation for User Story 1
 
-- [ ] T021 [P] [US1] `disabledPaths` gains `/sign-up/email` in `apps/api/src/auth/better.ts` (research D4, PR 1), with a comment citing D4: no password can be created over HTTP.
-- [ ] T022 [P] [US1] Remove `POST /auth/business/signup` from `apps/api/src/routes/auth.ts` (research D1): the route, `signupInput`, `removeUser` and their better-auth D15/D16 comments.
+- [X] T021 [P] [US1] `disabledPaths` gains `/sign-up/email` in `apps/api/src/auth/better.ts` (research D4, PR 1), with a comment citing D4: no password can be created over HTTP.
+- [X] T022 [P] [US1] Remove `POST /auth/business/signup` from `apps/api/src/routes/auth.ts` (research D1): the route, `signupInput`, `removeUser` and their better-auth D15/D16 comments.
   - **Delete `apps/api/test/isp-signup.test.ts`.** Its cases live in T016; the password cases leave with the password.
   - **Adapt the one case in `apps/api/test/cash-at-stores-access.test.ts`** that registers a shopkeeper's address through that route. It becomes: the panel's registration of that address opens the store's account by código, and `/auth/me` answers the store branch, which the panel refuses (cash-at-stores D2).
-- [ ] T023 [US1] `SignupPage` in two steps in `apps/admin/src/features/auth/pages.tsx` (research D6), per `contracts/panel-access.md` § `/signup`:
+- [X] T023 [US1] `SignupPage` in two steps in `apps/admin/src/features/auth/pages.tsx` (research D6), per `contracts/panel-access.md` § `/signup`:
   - **step 1**:
     - name and email, with the identity round's field problems;
     - "Continuar", wrapped in `<Pending label="Enviando el código.">`;
@@ -280,7 +280,7 @@ out, then sign in with the key alone.
   - **success**: `queryClient.clear()`, then navigate to `/welcome` with the validated `next`.
 
   Remove the password field and its rule. The description is the login's "Cobra por transferencia con validación automática." (FR-030).
-- [ ] T024 [US1] `WelcomePage` in `apps/admin/src/features/auth/pages.tsx` (research D6, D7), per `contracts/panel-access.md` § `/welcome`:
+- [X] T024 [US1] `WelcomePage` in `apps/admin/src/features/auth/pages.tsx` (research D6, D7), per `contracts/panel-access.md` § `/welcome`:
   - **a session is required** (`useUser`); without one, go to `/login?next=…`;
   - **it decides before painting**:
     - if the name is empty, it asks for it (`updateName`), then goes on;
@@ -290,11 +290,11 @@ out, then sign in with the key alone.
   - **it navigates** to the validated `next`, or `/`.
 
   Comments cite D6, D7 and the order D1 makes load-bearing: a key made before the name shows the account picker a random id.
-- [ ] T025 [US1] Routes in `apps/admin/src/router.tsx` (research D6):
+- [X] T025 [US1] Routes in `apps/admin/src/router.tsx` (research D6):
   - `/welcome` with `nextSearch`;
   - `/verify-email` becomes a `<Navigate to="/login" search={{ next }} />`: the validated `next` travels, the address does not (D6: never in a URL);
   - remove `VerifyEmailPage` from `apps/admin/src/features/auth/pages.tsx`.
-- [ ] T026 [US1] The nameless guard (research D6), in `apps/admin/src/features/shell/Shell.tsx` and `apps/admin/src/features/onboarding/NewBusinessScreen.tsx`. A session whose user's name is empty is sent to `/welcome?next=<path>`:
+- [X] T026 [US1] The nameless guard (research D6), in `apps/admin/src/features/shell/Shell.tsx` and `apps/admin/src/features/onboarding/NewBusinessScreen.tsx`. A session whose user's name is empty is sent to `/welcome?next=<path>`:
   - **imperatively and once**, as the shell's login bounce is (better-auth D12's lesson: `<Navigate>` re-navigates on every render);
   - **in both places**, because a person born through the sign-in door has no business yet, so the wizard is where they land.
 
@@ -315,28 +315,28 @@ erased every panel password.
 
 ### Tests for User Story 2
 
-- [ ] T027 [P] [US2] API tests in `apps/api/test/passwordless-sign-in.test.ts`, citing `passwordless-access US2`:
+- [X] T027 [P] [US2] API tests in `apps/api/test/passwordless-sign-in.test.ts`, citing `passwordless-access US2`:
   - **an existing account**: a sign-in código opens a session;
   - **an unknown address**: the request answers the same 200, and the código creates a user with `name = ""` (FR-013);
   - **`POST /auth/sign-in/email`** answers 404;
   - **a legacy account**, seeded unverified with a `credential` row and a session, signs in by código. It ends verified, and its `credential` row and its old session are gone (D1, `revokeUnprovenAccountAccess`).
-- [ ] T028 [P] [US2] API tests in `apps/api/test/passwordless-sweep.test.ts`, citing `passwordless-access US2`, for `eraseLegacyCredentials` (FR-029, research D5):
+- [X] T028 [P] [US2] API tests in `apps/api/test/passwordless-sweep.test.ts`, citing `passwordless-access US2`, for `eraseLegacyCredentials` (FR-029, research D5):
   - **deleted**: a panel user's `credential` row;
   - **kept**: a store user's `credential` row (PR 1);
   - **deleted with their sessions and accounts**: unverified users with no store and no membership;
   - **kept**: an unverified store user, an unverified user holding a membership, and an unverified user a row of ours names (a `top_ups.submitted_by_user_id`). The same run still erases a panel user's `credential` row (analysis U1);
   - **the report**: it counts both kinds; `console.log` is called only when something was deleted, and a second run deletes nothing.
-- [ ] T029 [P] [US2] Rewrite `apps/api/test/sessions.test.ts` to sign in by código (`mintCode` + `sign-in/email-otp`) wherever it signed in with a password, and add the citation `passwordless-access US2`:
+- [X] T029 [P] [US2] Rewrite `apps/api/test/sessions.test.ts` to sign in by código (`mintCode` + `sign-in/email-otp`) wherever it signed in with a password, and add the citation `passwordless-access US2`:
   - **keep**: the unverified cookie revoked, the sliding cookie (BUG-015), the tampered cookie, suspension, sign-out;
   - **remove**: wrong password 401, unknown email 401, and "a reset revokes live sessions". The last one is replaced by T047's `revoke-other-sessions` case;
   - **then remove `lastCodeFor`** from `apps/api/test/helpers.ts`: this file was its last reader (T022 deletes `isp-signup`, T077 moves the store cases to `sentCode`).
-- [ ] T030 [P] [US2] Rewrite `apps/api/test/rate-limit.test.ts`, citing `passwordless-access US2`, with the limiter armed (`armed()`):
+- [X] T030 [P] [US2] Rewrite `apps/api/test/rate-limit.test.ts`, citing `passwordless-access US2`, with the limiter armed (`armed()`):
   - the fourth `send-verification-otp` within 60 s answers 429 with `X-Retry-After`, and its row key ends `|/email-otp/send-verification-otp`;
   - the sixth `sign-in/email-otp` within 60 s answers 429 (D3);
   - `AUTH_RATE_LIMIT=off` disarms both.
 
   Every `/auth/sign-in/email` case leaves.
-- [ ] T031 [P] [US2] Rewrite `apps/api/test/dev-seed.test.ts`, citing `passwordless-access US2`:
+- [X] T031 [P] [US2] Rewrite `apps/api/test/dev-seed.test.ts`, citing `passwordless-access US2`:
   - **the seed**: `/dev/seed` creates the demo users verified, with no `account` row, and its answer carries no password;
   - **the demo signs in** with `POST /dev/code` and `sign-in/email-otp`;
   - **`/dev/code`**:
@@ -347,7 +347,7 @@ erased every panel password.
   - **`apps/api/test/dev-code-readable.test.ts`** (PR #273): its `/dev/last-code` cases move to `/dev/code`, and its `/dev/last-invitation` case stays. It keeps `bug: dev-code-readable` and adds `passwordless-access US2`.
 
   The orphan-keeps-its-password case becomes: an adopted orphan is verified and holds no password.
-- [ ] T032 [P] [US2] Component tests in `apps/admin/test/sign-in.test.tsx`, citing `passwordless-access US2`, with MSW and axe, against `contracts/panel-access.md` § `/login`:
+- [X] T032 [P] [US2] Component tests in `apps/admin/test/sign-in.test.tsx`, citing `passwordless-access US2`, with MSW and axe, against `contracts/panel-access.md` § `/login`:
   - **step 1**:
     - no line about passwords: nothing on the screen matches `/contraseña/i` (spec Clarifications, Q4);
     - "Entrar con huella o rostro" only where `PublicKeyCredential` exists;
@@ -358,7 +358,7 @@ erased every panel password.
   - **redirects**: `/recover` and `/verify-email` land on `/login` with `next`, and no address in the URL (D6).
 
   In `apps/admin/test/shell.test.tsx`, remove the cases moved here and to T018–T019: the password login, the signup, `/verify-email`, the unverified login, `/recover`. Keep the guard with `next`, the dropped absolute `next`, and the suspended screen's way out. In `apps/admin/test/access.test.tsx`, the login copy check follows the new copy.
-- [ ] T033 [US2] Rewrite `tests/passkey/passkey.spec.ts`, citing `passwordless-access US2`:
+- [X] T033 [US2] Rewrite `tests/passkey/passkey.spec.ts`, citing `passwordless-access US2`:
   - run `/dev/seed`, then at `/login` press "Enviar código" for the demo address;
   - get the código from `POST /dev/code` and type it;
   - activate on `/welcome` with the virtual authenticator;
@@ -368,15 +368,15 @@ erased every panel password.
 
 ### Implementation for User Story 2
 
-- [ ] T034 [P] [US2] `disabledPaths` gains `/sign-in/email` in `apps/api/src/auth/better.ts` (research D4, PR 1). `emailAndPassword` stays enabled, and the comment says why: the store app's `/sign-in/username` and recovery until PR 2.
-- [ ] T035 [P] [US2] `eraseLegacyCredentials(env, now = new Date())` in a new `apps/api/src/auth/credentials-sweep.ts` (research D5):
+- [X] T034 [P] [US2] `disabledPaths` gains `/sign-in/email` in `apps/api/src/auth/better.ts` (research D4, PR 1). `emailAndPassword` stays enabled, and the comment says why: the store app's `/sign-in/username` and recovery until PR 2.
+- [X] T035 [P] [US2] `eraseLegacyCredentials(env, now = new Date())` in a new `apps/api/src/auth/credentials-sweep.ts` (research D5):
   - **two deletions, each on its own** (analysis U1), so a user the sweep cannot delete never stops the erase of passwords:
     1. `credential` rows of users that no `stores.user_id` names (PR 1's filter, with a comment saying T064 removes it);
     2. unverified users that **no row names**: no store, no `member` row, and none of the user columns research D5 lists. Their `session`, `account` and `passkey` rows go first, in one D1 batch with the users;
   - **the report**: `{ credentials, users }`.
 
   In `apps/api/src/index.ts`, `scheduled` gains its own `ctx.waitUntil` lane that logs `credential erase:` only when either count is above zero. Comments cite D5: a sweep and not a migration, and the guarantee it keeps.
-- [ ] T036 [P] [US2] `LoginPage` in two steps in `apps/admin/src/features/auth/pages.tsx` (research D6), per `contracts/panel-access.md` § `/login`:
+- [X] T036 [P] [US2] `LoginPage` in two steps in `apps/admin/src/features/auth/pages.tsx` (research D6), per `contracts/panel-access.md` § `/login`:
   - **step 1**:
     - "Entrar con huella o rostro" first, `passkeysSupported()` only (`authClient.signIn.passkey()`, then `next`);
     - the separator "o con un código" where the key shows, then email and "Enviar código";
@@ -404,13 +404,13 @@ person, the sign-in button shows and the activation never opens by itself.
 
 ### Tests for User Story 3
 
-- [ ] T037 [P] [US3] Component tests in `apps/admin/test/no-passkey.test.tsx`, citing `passwordless-access US3`, with MSW and axe:
+- [X] T037 [P] [US3] Component tests in `apps/admin/test/no-passkey.test.tsx`, citing `passwordless-access US3`, with MSW and axe:
   - **`window.PublicKeyCredential` deleted**:
     - registration goes from the código straight to the wizard, with no offer;
     - `/login` has no key button;
     - no text on these screens matches `/huella|rostro/i` (FR-015);
   - **`PublicKeyCredential` present, `canVerifyPerson()` false**: `/login` shows the key button, and `/welcome` skips the offer (FR-016).
-- [ ] T038 [US3] Add a case to `apps/api/test/passwordless-sign-in.test.ts`, after T027, citing `passwordless-access US3`: an account with a `passkey` row signs in by código all the same (FR-015, scenario 3).
+- [X] T038 [US3] Add a case to `apps/api/test/passwordless-sign-in.test.ts`, after T027, citing `passwordless-access US3`: an account with a `passkey` row signs in by código all the same (FR-015, scenario 3).
 
 ### Implementation for User Story 3
 
@@ -440,7 +440,7 @@ device's confirmation, inside. No código, no password.
 
 ### Tests for User Story 4
 
-- [ ] T039 [P] [US4] API tests in `apps/api/test/passwordless-invitation.test.ts`, citing `passwordless-access US4`, against `contracts/panel-access.md` § `accept-new`:
+- [X] T039 [P] [US4] API tests in `apps/api/test/passwordless-invitation.test.ts`, citing `passwordless-access US4`, against `contracts/panel-access.md` § `accept-new`:
   - **`accept-new { name }`** answers 201 with the actor:
     - the user is born verified, with the name and no `account` row;
     - a `member` row carries the invited role;
@@ -448,15 +448,15 @@ device's confirmation, inside. No código, no password.
   - **a stray código**: a live sign-in código already stored for the address does not break it (D9, step 1);
   - **refusals**: an address with an account is 409 `EMAIL_TAKEN`; expired and gone are 404 `INVITATION_NOT_FOUND`;
   - **a body carrying `password`**: it is ignored, and no `account` row is written.
-- [ ] T040 [P] [US4] Rewrite `apps/api/test/identity-round.test.ts`, adding the citation `passwordless-access US4`:
+- [X] T040 [P] [US4] Rewrite `apps/api/test/identity-round.test.ts`, adding the citation `passwordless-access US4`:
   - **accept-new** sends `{ name }`;
   - **"the sixth signup in a minute"** leaves; its limit is T030's;
   - **"signup writes one código"** becomes "a registration request writes one `sign-in-otp-<email>` row, hashed";
   - **unchanged**: "no código left for an invitee born through accept-new".
-- [ ] T041 [P] [US4] Rewrite `apps/api/test/invitee-lands-own-business.test.ts`, adding the citation `passwordless-access US4`:
+- [X] T041 [P] [US4] Rewrite `apps/api/test/invitee-lands-own-business.test.ts`, adding the citation `passwordless-access US4`:
   - the signup becomes `send-verification-otp` + `sign-in/email-otp` with `sentCode`;
   - the inline read of the `verification` table leaves.
-- [ ] T042 [P] [US4] Rewrite the invitation-page cases of `apps/admin/test/memberships.test.tsx`, adding the citation `passwordless-access US4`, against `contracts/panel-access.md` § `/invitaciones/:invitationId`:
+- [X] T042 [P] [US4] Rewrite the invitation-page cases of `apps/admin/test/memberships.test.tsx`, adding the citation `passwordless-access US4`, against `contracts/panel-access.md` § `/invitaciones/:invitationId`:
   - **no session, an account**:
     - "Correo: {email}" as text;
     - "Entrar con huella o rostro" where supported;
@@ -467,11 +467,11 @@ device's confirmation, inside. No código, no password.
   - **without passkey support**: the código, or the name, only (FR-015);
   - **too many tries** (FR-027): a 429 on "Enviarme un código" or "Entrar" shows "Demasiados intentos. Espera un momento e intenta de nuevo.";
   - **expired and gone** are unchanged.
-- [ ] T043 [P] [US4] Rewrite `apps/admin/test/invitee-lands-own-business.test.tsx`, keeping `bug: invitee-lands-own-business` and adding `passwordless-access US4`:
+- [X] T043 [P] [US4] Rewrite `apps/admin/test/invitee-lands-own-business.test.tsx`, keeping `bug: invitee-lands-own-business` and adding `passwordless-access US4`:
   - "recovery from the invitation page comes back to it" becomes "the código on the invitation page keeps the invitee there: it accepts and lands in the invited business";
   - the login page has no recovery link;
   - the invitations named in the shell, the wizard and the chooser are unchanged.
-- [ ] T044 [US4] The invitee's half of `tests/passkey/identity-journey.spec.ts`, after T020, citing `passwordless-access US4`:
+- [X] T044 [US4] The invitee's half of `tests/passkey/identity-journey.spec.ts`, after T020, citing `passwordless-access US4`:
   - **the new invitee**:
     - `/dev/last-invitation` gives the link for `ana-<stamp>@journey.invalid`;
     - in a fresh context with its own virtual authenticator: "Tu nombre", "Crear cuenta y entrar", then the activation on `/welcome`;
@@ -481,7 +481,7 @@ device's confirmation, inside. No código, no password.
 
 ### Implementation for User Story 4
 
-- [ ] T045 [US4] The passwordless `accept-new` in `apps/api/src/routes/businesses/schema.ts` and `handler.ts` (research D9):
+- [X] T045 [US4] The passwordless `accept-new` in `apps/api/src/routes/businesses/schema.ts` and `handler.ts` (research D9):
   - **The schema**, in `apps/api/src/routes/businesses/schema.ts`: `acceptInvitationNewRequest = z.object({ name: z.string().trim().min(2).max(80) })`.
   - **The handler**, in `apps/api/src/routes/businesses/handler.ts`. `acceptInvitationAsNewUser` follows D9's steps:
     1. check the invitation;
@@ -492,7 +492,7 @@ device's confirmation, inside. No código, no password.
     6. forward the cookies.
   - **Removed**: the `signUpEmail` and `signInEmail` calls, and the manual `emailVerified` update.
   - **Comments** cite D9: the invitation proves the inbox, and minting goes through the plugin's own door.
-- [ ] T046 [US4] `apps/admin/src/features/invitations/AcceptInvitationScreen.tsx` (research D9), per `contracts/panel-access.md` § `/invitaciones/:invitationId`:
+- [X] T046 [US4] `apps/admin/src/features/invitations/AcceptInvitationScreen.tsx` (research D9), per `contracts/panel-access.md` § `/invitaciones/:invitationId`:
   - **"Entrar con huella o rostro"** calls `authClient.signIn.passkey()`, then invalidates `["user"]`. The page's same-address and other-address logic takes it from there;
   - **"Enviarme un código"** is `sendCode(inv.email)`, then `CodeInput`, then `signInWithCode(inv.email, otp)`, then `acceptInvitation` and `setActiveBusiness`, then `/welcome?next=/`;
   - **the separator** "o con un código" sits between the key and "Enviarme un código", where the key shows;
@@ -519,11 +519,11 @@ Remove a key: the código still works.
 
 ### Tests for User Story 5
 
-- [ ] T047 [P] [US5] API tests in `apps/api/test/passwordless-keys-sessions.test.ts`, citing `passwordless-access US5`:
+- [X] T047 [P] [US5] API tests in `apps/api/test/passwordless-keys-sessions.test.ts`, citing `passwordless-access US5`:
   - **closing other sessions**: with three sessions, `POST /auth/revoke-other-sessions` from one answers 200. The other two then get 401 on `/auth/me`, and the caller gets 200 (FR-022, M5);
   - **freshness**: `GET /auth/passkey/generate-register-options` on a session whose `created_at` is 25 hours old answers 403 `SESSION_NOT_FRESH`. After a sign-in código (a new session) it answers 200 (D8, M2);
   - **removing a key**: `delete-passkey` removes the row, `list-user-passkeys` no longer lists it, and the account still signs in by código (FR-023).
-- [ ] T048 [P] [US5] Rewrite the passkey-card cases of `apps/admin/test/session-round.test.tsx` and the identity card's check in `apps/admin/test/account-hub.test.tsx`, citing `passwordless-access US5`:
+- [X] T048 [P] [US5] Rewrite the passkey-card cases of `apps/admin/test/session-round.test.tsx` and the identity card's check in `apps/admin/test/account-hub.test.tsx`, citing `passwordless-access US5`:
   - **the card**: `KeysCard`'s list, "Quitar", and the empty state;
   - **the step-up**: "Activar en este dispositivo" meets `SESSION_NOT_FRESH` and runs the step-up. "Confirma que eres tú: te enviamos un código a {email}.", then `CodeInput`, then `signInWithCode`, then the ceremony runs again. "Cancelar" closes it and brings back "Activar en este dispositivo"; a 429 shows the wait line (FR-027);
   - **closing other sessions**: "Cerrar sesión en los demás dispositivos" posts `revoke-other-sessions` and shows its done line;
@@ -531,7 +531,7 @@ Remove a key: the código still works.
 
 ### Implementation for User Story 5
 
-- [ ] T049 [US5] `apps/admin/src/features/auth/PasskeyCard.tsx` becomes a container for `KeysCard` (research D8, D11, D12):
+- [X] T049 [US5] `apps/admin/src/features/auth/PasskeyCard.tsx` becomes a container for `KeysCard` (research D8, D11, D12):
   - the list and removal through `baGet`/`baPost`, as today (better-auth D18);
   - **activating**:
     - `canVerifyPerson()` decides `canActivate`;
@@ -540,7 +540,7 @@ Remove a key: the código still works.
   - **closing other sessions**: `revokeOtherSessions()`.
 
   The card's copy follows `contracts/panel-access.md` § Seguridad. Comments cite D8 (why a key asks for a recent proof) and D11.
-- [ ] T050 [P] [US5] Copy in `apps/admin/src/features/account/AccountHub.tsx`:
+- [X] T050 [P] [US5] Copy in `apps/admin/src/features/account/AccountHub.tsx`:
   - the identity card: "Para cambiar tu nombre, escríbenos. Pronto podrás hacerlo desde aquí." (FR-030);
   - the rail row "Entrar con huella o rostro": its detail "Tus passkeys" becomes "Tus llaves y sesiones", the product's words for what the card holds (the design canvas).
 
@@ -562,7 +562,7 @@ merges.
     - Seguridad's card;
     - `/login` and `/signup` without passkey support (an init script deletes `PublicKeyCredential`, US3).
 - [ ] T052 [P] The design captures in `tests/design/review-identity.spec.ts` and `tests/design/review-identidad-2.spec.ts` follow the panel's new screens: the password screens and the `sign-in/email` 401 stub leave.
-- [ ] T053 [P] Remove the password handlers from `apps/admin/test/msw.ts` (`login`, `signup`, `verifyEmail`, the email-verification `sendCode`, `requestReset`, `resetPassword`) once no test imports them (after T018, T032, T042, T043).
+- [X] T053 [P] Remove the password handlers from `apps/admin/test/msw.ts` (`login`, `signup`, `verifyEmail`, the email-verification `sendCode`, `requestReset`, `resetPassword`) once no test imports them (after T018, T032, T042, T043).
 - [ ] T054 [P] `CLAUDE.md`: the "Local seed" line drops `devolada123`. The demo signs in with a código, which prints in the API's console without `RESEND_API_KEY` or comes from `POST /dev/code` (research D16).
 - [ ] T055 The gate before PR 1 merges, following `specs/020-passwordless-access/quickstart.md`:
   1. amendment 1 is applied (T003);

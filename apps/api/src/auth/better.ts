@@ -78,7 +78,11 @@ export function makeAuth(env: Bindings) {
        births the user without a session; sign-in of an unverified email
        answers 403 EMAIL_NOT_VERIFIED; `email-otp/verify-email` is the
        door — it creates the session itself (pinned against 1.6.29's
-       dist). */
+       dist).
+       passwordless-access D4: since PR 1 only the store app reaches this
+       block — its phone and password (`/sign-in/username`) and their
+       recovery — and it turns off with User Story 6. The panel's two doors
+       are in `disabledPaths`. */
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: true,
@@ -96,6 +100,11 @@ export function makeAuth(env: Bindings) {
          404 from its router, so the server's own `auth.api.*` calls keep
          the path (measured 2026-10-02, M3). */
       "/sign-up/email",
+      /* passwordless-access D4 (PR 1): the panel's sign-in door. With it the
+         panel has no password door left. `emailAndPassword` stays enabled
+         below: the store app's `/sign-in/username` and its recovery need it
+         until User Story 6 (PR 2). */
+      "/sign-in/email",
     ],
     hooks: {
       /* cash-at-stores D3: see USERNAME_INPUT_PATHS. Runs before every

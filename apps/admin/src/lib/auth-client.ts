@@ -39,3 +39,9 @@ export function canVerifyPerson(): Promise<boolean> {
   }
   return verifyingPlatform;
 }
+
+/* For tests: a page load is a test, and a test starts from empty
+   (constitution IV) — the answer above is otherwise kept for the whole run */
+export function resetCanVerifyPerson() {
+  verifyingPlatform = null;
+}

@@ -11,11 +11,13 @@ import { renderApp } from "./render";
    pitch ("red de puntos de cobro") left with devolada-red, and "Admin"
    was an identifier, never es-MX copy. */
 describe("US-B01: the access screens speak the pivoted product", () => {
-  it("login wears the Devolada wordmark and the SPEI-validation subtitle", async () => {
+  it("login wears the Devolada wordmark and the SPEI-validation subtitle (passwordless-access US2: and asks a código, not a password)", async () => {
     renderApp("/login");
 
     expect(await screen.findByText("Devolada")).toBeInTheDocument();
     expect(screen.getByText("Cobra por transferencia con validación automática.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enviar código" })).toBeInTheDocument();
+    expect(screen.queryByText(/contraseña/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/red de puntos de cobro/)).not.toBeInTheDocument();
     expect(screen.queryByText("Devolada Admin")).not.toBeInTheDocument();
   });

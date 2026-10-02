@@ -3,64 +3,67 @@ import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { invitation, user, verification } from "../src/db/schema";
-import { app, seedBusiness } from "./helpers";
+import { app, json, mintCode, seedBusiness } from "./helpers";
 
 /* bug: dev-code-readable — the deployed dev Worker answers /dev/* too, and
    /dev/last-code handed out any account's código (every account's latest,
    with no address at all); /dev/last-invitation, any pending invitation's
    id. Both now answer only for a test address — `.invalid`, or the demo
-   account — and refuse the rest before a row is read. */
+   account — and refuse the rest before a row is read.
+
+   passwordless-access US2 (D14): códigos are stored hashed, so there are no
+   digits to read back; `/dev/last-code` retired and `POST /dev/code` mints a
+   fresh one instead, under the same rule. */
 
 const get = async (path: string) => (await app()).request(path, {}, env);
-
-/* A código as Better Auth's email-OTP plugin stores it: `<type>-otp-<email>`,
-   the code then the attempts (1.6.29, plain until passwordless-access D2) */
-async function storeCode(identifier: string, code: string) {
-  const now = new Date();
-  await drizzle(env.DB)
-    .insert(verification)
-    .values({ id: crypto.randomUUID(), identifier, value: `${code}:0`, expiresAt: new Date(now.getTime() + 600_000), createdAt: now, updatedAt: now });
-}
+const devCode = async (body: unknown) => (await app()).request("/dev/code", json(body), env);
+const enter = async (email: string, otp: string) =>
+  (await app()).request("/auth/sign-in/email-otp", json({ email, otp, name: "Prueba" }), env);
 
 const REFUSED = { success: false, error: { code: "TEST_ADDRESS_ONLY" } };
 
-describe("bug: dev-code-readable — /dev/last-code answers only for a test address", () => {
-  it("refuses a real address, and no digit of its código leaves", async () => {
-    await storeCode("sign-in-otp-ana@negocio.mx", "482913");
-    const res = await get("/dev/last-code?email=ana%40negocio.mx");
+describe("bug: dev-code-readable — /dev/code mints only for a test address (passwordless-access US2)", () => {
+  it("refuses a real address, and its live código is left as it was", async () => {
+    const live = await mintCode("ana@negocio.mx");
+    const res = await devCode({ email: "ana@negocio.mx", type: "sign-in" });
     expect(res.status).toBe(403);
     const body = await res.text();
     expect(JSON.parse(body)).toEqual(REFUSED);
-    expect(body).not.toContain("482913");
+    expect(body).not.toContain(live);
+    expect(await drizzle(env.DB).select().from(verification).where(eq(verification.identifier, "sign-in-otp-ana@negocio.mx"))).toHaveLength(1);
+    expect((await enter("ana@negocio.mx", live)).status).toBe(200);
   });
 
-  it("refuses a missing or blank address instead of answering anyone's latest código", async () => {
-    await storeCode("sign-in-otp-ana@negocio.mx", "482913");
-    for (const path of ["/dev/last-code", "/dev/last-code?email=", "/dev/last-code?email=%20"]) {
-      const res = await get(path);
-      expect(res.status, path).toBe(403);
-      expect(await res.text(), path).not.toContain("482913");
+  it("refuses a missing or blank address instead of minting for anyone", async () => {
+    for (const body of [{}, { email: "" }, { email: "   " }]) {
+      const res = await devCode({ ...body, type: "sign-in" });
+      expect(res.status, JSON.stringify(body)).toBe(403);
+      expect(await res.json()).toEqual(REFUSED);
     }
+    expect(await drizzle(env.DB).select().from(verification)).toHaveLength(0);
   });
 
-  it("matches the address whole: `.invalid` inside a real address never reaches its código", async () => {
-    await storeCode("sign-in-otp-ana.invalid@gmail.com", "271828");
-    await storeCode("sign-in-otp-bowner@journey.invalid", "141421");
-    for (const email of ["ana.invalid", "owner@journey.invalid"]) {
-      const res = await get(`/dev/last-code?email=${encodeURIComponent(email)}`);
-      expect(res.status, email).toBe(200);
-      const body = await res.text();
-      expect(JSON.parse(body), email).toEqual({ success: true, data: { code: null } });
-      expect(body, email).not.toMatch(/271828|141421/);
-    }
+  it("matches the address whole: `.invalid` inside a real address never reaches its account", async () => {
+    const real = await mintCode("ana.invalid@gmail.com");
+    const res = await devCode({ email: "ana.invalid", type: "sign-in" });
+    expect(res.status).toBe(200);
+    const minted = ((await res.json()) as { data: { code: string } }).data.code;
+    if (minted !== real) expect((await enter("ana.invalid@gmail.com", minted)).status).toBe(400);
+    /* the real address's own código was never touched */
+    expect((await enter("ana.invalid@gmail.com", real)).status).toBe(200);
   });
 
-  it("still reads a `.invalid` address's código and the demo account's, as the passkey journeys do", async () => {
-    await storeCode("email-verification-otp-owner@journey.invalid", "314159");
-    await storeCode("sign-in-otp-demo@devolada.app", "161803");
-    expect(await (await get("/dev/last-code?email=owner%40journey.invalid")).json()).toEqual({ success: true, data: { code: "314159" } });
-    /* typed in any case: the plugin stores the address lowercased */
-    expect(await (await get("/dev/last-code?email=Demo%40Devolada.app")).json()).toEqual({ success: true, data: { code: "161803" } });
+  it("still mints for a `.invalid` address and the demo account's, as the passkey journeys do", async () => {
+    const verify = await devCode({ email: "owner@journey.invalid", type: "email-verification" });
+    expect(((await verify.json()) as { data: { code: string } }).data.code).toMatch(/^\d{6}$/);
+    /* typed in any case: the plugin keys the address lowercased */
+    const demo = await devCode({ email: "Demo@Devolada.app", type: "sign-in" });
+    const otp = ((await demo.json()) as { data: { code: string } }).data.code;
+    expect((await enter("demo@devolada.app", otp)).status).toBe(200);
+  });
+
+  it("GET /dev/last-code is gone", async () => {
+    expect((await get("/dev/last-code?email=owner%40journey.invalid")).status).toBe(404);
   });
 });
 

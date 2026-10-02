@@ -48,9 +48,9 @@
   - Movements that are neither SPEI credits nor same-bank credits are
     skipped and not kept.
 - Revised 2026-10-02 with same-bank payments (User Story 4, FR-016 –
-  FR-022, SC-004), from the creator's decisions of that day
-  (Clarifications). Added while specifying, as informed defaults for the
-  creator to confirm:
+  FR-023, SC-004), from the creator's decisions of that day
+  (Clarifications). Added while specifying as informed defaults, and
+  confirmed by the creator on 2026-10-02 ("Sí, continúa"):
   - A receipt showing the same bank on both sides asks the payer for their
     bank before any search (FR-017): the candidate receipt-reader-tuning
     left for this decision, since the reading may be a misread.
@@ -66,5 +66,8 @@
   - Transfers to the business's card or phone stay out of scope.
 - BBVA Net Cash and Banxico appear as the measured facts the feature
   rests on, not as implementation choices.
-- Before `/speckit-plan`: a real BBVA Net Cash export from the pilot, to
-  measure (Assumptions).
+- The payer reads a same-bank payment's state in spec 017's words, never
+  how it is validated (FR-019, the creator's rule of 2026-10-02).
+- Planning no longer waits for the pilot's file (Session 2026-10-02): the
+  real BBVA export is measured before its reader is built. The same-bank
+  part without a file is delivered first.

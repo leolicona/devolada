@@ -1,5 +1,5 @@
 import { Alert, Button, Input, Pending } from "@devolada/ui";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Label } from "@/components/ui/label";
@@ -24,6 +24,17 @@ export function NewBusinessScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /* passwordless-access D6: the wizard is where a person born through the
+     sign-in door lands — no business yet — so the shell's nameless guard
+     stands here too: the name is asked first, once, then back here. */
+  const nameless = Boolean(user.data) && !user.data!.name.trim();
+  const sentToWelcome = useRef(false);
+  useEffect(() => {
+    if (!nameless || sentToWelcome.current) return;
+    sentToWelcome.current = true;
+    void navigate({ to: "/welcome", search: { next: "/nuevo-negocio" }, replace: true });
+  }, [nameless, navigate]);
+
   /* feedback-vocabulary-rollout D1/D5. The word used to appear the instant the
      request left, so a session check answered from cache flashed a full screen
      of "Cargando…" and took it away again — the flicker the threshold exists to
@@ -44,6 +55,7 @@ export function NewBusinessScreen() {
     );
   }
   if (!user.data) return <Navigate to="/login" />;
+  if (nameless) return null;
 
   async function create() {
     setBusy(true);

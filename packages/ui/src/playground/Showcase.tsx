@@ -1,9 +1,23 @@
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useRef, useState, type ComponentType } from "react";
 import { Monitor, Moon, Search, Sun } from "lucide-react";
 import { Button } from "../components/button";
 import { Field, Input } from "../components/input";
-import { AmountBreakdown, StatusBadge, Amount, Pending, Reveal, type Status } from "../index";
+import {
+  AmountBreakdown,
+  StatusBadge,
+  Amount,
+  Pending,
+  Reveal,
+  CodeInput,
+  KeysCard,
+  PasskeyOffer,
+  type KeysCardKey,
+  type KeysCardProps,
+  type PasskeyOfferState,
+  type Status,
+} from "../index";
 import { Alert } from "../components/alert";
+import { Card } from "../components/card";
 
 /* Living catalog of tokens and shared atoms. Visible strings are real
    product copy and therefore stay in es-MX. */
@@ -121,6 +135,180 @@ function FeedbackDemo() {
           </Alert>
         </Reveal>
       )}
+    </div>
+  );
+}
+
+/* passwordless-access D12: the three access atoms. Each demo is a row of
+   states to jump between, because the states ARE the design — a still frame
+   of the idle card shows none of what the step-up, a failure or a done line
+   look like next to it. Switch the theme above to see each in both. */
+
+function Choices<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex flex-wrap gap-2">
+      {options.map((option) => (
+        <Button
+          key={option.value}
+          size="compact"
+          variant={option.value === value ? "primary" : "secondary"}
+          aria-pressed={option.value === value}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+const DEVICE_WORDS = [
+  { value: "este dispositivo", label: "Panel" },
+  { value: "este teléfono", label: "Teléfono" },
+  { value: "esta computadora", label: "Computadora" },
+];
+
+function CodeInputDemo() {
+  const [code, setCode] = useState("");
+  return (
+    <div className="grid gap-6 sm:grid-cols-2">
+      <CodeInput value={code} onChange={setCode} />
+      <CodeInput label="Código (incorrecto)" value="482913" onChange={() => {}} invalid />
+      <CodeInput label="Código (compacto, panel)" value={code} onChange={setCode} size="compact" />
+      <CodeInput label="Código (mientras se confirma)" value="482913" onChange={() => {}} disabled />
+    </div>
+  );
+}
+
+/* A demo pretending to be the app: "Activar" waits and lands on "Listo." —
+   a scripted stand-in for the ceremony, so the waiting breath can be seen. */
+function PasskeyOfferDemo() {
+  const [state, setState] = useState<PasskeyOfferState>("idle");
+  const [deviceWord, setDeviceWord] = useState(DEVICE_WORDS[0].value);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  return (
+    <div className="space-y-4">
+      <Choices
+        label="Estado"
+        value={state}
+        onChange={setState}
+        options={[
+          { value: "idle", label: "Oferta" },
+          { value: "busy", label: "Esperando" },
+          { value: "failed", label: "Falló" },
+          { value: "alreadyEnrolled", label: "Ya tenía" },
+          { value: "done", label: "Listo" },
+        ]}
+      />
+      <Choices label="Dispositivo" value={deviceWord} onChange={setDeviceWord} options={DEVICE_WORDS} />
+      <Card className="max-w-sm p-6">
+        <PasskeyOffer
+          deviceWord={deviceWord}
+          state={state}
+          onActivate={() => {
+            setState("busy");
+            clearTimeout(timer.current);
+            timer.current = setTimeout(() => setState("done"), 1600);
+          }}
+          onSkip={() => setState("idle")}
+        />
+      </Card>
+    </div>
+  );
+}
+
+const DEMO_KEYS: KeysCardKey[] = [
+  { id: "k1", name: "MacBook de Ana", createdAt: "2026-09-14T12:00:00.000Z", backedUp: true },
+  { id: "k2", name: null, createdAt: "2026-10-02T12:00:00.000Z", backedUp: false },
+];
+
+type KeysScenario =
+  | "keys"
+  | "empty"
+  | "loading"
+  | "stepUp"
+  | "stepUpInvalid"
+  | "stepUpTooMany"
+  | "failed"
+  | "done";
+
+function KeysCardDemo() {
+  const [scenario, setScenario] = useState<KeysScenario>("keys");
+  const [size, setSize] = useState<"compact" | "standard">("compact");
+  const [code, setCode] = useState("");
+  const [keys, setKeys] = useState(DEMO_KEYS);
+  const [signOutOthers, setSignOutOthers] = useState<KeysCardProps["signOutOthers"]>("idle");
+
+  const stepUp: KeysCardProps["stepUp"] = scenario.startsWith("stepUp")
+    ? {
+        email: "ana@negocio.mx",
+        code,
+        onCodeChange: setCode,
+        onSubmit: () => setScenario("done"),
+        onCancel: () => setScenario("keys"),
+        busy: false,
+        error:
+          scenario === "stepUpInvalid" ? "invalid" : scenario === "stepUpTooMany" ? "tooMany" : null,
+      }
+    : null;
+
+  return (
+    <div className="space-y-4">
+      <Choices
+        label="Estado"
+        value={scenario}
+        onChange={(next) => {
+          setScenario(next);
+          setCode("");
+          setKeys(DEMO_KEYS);
+          setSignOutOthers("idle");
+        }}
+        options={[
+          { value: "keys", label: "Con llaves" },
+          { value: "empty", label: "Sin llaves" },
+          { value: "loading", label: "Cargando" },
+          { value: "stepUp", label: "Pide código" },
+          { value: "stepUpInvalid", label: "Código incorrecto" },
+          { value: "stepUpTooMany", label: "Demasiados intentos" },
+          { value: "failed", label: "No se pudo activar" },
+          { value: "done", label: "Activada" },
+        ]}
+      />
+      <Choices
+        label="Tamaño"
+        value={size}
+        onChange={setSize}
+        options={[
+          { value: "compact", label: "Panel · 40px" },
+          { value: "standard", label: "Tienda · 48px" },
+        ]}
+      />
+      <KeysCard
+        className={size === "standard" ? "max-w-sm" : undefined}
+        size={size}
+        deviceWord={size === "standard" ? "este teléfono" : "este dispositivo"}
+        keys={scenario === "empty" ? [] : scenario === "loading" ? undefined : keys}
+        loading={scenario === "loading"}
+        canActivate
+        activation={scenario === "failed" ? "failed" : scenario === "done" ? "done" : "idle"}
+        onActivate={() => setScenario("stepUp")}
+        onRemove={(id) => setKeys((all) => all.filter((key) => key.id !== id))}
+        stepUp={stepUp}
+        signOutOthers={signOutOthers}
+        onSignOutOthers={() => setSignOutOthers("done")}
+      />
     </div>
   );
 }
@@ -278,6 +466,18 @@ export function Showcase() {
 
       <Section title="Espera y desenlace">
         <FeedbackDemo />
+      </Section>
+
+      <Section title="Código — seis dígitos, uno por uno">
+        <CodeInputDemo />
+      </Section>
+
+      <Section title="Huella o rostro — la oferta después del código">
+        <PasskeyOfferDemo />
+      </Section>
+
+      <Section title="Llaves y sesiones — Cuenta → Seguridad y Caja">
+        <KeysCardDemo />
       </Section>
 
       <footer className="border-t border-line pt-6 text-sm text-ink-soft">

@@ -257,20 +257,30 @@ describe("cash-at-stores US3 — the invitation: preview, acceptance, the códig
     expect(signIn.status).toBe(200);
   });
 
-  it("a business signup with an unverified shopkeeper's email is EMAIL_TAKEN, and the shopkeeper keeps their account (T078)", async () => {
+  it("the panel's registration of a shopkeeper's address opens the store's account by código, which the panel refuses (passwordless-access US1)", async () => {
     const { store, token } = await invite();
     await call(`/store/invitations/${token}/accept`, json({ email: "lupita@correo.mx", password: "secreta123" }));
-    const res = await call("/auth/business/signup", json({ name: "Otro Negocio", email: "lupita@correo.mx", password: "otra-clave-1" }));
-    expect(res.status).toBe(409);
-    expect((await res.json()).error.code).toBe("EMAIL_TAKEN");
-    const [user] = await db().select().from(userTable).where(eq(userTable.email, "lupita@correo.mx"));
+    const [shopkeeper] = await db().select().from(userTable).where(eq(userTable.email, "lupita@correo.mx"));
+
+    /* the registration door answers as for anyone (FR-005), and the código
+       proves the inbox — whoever types it is the shopkeeper */
+    expect((await call("/auth/email-otp/send-verification-otp", json({ email: "lupita@correo.mx", type: "sign-in" }))).status).toBe(200);
+    const res = await call("/auth/sign-in/email-otp", json({ email: "lupita@correo.mx", otp: sentCode("lupita@correo.mx"), name: "Otro Negocio" }));
+    expect(res.status).toBe(200);
+
+    /* the same account, still the store's; no second user, no new name */
+    const users = await db().select().from(userTable).where(eq(userTable.email, "lupita@correo.mx"));
+    expect(users).toHaveLength(1);
+    expect(users[0]).toMatchObject({ id: shopkeeper.id, name: "Lupita Hernández", emailVerified: true });
     const [row] = await db().select().from(stores).where(eq(stores.id, store.id));
-    expect(row.userId).toBe(user.id);
-    /* the password still opens the door once the código is typed */
-    const verified = await call("/auth/email-otp/verify-email", json({ email: "lupita@correo.mx", otp: sentCode("lupita@correo.mx") }));
-    expect(verified.status).toBe(200);
-    const signIn = await call("/auth/sign-in/username", json({ username: "5512345678", password: "secreta123" }));
-    expect(signIn.status).toBe(200);
+    expect(row.userId).toBe(shopkeeper.id);
+
+    /* and its session is the store branch, which every business door refuses (cash-at-stores D2) */
+    const me = await call("/auth/me", withCookie(sessionOf(res)));
+    expect((await me.json()).data).toMatchObject({ type: "store", storeId: store.id });
+    const feed = await call("/payments/feed", withCookie(sessionOf(res)));
+    expect(feed.status).toBe(403);
+    expect((await feed.json()).error.code).toBe("WRONG_ACTOR");
   });
 
   it("EMAIL_TAKEN for an existing user and for an operator's address; the invitation stays open", async () => {

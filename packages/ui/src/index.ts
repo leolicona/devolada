@@ -28,3 +28,20 @@ export { Skeleton } from "./components/skeleton";
    ship here; `entering`, `leaving` and `retrying` are 002's. */
 export { Pending, type PendingProps } from "./components/pending";
 export { Reveal, type RevealProps } from "./components/reveal";
+
+/* Access without a password (passwordless-access D12). The panel and the
+   store app both render the código field, the activation step and the keys
+   card; presentational, so each app keeps its own Better Auth client and
+   passes state and callbacks in. */
+export { CodeInput, CODE_LENGTH, type CodeInputProps } from "./components/code-input";
+export {
+  PasskeyOffer,
+  type PasskeyOfferProps,
+  type PasskeyOfferState,
+} from "./components/passkey-offer";
+export {
+  KeysCard,
+  type KeysCardProps,
+  type KeysCardKey,
+  type KeysCardStepUp,
+} from "./components/keys-card";

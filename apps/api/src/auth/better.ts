@@ -88,8 +88,15 @@ export function makeAuth(env: Bindings) {
       revokeSessionsOnPasswordReset: true,
     },
     emailVerification: { autoSignInAfterVerification: true },
-    /* cash-at-stores D3: whether a phone is a store's is nobody's to probe */
-    disabledPaths: ["/is-username-available"],
+    disabledPaths: [
+      /* cash-at-stores D3: whether a phone is a store's is nobody's to probe */
+      "/is-username-available",
+      /* passwordless-access D4 (PR 1): no password can be created over
+         HTTP — registration is the código door (D1). Better Auth answers
+         404 from its router, so the server's own `auth.api.*` calls keep
+         the path (measured 2026-10-02, M3). */
+      "/sign-up/email",
+    ],
     hooks: {
       /* cash-at-stores D3: see USERNAME_INPUT_PATHS. Runs before every
          plugin's hooks (1.6.29 `getHooks`: the user hook first). */

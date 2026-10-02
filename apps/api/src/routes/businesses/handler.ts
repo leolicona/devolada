@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { businesses, invitation, member, organization, user as userTable } from "../../db/schema";
+import { businesses, invitation, member, organization, user as userTable, verification } from "../../db/schema";
 import { isStoreUser, makeAuth } from "../../auth/better";
 import { findActor } from "../../auth/middleware";
 import { grantableRoles, isRole, roleCan, ROLE_RANK, type Role } from "../../auth/roles";
@@ -359,10 +359,16 @@ function cookieHeadersFrom(from: Headers): Headers {
   return new Headers({ Cookie: cookies.map((c) => c.split(";")[0]).join("; ") });
 }
 
-/* D14: the invitee without an account creates it here — name and
-   password, the email is the invitation's — and lands inside the
-   business. The invitation proves the address (it arrived in that
-   inbox), so the user is born verified and no código goes out. */
+/* D14: the invitee without an account creates it here — the email is the
+   invitation's — and lands inside the business. The invitation proves the
+   address (it arrived in that inbox), so the user is born verified and no
+   código goes out.
+   passwordless-access D9: a name, and no password. The account is born
+   through the email-OTP plugin's own door rather than by hand: a código is
+   minted on the server (`createVerificationOTP`, server-only) and consumed
+   at once by `signInEmailOTP`, which creates the user verified and named
+   and opens its session — signing Better Auth's cookie ourselves would
+   couple us to its format. */
 export async function acceptInvitationAsNewUser(c: Ctx, invitationId: string, body: AcceptInvitationNewRequest) {
   const db = drizzle(c.env.DB);
   const [row] = await db.select().from(invitation).where(eq(invitation.id, invitationId));
@@ -373,18 +379,17 @@ export async function acceptInvitationAsNewUser(c: Ctx, invitationId: string, bo
   if (existing) return c.json({ success: false, error: { code: "EMAIL_TAKEN" } }, 409);
 
   const auth = makeAuth(c.env);
-  const { user } = await auth.api.signUpEmail({
-    body: { name: body.name, email: row.email, password: body.password },
-  });
-  await db.update(userTable).set({ emailVerified: true }).where(eq(userTable.id, user.id));
-
-  /* better-auth D16: signUpEmail births no session any more; the sign-in
-     right after the flag is what opens one — the invitee is verified by
-     the invitation, so the gate lets them through. */
-  const { headers } = await auth.api.signInEmail({
-    body: { email: row.email, password: body.password },
+  const email = row.email.toLowerCase();
+  /* D9 step 1: a live sign-in código for this address (the invitee asked
+     for one on /login, say) goes first. The plugin keeps one live row per
+     address (D2), and a stray one would be the row the next step checks. */
+  await db.delete(verification).where(eq(verification.identifier, `sign-in-otp-${email}`));
+  const otp = await auth.api.createVerificationOTP({ body: { email, type: "sign-in" } });
+  const { headers, response } = await auth.api.signInEmailOTP({
+    body: { email, otp, name: body.name },
     returnHeaders: true,
   });
+  const user = response.user;
   const asNewUser = cookieHeadersFrom(headers);
   await auth.api.acceptInvitation({ headers: asNewUser, body: { invitationId } });
   await auth.api.setActiveOrganization({ headers: asNewUser, body: { organizationId: row.organizationId } });

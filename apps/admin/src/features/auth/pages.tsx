@@ -1,52 +1,39 @@
-import { Alert, Button, Input, Pending } from "@devolada/ui";
-import { useState } from "react";
+import { Alert, Button, Input, PasskeyOffer, Pending, type PasskeyOfferState } from "@devolada/ui";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Fingerprint } from "lucide-react";
 import { Label } from "@/components/ui/label";
-import { ApiError } from "@/lib/api";
-import { authClient, passkeysSupported } from "@/lib/auth-client";
+import { canVerifyPerson, passkeysSupported } from "@/lib/auth-client";
 import { AccessLayout } from "./AccessLayout";
-import { login, requestPasswordReset, resetPasswordWithCode, sendVerificationCode, signup, verifyEmailCode } from "./session";
+import { CodeStep, OrWithCode } from "./CodeStep";
+import { accessProblem, activateKey, signInWithKey, TOO_MANY } from "./keys";
+import { sendCode, signInWithCode, updateName, useUser } from "./session";
 
-/* Access pages (better-auth.spec.md UI contract). Controlled forms,
-   plain es-MX copy, generic errors that never leak account existence.
-   Codes, never links (D4): recovery types a código, it never clicks.
-   D12: `next` (validated by the route) is where login and signup go
-   afterwards — the page the guard bounced, or an invitation. */
+/* Access pages (better-auth.spec.md UI contract; passwordless-access D6).
+   Controlled forms, plain es-MX copy, answers that never leak account
+   existence. Codes, never links (better-auth D4): a código is typed where
+   the session belongs. No password exists to ask for. D12: `next`
+   (validated by the route) is where every door goes afterwards — the page
+   the guard bounced, or an invitation. */
 
-/* An action that took the person somewhere else on its own returns
-   HANDLED, and the usual landing is skipped. */
-export const HANDLED = Symbol("handled");
-
-function useSubmit(
-  action: () => Promise<unknown>,
-  onDone: () => void,
-  fallback: string,
-  /* What a wrong or dead código says on this page — the screen with the
-     resend at hand says "Reenvíalo", the others "Pide uno nuevo" (design
-     review identidad-2, should fix 3) */
-  codeCopy = "El código no es válido o ya venció. Pide uno nuevo.",
-) {
+/* passwordless-access D6: a request that sends a código, or saves a name.
+   A 429 is the limiter's wait, said as such (FR-027); anything else is the
+   screen's own fallback. */
+function useSend(action: () => Promise<unknown>, onDone: () => void, fallback = "No pudimos enviar el código. Intenta de nuevo.") {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   return {
     error,
-    setError,
     busy,
     async run() {
       setBusy(true);
       setError(null);
       try {
-        if ((await action()) !== HANDLED) onDone();
+        await action();
+        onDone();
       } catch (e) {
-        setError(
-          e instanceof ApiError && e.code === "EMAIL_TAKEN"
-            ? "Ya existe una cuenta con ese correo."
-            : e instanceof ApiError && /OTP|CODE/i.test(e.code)
-              ? codeCopy
-              : fallback,
-        );
+        setError(accessProblem(e) === "tooMany" ? TOO_MANY : fallback);
       } finally {
         setBusy(false);
       }
@@ -57,11 +44,11 @@ function useSubmit(
 /* Field-level problems, named before the request leaves (identity round
    2026-09-02): the server's 400 used to be the first word the person
    heard about a one-letter name or a short password. The rules mirror
-   the API's Zod input (name ≥ 2, email, password ≥ 8). */
+   the API's (name 2–80 once trimmed: passwordless-access analysis A3;
+   email). */
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const nameProblem = (v: string) => (v.trim().length < 2 ? "Escribe tu nombre, al menos 2 letras." : null);
 const emailProblem = (v: string) => (EMAIL_SHAPE.test(v.trim()) ? null : "Escribe un correo válido, como nombre@dominio.com.");
-const passwordProblem = (v: string) => (v.length < 8 ? "Usa al menos 8 caracteres." : null);
 
 /* `next` is any same-app path the route already validated; the router's
    `to` wants a literal route name, so the string goes through unchecked. */
@@ -76,136 +63,160 @@ function FieldError({ id, children }: { id: string; children: string | null }) {
   );
 }
 
-/* design-review 2026-09-01 (must fix): the login subtitle pitched the
-   store network that left to devolada-red; it now speaks the pivot. */
+/* passwordless-access D6, D7 (contracts/panel-access.md § /login): the key
+   first, wherever the browser supports passkeys — it can reach a phone
+   nearby or a synced key even on a computer without a sensor (FR-016) —
+   then the email and a código, for every address alike (FR-013). The
+   address stays in this component, never in the URL. No line announces
+   that passwords are gone: the screen reads as if it had always been this
+   way (spec Clarifications, Q4). A key goes to `next`; a código goes
+   through /welcome, which asks a missing name and offers the key (D6). */
 export function LoginPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { next } = useSearch({ from: "/login" });
+  const [step, setStep] = useState<"start" | "code">("start");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const goOn = () => {
-    void queryClient.invalidateQueries({ queryKey: ["session"] });
-    void navigate({ to: next ? asRoute(next) : "/" });
-  };
-  const submit = useSubmit(
-    async () => {
-      try {
-        await login(email, password);
-      } catch (e) {
-        /* better-auth D16: the password is right, the address is not yet
-           proven — a fresh código goes out and the code screen takes over */
-        if (e instanceof ApiError && e.code === "EMAIL_NOT_VERIFIED") {
-          void sendVerificationCode(email).catch(() => {});
-          void navigate({ to: "/verify-email", search: { email, next } });
-          return HANDLED;
-        }
-        throw e;
-      }
-    },
-    goOn,
-    "Correo o contraseña incorrectos",
-  );
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [keyFailed, setKeyFailed] = useState(false);
+  const address = email.trim();
+  const shapeOk = EMAIL_SHAPE.test(address);
+  const withKey = passkeysSupported();
+  const send = useSend(() => sendCode(address), () => setStep("code"));
+
+  if (step === "code") {
+    return (
+      <AccessLayout title="Escribe tu código" description={`Te enviamos un código de 6 dígitos a ${address}. Vence en 10 minutos.`}>
+        <CodeStep
+          purpose="enter"
+          onSubmit={async (otp) => {
+            await signInWithCode(address, otp);
+            queryClient.clear();
+            void navigate({ to: "/welcome", search: { next } });
+          }}
+          onResend={() => sendCode(address)}
+          onOtherEmail={() => setStep("start")}
+        />
+      </AccessLayout>
+    );
+  }
 
   return (
     <AccessLayout title="Iniciar sesión" description="Cobra por transferencia con validación automática.">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit.run();
-        }}
-        className="space-y-4"
-        noValidate
-      >
-        <div>
-          <Label htmlFor="email">Correo</Label>
-          <Input size="compact" id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div>
-          <Label htmlFor="password">Contraseña</Label>
-          <Input size="compact" id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </div>
-        {submit.error && <Alert variant="destructive">{submit.error}</Alert>}
-        {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
-            is still a wait the operator is having — the earlier sweeps keyed on
-            `isPending` and could not see these (converge F1/F2). */}
-        <Pending active={submit.busy} label="Entrando a tu cuenta.">
-          <Button type="submit" size="standard" className="w-full" disabled={submit.busy}>
-            {submit.busy ? "Entrando…" : "Entrar"}
-          </Button>
-        </Pending>
-        {/* US-S07: one-touch sign-in for devices with an enrolled passkey */}
-        {passkeysSupported() && (
-          <Button
-            type="button"
-            variant="secondary"
-            size="standard"
-            className="w-full"
-            onClick={async () => {
-              const { error } = await authClient.signIn.passkey();
-              if (error) {
-                submit.setError("No pudimos usar tu huella o rostro. Entra con tu contraseña.");
-                return;
-              }
-              goOn();
-            }}
-          >
-            <Fingerprint className="size-5" aria-hidden />
-            Entrar con huella o rostro
-          </Button>
+      <div className="space-y-4">
+        {withKey && (
+          <>
+            <Pending active={keyBusy} label="Esperando a tu dispositivo.">
+              <Button
+                type="button"
+                size="standard"
+                className="w-full"
+                disabled={keyBusy}
+                /* D7: the device's window opens inside this click */
+                onClick={async () => {
+                  setKeyBusy(true);
+                  setKeyFailed(false);
+                  const opened = await signInWithKey();
+                  setKeyBusy(false);
+                  if (!opened) {
+                    /* FR-012: one line, and the código right below it */
+                    setKeyFailed(true);
+                    return;
+                  }
+                  queryClient.clear();
+                  void navigate({ to: next ? asRoute(next) : "/" });
+                }}
+              >
+                <Fingerprint className="size-5" aria-hidden />
+                {keyBusy ? "Esperando a tu dispositivo…" : "Entrar con huella o rostro"}
+              </Button>
+            </Pending>
+            {keyFailed && <Alert variant="destructive">No pudimos usar tu huella o rostro. Entra con un código.</Alert>}
+            <OrWithCode />
+          </>
         )}
-        <div className="flex justify-between text-sm">
-          {/* bug: invitee-lands-own-business — the recovery keeps `next`:
-              an invitee who came here from their invitation goes back to it */}
-          <Link to="/recover" search={{ next }} className="text-link hover:underline">
-            Olvidé mi contraseña
-          </Link>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (shapeOk && !send.busy) void send.run();
+          }}
+          className="space-y-4"
+          noValidate
+        >
+          <div>
+            <Label htmlFor="email">Correo</Label>
+            <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          {send.error && <Alert variant="destructive">{send.error}</Alert>}
+          <Pending active={send.busy} label="Enviando el código.">
+            <Button type="submit" size="standard" variant={withKey ? "secondary" : "primary"} className="w-full" disabled={!shapeOk || send.busy}>
+              {send.busy ? "Enviando…" : "Enviar código"}
+            </Button>
+          </Pending>
+        </form>
+        <p className="text-center text-sm">
           <Link to="/signup" search={{ next }} className="text-link hover:underline">
             Crear cuenta
           </Link>
-        </div>
-      </form>
+        </p>
+      </div>
     </AccessLayout>
   );
 }
 
+/* passwordless-access D1, D6 (contracts/panel-access.md § /signup): name
+   and email, then the código. The name stays in this component until the
+   código carries it — the account is born there, verified and named, and
+   nothing exists before (FR-004). No message ever says an address is taken
+   (FR-005): a taken address goes through the same two steps and its código
+   opens the existing account. The description names no business type
+   (constitution IX, FR-030). */
 export function SignupPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { next } = useSearch({ from: "/signup" });
+  const [step, setStep] = useState<"data" | "code">("data");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [touched, setTouched] = useState<{ name?: boolean; email?: boolean; password?: boolean }>({});
-  const problems = { name: nameProblem(name), email: emailProblem(email), password: passwordProblem(password) };
+  const [touched, setTouched] = useState<{ name?: boolean; email?: boolean }>({});
+  const problems = { name: nameProblem(name), email: emailProblem(email) };
   const shown = (field: keyof typeof problems) => (touched[field] ? problems[field] : null);
-  const submit = useSubmit(
-    () => signup(name, email, password),
-    () => {
-      /* better-auth D16: the account exists and holds no session yet —
-         the código screen opens it, then the wizard (business D5) or,
-         for an invitee, the invitation (D12). */
-      queryClient.clear();
-      void navigate({ to: "/verify-email", search: { email, next } });
-    },
-    "No pudimos crear la cuenta. Intenta de nuevo.",
-  );
+  const address = email.trim();
+  const send = useSend(() => sendCode(address), () => setStep("code"));
+
+  if (step === "code") {
+    return (
+      <AccessLayout title="Escribe tu código" description={`Te enviamos un código de 6 dígitos a ${address}. Vence en 10 minutos.`}>
+        <CodeStep
+          purpose="create"
+          onSubmit={async (otp) => {
+            await signInWithCode(address, otp, name.trim());
+            /* A new session: whatever a query read before it is stale */
+            queryClient.clear();
+            void navigate({ to: "/welcome", search: { next } });
+          }}
+          onResend={() => sendCode(address)}
+          onOtherEmail={() => setStep("data")}
+        />
+      </AccessLayout>
+    );
+  }
 
   return (
-    <AccessLayout title="Crear cuenta" description="Tu ISP, cobrando por transferencia sin trabajo manual.">
+    <AccessLayout title="Crear cuenta" description="Cobra por transferencia con validación automática.">
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          setTouched({ name: true, email: true, password: true });
-          if (problems.name || problems.email || problems.password) return;
-          void submit.run();
+          setTouched({ name: true, email: true });
+          if (problems.name || problems.email) return;
+          void send.run();
         }}
         className="space-y-4"
         noValidate
       >
         <div>
           <Label htmlFor="name">Tu nombre</Label>
-          <Input size="compact"
+          <Input
             id="name"
             autoComplete="name"
             value={name}
@@ -218,7 +229,7 @@ export function SignupPage() {
         </div>
         <div>
           <Label htmlFor="email">Correo</Label>
-          <Input size="compact"
+          <Input
             id="email"
             type="email"
             autoComplete="email"
@@ -230,33 +241,10 @@ export function SignupPage() {
           />
           <FieldError id="email-error">{shown("email")}</FieldError>
         </div>
-        <div>
-          <Label htmlFor="password">Contraseña</Label>
-          <Input size="compact"
-            id="password"
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onBlur={() => setTouched((t) => ({ ...t, password: true }))}
-            aria-invalid={Boolean(shown("password")) || undefined}
-            aria-describedby={shown("password") ? "password-error" : "password-hint"}
-          />
-          {shown("password") ? (
-            <FieldError id="password-error">{shown("password")}</FieldError>
-          ) : (
-            <p id="password-hint" className="mt-1 text-sm text-muted-foreground">
-              Al menos 8 caracteres.
-            </p>
-          )}
-        </div>
-        {submit.error && <Alert variant="destructive">{submit.error}</Alert>}
-        {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
-            is still a wait the operator is having — the earlier sweeps keyed on
-            `isPending` and could not see these (converge F1/F2). */}
-        <Pending active={submit.busy} label="Creando tu cuenta.">
-          <Button type="submit" size="standard" className="w-full" disabled={submit.busy}>
-            {submit.busy ? "Creando…" : "Crear cuenta"}
+        {send.error && <Alert variant="destructive">{send.error}</Alert>}
+        <Pending active={send.busy} label="Enviando el código.">
+          <Button type="submit" size="standard" className="w-full" disabled={send.busy}>
+            {send.busy ? "Enviando…" : "Continuar"}
           </Button>
         </Pending>
         <p className="text-center text-sm">
@@ -269,242 +257,139 @@ export function SignupPage() {
   );
 }
 
-/* The código screen (better-auth.spec.md D16): the one door between an
-   account and its session. The address arrives in the URL from signup or
-   login; typed only when someone lands here without it. Codes are typed,
-   never clicked (D4). */
-export function VerifyEmailPage() {
+/* "Listo." stays for a beat before the page moves on (the design canvas):
+   long enough to be read, short enough not to feel like a wait. */
+const OUTCOME_BEAT_MS = 1200;
+
+/* passwordless-access D6, D7 (contracts/panel-access.md § /welcome): where
+   every door that opens a session by código lands, and an invitee's birth
+   (D9). It does at most two things, in this order, then goes on to `next`:
+   1. a person born through the sign-in door has no name — it asks. The
+      order is load-bearing (D1): the passkey plugin names the WebAuthn user
+      `user.name || user.id`, so a key made before the name would show the
+      device's account picker a random id;
+   2. a device that can verify the person itself (`canVerifyPerson`, not
+      merely `passkeysSupported`: D7) is offered the key, with "Ahora no".
+   When neither applies it navigates before painting: nobody sees a flash
+   of it. */
+export function WelcomePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { email: given, next } = useSearch({ from: "/verify-email" });
-  const [email, setEmail] = useState(given ?? "");
-  const [code, setCode] = useState("");
-  const [resent, setResent] = useState(false);
-  const address = email.trim();
+  const { next } = useSearch({ from: "/welcome" });
+  const user = useUser();
+  const [phase, setPhase] = useState<"deciding" | "name" | "offer">("deciding");
+  const [offer, setOffer] = useState<PasskeyOfferState>("idle");
+  const [name, setName] = useState("");
+  const [touched, setTouched] = useState(false);
+  const decided = useRef(false);
+  const goOn = () => void navigate({ to: next ? asRoute(next) : "/", replace: true });
 
-  const confirm = useSubmit(
-    () => verifyEmailCode(address, code),
+  async function decideOffer() {
+    if (await canVerifyPerson()) setPhase("offer");
+    else goOn();
+  }
+
+  /* Decided once, like the shell's bounce (better-auth D12's lesson) */
+  useEffect(() => {
+    if (user.isPending || decided.current) return;
+    decided.current = true;
+    if (!user.data) {
+      void navigate({ to: "/login", search: { next }, replace: true });
+      return;
+    }
+    if (!user.data.name.trim()) setPhase("name");
+    else void decideOffer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- decided once, on the first answer
+  }, [user.isPending, user.data]);
+
+  const save = useSend(
+    () => updateName(name.trim()),
     () => {
-      /* The session was born with the código: the shell takes it from
-         here — the wizard when no business exists yet */
-      queryClient.clear();
-      void navigate({ to: next ? asRoute(next) : "/" });
+      void queryClient.invalidateQueries({ queryKey: ["user"] });
+      void queryClient.invalidateQueries({ queryKey: ["session"] });
+      void decideOffer();
     },
-    "No pudimos confirmar el código. Intenta de nuevo.",
-    "El código no es válido o ya venció. Reenvíalo e intenta otra vez.",
+    "No pudimos guardar tu nombre. Intenta de nuevo.",
   );
 
+  if (phase === "name") {
+    const problem = touched ? nameProblem(name) : null;
+    return (
+      <AccessLayout title="¿Cómo te llamas?">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            setTouched(true);
+            if (nameProblem(name)) return;
+            void save.run();
+          }}
+          className="space-y-4"
+          noValidate
+        >
+          <div>
+            <Label htmlFor="name">Tu nombre</Label>
+            <Input
+              id="name"
+              autoComplete="name"
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => setTouched(true)}
+              aria-invalid={Boolean(problem) || undefined}
+              aria-describedby={problem ? "name-error" : undefined}
+            />
+            <FieldError id="name-error">{problem}</FieldError>
+          </div>
+          {save.error && <Alert variant="destructive">{save.error}</Alert>}
+          <Pending active={save.busy} label="Guardando tu nombre.">
+            <Button type="submit" size="standard" className="w-full" disabled={save.busy}>
+              {save.busy ? "Guardando…" : "Continuar"}
+            </Button>
+          </Pending>
+        </form>
+      </AccessLayout>
+    );
+  }
+
+  if (phase === "offer") {
+    return (
+      <AccessLayout>
+        <PasskeyOffer
+          deviceWord="este dispositivo"
+          state={offer}
+          /* D7: the ceremony starts inside this click — Safari refuses a
+             WebAuthn call without a user gesture */
+          onActivate={() => {
+            setOffer("busy");
+            void activateKey().then((outcome) => {
+              if (outcome === "done" || outcome === "alreadyEnrolled") {
+                setOffer(outcome);
+                void queryClient.invalidateQueries({ queryKey: ["passkeys"] });
+                setTimeout(goOn, OUTCOME_BEAT_MS);
+              } else {
+                /* FR-009: one line, and both ways on */
+                setOffer("failed");
+              }
+            });
+          }}
+          onSkip={goOn}
+        />
+      </AccessLayout>
+    );
+  }
+
+  /* Deciding: the wait shows only if it is real (feedback-vocabulary-rollout D5) */
   return (
-    <AccessLayout
-      title="Confirma tu correo"
-      description={
-        given
-          ? `Escribe el código de 6 dígitos que enviamos a ${given}.`
-          : "Escribe tu correo y el código de 6 dígitos que te enviamos."
+    <Pending
+      active
+      label="Cargando tu sesión."
+      shape={
+        <main className="flex min-h-dvh items-center justify-center bg-background">
+          <p className="text-sm text-ink-soft">Cargando…</p>
+        </main>
       }
     >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (code.length === 6 && EMAIL_SHAPE.test(address)) void confirm.run();
-        }}
-        className="space-y-4"
-        noValidate
-      >
-        {!given && (
-          <div>
-            <Label htmlFor="email">Correo</Label>
-            <Input size="compact" id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </div>
-        )}
-        <div>
-          <Label htmlFor="code">Código</Label>
-          <Input size="compact"
-            id="code"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={6}
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-          />
-        </div>
-        {confirm.error && <Alert variant="destructive">{confirm.error}</Alert>}
-        {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
-            is still a wait the operator is having — the earlier sweeps keyed on
-            `isPending` and could not see these (converge F1/F2). */}
-        <Pending active={confirm.busy} label="Confirmando tu correo.">
-          <Button type="submit" size="standard" className="w-full" disabled={confirm.busy || code.length < 6}>
-            {confirm.busy ? "Confirmando…" : "Confirmar"}
-          </Button>
-        </Pending>
-        <p className="text-center text-sm">
-          <Button size="compact"
-            variant="link"
-            disabled={!EMAIL_SHAPE.test(address)}
-            onClick={() => {
-              setResent(true);
-              void sendVerificationCode(address).catch(() => {});
-            }}
-          >
-            {resent ? "Código reenviado" : "Reenviar código"}
-          </Button>
-        </p>
-        <div className="flex justify-between text-sm">
-          {/* A mistyped address is fixed by signing up again: the unverified
-              account is replaced, never "taken" (D16) */}
-          <Link to="/signup" search={{ next }} className="text-link hover:underline">
-            Usar otro correo
-          </Link>
-          <Link to="/login" search={{ next }} className="text-link hover:underline">
-            Volver a iniciar sesión
-          </Link>
-        </div>
-      </form>
-    </AccessLayout>
-  );
-}
-
-/* Recovery in two steps on one screen (better-auth.spec.md): email →
-   código + new password. The confirmation copy is identical whether the
-   account exists or not — no existence leak. Scenario 7 says "restores
-   access": the new password signs the person in right here, instead of
-   sending them to type it once more on the login page.
-   bug: invitee-lands-own-business — and it goes on to `next` (D12), not
-   to "/": an invitee who forgot their password used to land in their own
-   business with the invitation forgotten. The address arrives filled in
-   when the invitation page knows it (D14: the invitation's, never typed). */
-export function RecoverPage() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { next, email: given } = useSearch({ from: "/recover" });
-  const [step, setStep] = useState<"email" | "code">("email");
-  const [email, setEmail] = useState(given ?? "");
-  const [code, setCode] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [resent, setResent] = useState(false);
-
-  const ask = useSubmit(
-    () => requestPasswordReset(email),
-    () => setStep("code"),
-    "No pudimos enviar el código. Intenta de nuevo.",
-  );
-
-  const reset = useSubmit(
-    async () => {
-      if (password.length < 8) throw new ApiError("VALIDATION", 400);
-      if (password !== confirm) throw new ApiError("VALIDATION", 400);
-      await resetPasswordWithCode(email, code, password);
-      await login(email, password);
-    },
-    () => {
-      /* A new session: whatever a page read before it (the invitation
-         page's "nobody signed in") is stale, as on the código screen */
-      queryClient.clear();
-      void navigate({ to: next ? asRoute(next) : "/" });
-    },
-    "Revisa que la contraseña tenga 8 caracteres y coincida.",
-  );
-
-  const backToLogin = (
-    <p className="text-center text-sm">
-      <Link to="/login" search={{ next }} className="text-link hover:underline">
-        Volver a iniciar sesión
-      </Link>
-    </p>
-  );
-
-  return (
-    <AccessLayout
-      title="Recuperar contraseña"
-      description={step === "email" ? "Te enviamos un código para elegir una contraseña nueva." : undefined}
-    >
-      {step === "email" ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void ask.run();
-          }}
-          className="space-y-4"
-          noValidate
-        >
-          <div>
-            <Label htmlFor="email">Correo</Label>
-            <Input size="compact" id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </div>
-          {ask.error && <Alert variant="destructive">{ask.error}</Alert>}
-          {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
-              is still a wait the operator is having — the earlier sweeps keyed on
-              `isPending` and could not see these (converge F1/F2). */}
-          <Pending active={ask.busy} label="Enviando el código.">
-            <Button type="submit" size="standard" className="w-full" disabled={ask.busy}>
-              {ask.busy ? "Enviando…" : "Enviar código"}
-            </Button>
-          </Pending>
-          {backToLogin}
-        </form>
-      ) : (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void reset.run();
-          }}
-          className="space-y-4"
-          noValidate
-        >
-          <Alert>Si existe una cuenta con {email}, le enviamos un código.</Alert>
-          <div>
-            <Label htmlFor="code">Código</Label>
-            <Input size="compact"
-              id="code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-            />
-          </div>
-          <div>
-            <Label htmlFor="password">Nueva contraseña</Label>
-            <Input size="compact" id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </div>
-          <div>
-            <Label htmlFor="confirm">Repite la contraseña</Label>
-            <Input size="compact" id="confirm" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-          </div>
-          {reset.error && <Alert variant="destructive">{reset.error}</Alert>}
-          {ask.error && <Alert variant="destructive">{ask.error}</Alert>}
-          {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
-              is still a wait the operator is having — the earlier sweeps keyed on
-              `isPending` and could not see these (converge F1/F2). */}
-          <Pending active={reset.busy} label="Guardando tu contraseña.">
-            <Button type="submit" size="standard" className="w-full" disabled={reset.busy}>
-              {reset.busy ? "Guardando…" : "Guardar contraseña"}
-            </Button>
-          </Pending>
-          <p className="text-center text-sm">
-            {/* The same confirmation the verify banner gives: a resend that
-                says nothing looks like a button that did nothing. */}
-            {/* feedback-vocabulary-rollout D1/D4. The label flips optimistically
-                to "Código reenviado" the moment it is clicked, so the operator
-                is not left guessing — but the request is still in flight after
-                that, and the breath is what says so. */}
-            <Pending active={ask.busy} label="Reenviando el código." className="inline-block">
-              <Button size="compact"
-                variant="link"
-                disabled={ask.busy}
-                onClick={() => {
-                  setResent(true);
-                  void ask.run();
-                }}
-              >
-                {resent ? "Código reenviado" : "Reenviar código"}
-              </Button>
-            </Pending>
-          </p>
-          {backToLogin}
-        </form>
-      )}
-    </AccessLayout>
+      {null}
+    </Pending>
   );
 }

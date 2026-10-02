@@ -68,9 +68,12 @@ export const invitationPreviewResponse = z.object({
   hasAccount: z.boolean(),
 });
 
+/* passwordless-access D9: the invitee without an account gives a name and
+   nothing else — no password exists. 2–80 once trimmed, the registration's
+   rule (data-model.md). A `password` a stale client still sends is
+   stripped by the object, never stored. */
 export const acceptInvitationNewRequest = z.object({
-  name: z.string().trim().min(2).max(120),
-  password: z.string().min(8),
+  name: z.string().trim().min(2).max(80),
 });
 
 /* bug: invitee-lands-own-business — the invitations addressed to the

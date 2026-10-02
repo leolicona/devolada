@@ -66,14 +66,6 @@ export function useDisplaySettings(): { timezone: string; timeFormat: "12h" | "2
   };
 }
 
-/* Daily login keeps the password (better-auth.spec.md D2);
-   registration and recovery prove the email with a code (D4). */
-
-export const login = (email: string, password: string) =>
-  baPost("/auth/sign-in/email", { email, password });
-
-export const signup = (name: string, email: string, password: string) =>
-  api("/auth/business/signup", { method: "POST", body: JSON.stringify({ name, email, password }) });
 
 export const logout = () => baPost("/auth/sign-out");
 
@@ -138,15 +130,3 @@ export const cancelInvitation = (invitationId: string) =>
   api(`/businesses/invitations/${invitationId}`, { method: "DELETE" });
 export const updateMemberRole = (memberId: string, role: string) =>
   api(`/businesses/members/${memberId}`, { method: "PATCH", body: JSON.stringify({ role }) });
-
-export const sendVerificationCode = (email: string) =>
-  baPost("/auth/email-otp/send-verification-otp", { email, type: "email-verification" });
-
-export const verifyEmailCode = (email: string, otp: string) =>
-  baPost("/auth/email-otp/verify-email", { email, otp });
-
-export const requestPasswordReset = (email: string) =>
-  baPost("/auth/email-otp/request-password-reset", { email });
-
-export const resetPasswordWithCode = (email: string, otp: string, password: string) =>
-  baPost("/auth/email-otp/reset-password", { email, otp, password });

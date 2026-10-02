@@ -223,6 +223,19 @@ export function Shell() {
     void navigate({ to: "/login", search: pathname === "/" ? {} : { next: pathname } });
   }, [bounced, navigate, router]);
 
+  /* passwordless-access D6: a person born through the sign-in door has no
+     name until /welcome asks — a tab closed in between brings them back
+     here nameless. Sent there once, imperatively, for the bounce's reason
+     above, and nothing of the shell paints meanwhile. */
+  const nameless = Boolean(actor) && !actor!.userName.trim();
+  const sentToWelcome = useRef(false);
+  useEffect(() => {
+    if (!nameless || sentToWelcome.current) return;
+    sentToWelcome.current = true;
+    const { pathname } = router.state.location;
+    void navigate({ to: "/welcome", search: { next: pathname }, replace: true });
+  }, [nameless, navigate, router]);
+
   /* cobros-in-links (review of 2026-09-28): the business changing under
      this tab — through its own switcher, or through another tab's that
      this session has just caught up with — is when the tab's Links
@@ -263,6 +276,7 @@ export function Shell() {
   if (error?.code === "NO_ACTIVE_BUSINESS") return <ChooseBusinessScreen reason="choose" />;
   if (error?.code === "MEMBERSHIP_REVOKED") return <ChooseBusinessScreen reason="revoked" />;
   if (error || !actor) return null; /* the effect above is on its way to /login */
+  if (nameless) return null; /* …or to /welcome */
 
   return (
     <div className="min-h-dvh bg-background lg:flex">

@@ -2,26 +2,36 @@ import { Alert, Button, Input, Pending } from "@devolada/ui";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Fingerprint } from "lucide-react";
 import type { InvitationPreviewResponse } from "@devolada/api/businesses-schema";
 import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
+import { passkeysSupported } from "@/lib/auth-client";
 import { AccessLayout } from "../auth/AccessLayout";
+import { CodeStep, OrWithCode } from "../auth/CodeStep";
+import { accessProblem, signInWithKey, TOO_MANY } from "../auth/keys";
 import { ROLE_LABELS } from "../auth/roles";
 import {
   acceptInvitation,
   acceptInvitationAsNewUser,
-  login,
   logout,
+  sendCode,
   setActiveBusiness,
+  signInWithCode,
   useUser,
 } from "../auth/session";
 
 /* The link the invitation email carries (business-and-memberships D8):
    `/invitaciones/:id`. better-auth D14: the page reads the invitation
    first and decides for the invitee — the address is the invitation's,
-   never typed; the only question left is a password: a new one when the
-   address has no account here, the existing one otherwise. Signed in
-   with the invited address, it just accepts; with another, it says so. */
+   shown as text, never typed. Signed in with the invited address, it just
+   accepts; with another, it says so.
+   passwordless-access D9: no password in any state (FR-020). An address
+   with an account comes in with its key, where the browser supports one,
+   or with a código sent to the invited address (FR-017); a new person
+   gives a name, and the invitation that reached their inbox is the proof
+   (FR-019). A código and a birth both go through /welcome, which offers
+   the key (FR-006). */
 export function AcceptInvitationScreen() {
   const { invitationId } = useParams({ strict: false }) as { invitationId: string };
   const here = `/invitaciones/${invitationId}`;
@@ -35,9 +45,12 @@ export function AcceptInvitationScreen() {
   const queryClient = useQueryClient();
   const [state, setState] = useState<"idle" | "accepting" | "failed">("idle");
   const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /* the código door: closed, asking, or the código step open */
+  const [codeStep, setCodeStep] = useState<"closed" | "sending" | "open">("closed");
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [keyFailed, setKeyFailed] = useState(false);
 
   const inv = preview.data;
   const sameEmail =
@@ -62,21 +75,40 @@ export function AcceptInvitationScreen() {
     void navigate({ to: "/login", search: { next: here } });
   }
 
-  async function join(action: () => Promise<unknown>, fallback: string) {
+  const invitationGone = "La invitación ya no es válida. Pide una nueva a quien te invitó.";
+
+  /* passwordless-access D9: a new person's birth, then /welcome (FR-019) */
+  async function joinAsNew() {
     setBusy(true);
     setError(null);
     try {
-      await action();
+      await acceptInvitationAsNewUser(invitationId, { name: name.trim() });
       queryClient.clear();
-      void navigate({ to: "/" });
+      void navigate({ to: "/welcome", search: { next: "/" } });
     } catch (e) {
       setError(
         e instanceof ApiError && e.code === "INVITATION_NOT_FOUND"
-          ? "La invitación ya no es válida. Pide una nueva a quien te invitó."
-          : fallback,
+          ? invitationGone
+          : accessProblem(e) === "tooMany"
+            ? TOO_MANY
+            : "No pudimos crear tu cuenta. Intenta de nuevo.",
       );
     } finally {
       setBusy(false);
+    }
+  }
+
+  /* passwordless-access D9: the código goes to the invited address, which
+     the person never types (better-auth D14) */
+  async function askCode() {
+    setCodeStep("sending");
+    setError(null);
+    try {
+      await sendCode(inv!.email!);
+      setCodeStep("open");
+    } catch (e) {
+      setCodeStep("closed");
+      setError(accessProblem(e) === "tooMany" ? TOO_MANY : "No pudimos enviar el código. Intenta de nuevo.");
     }
   }
 
@@ -162,91 +194,121 @@ export function AcceptInvitationScreen() {
     );
   }
 
-  const description = inv.hasAccount
-    ? `Como ${roleLabel}. Entra con tu contraseña.`
-    : `Como ${roleLabel}. Crea tu contraseña para entrar.`;
+  const description = roleLabel ? `Como ${roleLabel}.` : undefined;
 
-  return (
-    <AccessLayout title={title} description={description}>
-      <form
-        className="space-y-4"
-        noValidate
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (busy) return;
-          if (inv.hasAccount) {
-            void join(async () => {
-              await login(inv.email!, password);
-              const { organizationId } = await acceptInvitation(invitationId);
-              await setActiveBusiness(organizationId).catch(() => {});
-            }, "Correo o contraseña incorrectos");
-          } else {
-            if (name.trim().length < 2 || password.length < 8) {
-              setError("Escribe tu nombre y una contraseña de al menos 8 caracteres.");
+  /* The invitation's address, never typed (D14) — shown as text, not as a
+     field that looks editable (design review identidad-2) */
+  const address = (
+    <p className="text-sm">
+      <span className="text-muted-foreground">Correo:</span> <span className="font-medium">{inv.email}</span>
+    </p>
+  );
+
+  if (!inv.hasAccount) {
+    const nameShort = name.trim().length < 2;
+    return (
+      <AccessLayout title={title} description={description}>
+        <form
+          className="space-y-4"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (busy) return;
+            if (nameShort) {
+              setError("Escribe tu nombre, al menos 2 letras.");
               return;
             }
-            void join(
-              () => acceptInvitationAsNewUser(invitationId, { name: name.trim(), password }),
-              "No pudimos crear tu cuenta. Intenta de nuevo.",
-            );
-          }
-        }}
-      >
-        {/* The invitation's address, never typed (D14) — shown as text, not
-            as a field that looks editable (design review identidad-2) */}
-        <p className="text-sm">
-          <span className="text-muted-foreground">Correo:</span>{" "}
-          <span className="font-medium">{inv.email}</span>
-        </p>
-        {!inv.hasAccount && (
+            void joinAsNew();
+          }}
+        >
+          {address}
           <div>
             <Label htmlFor="name">Tu nombre</Label>
-            <Input size="compact" id="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input id="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
+          {error && <Alert variant="destructive">{error}</Alert>}
+          <Pending active={busy} label="Creando tu cuenta.">
+            <Button type="submit" size="standard" className="w-full" disabled={busy}>
+              {busy ? "Creando…" : "Crear cuenta y entrar"}
+            </Button>
+          </Pending>
+        </form>
+      </AccessLayout>
+    );
+  }
+
+  const withKey = passkeysSupported();
+  return (
+    <AccessLayout title={title} description={description}>
+      <div className="space-y-4">
+        {address}
+        {withKey && (
+          <>
+            <Pending active={keyBusy} label="Esperando a tu dispositivo.">
+              <Button
+                type="button"
+                size="standard"
+                className="w-full"
+                disabled={keyBusy}
+                /* D7: the device's window opens inside this click. The
+                   session it opens meets the page's own logic above: the
+                   invited address accepts on sight, another address gets the
+                   "otro correo" state with its switch (FR-018). */
+                onClick={async () => {
+                  setKeyBusy(true);
+                  setKeyFailed(false);
+                  const opened = await signInWithKey();
+                  setKeyBusy(false);
+                  if (!opened) {
+                    setKeyFailed(true);
+                    return;
+                  }
+                  void queryClient.invalidateQueries({ queryKey: ["user"] });
+                }}
+              >
+                <Fingerprint className="size-5" aria-hidden />
+                {keyBusy ? "Esperando a tu dispositivo…" : "Entrar con huella o rostro"}
+              </Button>
+            </Pending>
+            {keyFailed && <Alert variant="destructive">No pudimos usar tu huella o rostro. Entra con un código.</Alert>}
+            <OrWithCode />
+          </>
         )}
-        <div>
-          <Label htmlFor="password">{inv.hasAccount ? "Contraseña" : "Crea tu contraseña"}</Label>
-          <Input size="compact"
-            id="password"
-            type="password"
-            autoComplete={inv.hasAccount ? "current-password" : "new-password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            aria-describedby={inv.hasAccount ? undefined : "password-hint"}
+        {codeStep === "open" ? (
+          <CodeStep
+            purpose="enter"
+            onSubmit={async (otp) => {
+              await signInWithCode(inv.email!, otp);
+              /* The session is open; the invitation is accepted here, not by
+                 the effect above, so it happens once */
+              try {
+                const { organizationId } = await acceptInvitation(invitationId);
+                await setActiveBusiness(organizationId).catch(() => {});
+              } catch {
+                setError(invitationGone);
+                return;
+              }
+              queryClient.clear();
+              void navigate({ to: "/welcome", search: { next: "/" } });
+            }}
+            onResend={() => sendCode(inv.email!)}
           />
-          {!inv.hasAccount && (
-            <p id="password-hint" className="mt-1 text-sm text-muted-foreground">
-              Al menos 8 caracteres.
-            </p>
-          )}
-        </div>
-        {error && <Alert variant="destructive">{error}</Alert>}
-        {/* feedback-vocabulary-rollout D1/D4. A wait driven by a local `busy` flag
-            is still a wait the operator is having — the earlier sweeps keyed on
-            `isPending` and could not see these (converge F1/F2). */}
-        <Pending active={busy} label="Entrando al negocio.">
-          <Button type="submit" size="standard" className="w-full" disabled={busy}>
-            {busy ? "Entrando…" : inv.hasAccount ? "Entrar" : "Crear cuenta y entrar"}
-          </Button>
-        </Pending>
-        {inv.hasAccount && (
-          <p className="text-center text-sm">
-            {/* bug: invitee-lands-own-business — the recovery brings the
-                person back here, with the invited address already filled in.
-                Without `next` it landed them in their own business, and the
-                invitation was never accepted (measured 2026-10-01 on
-                production: a recovery code an hour after the invitation, the
-                invitation expired pending). */}
-            <Link
-              to="/recover"
-              search={{ next: here, email: inv.email ?? undefined }}
-              className="text-link hover:underline"
+        ) : (
+          <Pending active={codeStep === "sending"} label="Enviando el código.">
+            <Button
+              type="button"
+              size="standard"
+              variant={withKey ? "secondary" : "primary"}
+              className="w-full"
+              disabled={codeStep === "sending"}
+              onClick={() => void askCode()}
             >
-              Olvidé mi contraseña
-            </Link>
-          </p>
+              {codeStep === "sending" ? "Enviando…" : "Enviarme un código"}
+            </Button>
+          </Pending>
         )}
-      </form>
+        {error && <Alert variant="destructive">{error}</Alert>}
+      </div>
     </AccessLayout>
   );
 }

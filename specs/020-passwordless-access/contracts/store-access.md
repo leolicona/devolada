@@ -105,7 +105,11 @@ Rate-limited 5 per 60 s per address (D3).
   store, so the answer cannot tell them apart (FR-033). `OTP_EXPIRED` and
   `TOO_MANY_ATTEMPTS` exist only for an address that holds a código, so
   this route never carries them (adversarial review, 2026-10-02). The
-  store app reads all three alike anyway.
+  store app reads all three alike anyway. **As fast, too**: a phone no
+  store names still runs the plugin's código check, against an address
+  nobody could predict (so it can never create an account), and every
+  refusal answers no sooner than a fixed floor after the request began, so
+  timing cannot tell the phones apart either.
 - **403** `STORE_SUSPENDED`: a suspended store, as `requireStore` answers
   today. No session is kept.
 - **429**.
@@ -153,7 +157,9 @@ today's "Demasiados intentos. Espera un momento.".
 
 **Step 1, "Bienvenido a Devolada, {tienda}":**
 - "Entrarás con tu huella o rostro, o con un código que te enviamos a tu
-  correo."
+  correo." Without passkey support: "Entrarás con un código que te enviamos
+  a tu correo." — no screen names the fingerprint or face on a device that
+  cannot use them (FR-015; adversarial review, 2026-10-02).
 - "Tu correo" and "Continuar".
 - Bad invitations read the same as today: "Esta invitación ya no funciona".
 

@@ -355,9 +355,10 @@ the activation offered on a device that can verify the person.
 6. **Given** a key activated before this feature (US-S07), **Then** it keeps
    working.
 7. **Given** a person who used to sign in with a password, **When** they open
-   the sign-in screen, **Then** one line tells them passwords are no longer
-   used, next to the key and the código (FR-029); their old password opens
-   nothing.
+   the sign-in screen, **Then** they see the key and the código and no
+   password field; no line announces the change (Clarifications, Q4); their
+   old password opens nothing (FR-029). *(Rewritten 2026-10-02: this scenario
+   still asked for the announcement Q4 had removed.)*
 
 ---
 

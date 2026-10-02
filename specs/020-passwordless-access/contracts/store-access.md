@@ -164,7 +164,7 @@ today's "Demasiados intentos. Espera un momento.".
 ### `/entrar`
 
 **Step 1, "Entrar":**
-- "Ya no usamos contraseñas: entra con tu huella o rostro, o con un código."
+- No line about passwords (spec Clarifications, Q4).
 - "Entrar con huella o rostro" (where supported), the primary button, then
   the separator "o con un código". Without the key, "Enviar código" is the
   primary.

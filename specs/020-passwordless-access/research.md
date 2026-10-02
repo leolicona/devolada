@@ -255,8 +255,8 @@ typed) are kept: they get in by phone (D10).
 - **`/login`** has two steps on one screen:
   1. "Entrar con huella o rostro" first, wherever the browser supports
      passkeys (`passkeysSupported`, today's check), then the email and
-     "Enviar código". The line "Ya no usamos contraseñas…" sits above
-     (FR-029).
+     "Enviar código". No line announces that passwords are gone (spec
+     Clarifications, Q4).
   2. The código, with "Reenviar código" and "Usar otro correo".
   The address stays in the component, never in the URL.
 - **`/signup`** has the same two steps, with the name and email in step 1.
@@ -533,13 +533,13 @@ in. Waiting labels sit inside `<Pending>` (`pending-lint`). The two
   their doors (PR 2).
 - **Screens** use the access pages' existing vocabulary: *código*, *huella o
   rostro*, "Reenviar código", "Usar otro correo". New lines:
-  - "Ya no usamos contraseñas: entra con tu huella o rostro, o con un
-    código." (sign-in screens);
   - "Ahora no";
   - "Cerrar sesión en los demás dispositivos";
   - "Confirma que eres tú: te enviamos un código a …" (step-up);
   - "Este dispositivo ya tiene tu huella o rostro."
-  Never "OTP", "token", "enlace" or "passkey" in copy.
+  Never "OTP", "token", "enlace" or "passkey" in copy, and no line that
+  announces the passwords' departure: the screens read as if the flow had
+  always been this way (spec Clarifications, Q4).
 - **The registration screen names no business type** (constitution IX): its
   description changes from "Tu ISP, cobrando por transferencia…" to the
   login's "Cobra por transferencia con validación automática." (FR-030).

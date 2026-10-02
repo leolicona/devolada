@@ -337,7 +337,7 @@ erased every panel password.
   The orphan-keeps-its-password case becomes: an adopted orphan is verified and holds no password.
 - [ ] T032 [P] [US2] Component tests in `apps/admin/test/sign-in.test.tsx`, citing `passwordless-access US2`, with MSW and axe, against `contracts/panel-access.md` § `/login`:
   - **step 1**:
-    - the line "Ya no usamos contraseñas: entra con tu huella o rostro, o con un código.";
+    - no line about passwords: nothing on the screen matches `/contraseña/i` (spec Clarifications, Q4);
     - "Entrar con huella o rostro" only where `PublicKeyCredential` exists;
     - a failed key shows "No pudimos usar tu huella o rostro. Entra con un código.";
     - "Crear cuenta" keeps `next`;
@@ -366,9 +366,8 @@ erased every panel password.
   In `apps/api/src/index.ts`, `scheduled` gains its own `ctx.waitUntil` lane that logs `credential erase:` only when either count is above zero. Comments cite D5: a sweep and not a migration, and the guarantee it keeps.
 - [ ] T036 [P] [US2] `LoginPage` in two steps in `apps/admin/src/features/auth/pages.tsx` (research D6), per `contracts/panel-access.md` § `/login`:
   - **step 1**:
-    - the "Ya no usamos contraseñas…" line;
     - "Entrar con huella o rostro" first, `passkeysSupported()` only (`authClient.signIn.passkey()`, then `next`);
-    - the separator "o con un código", then email and "Enviar código";
+    - the separator "o con un código" where the key shows, then email and "Enviar código";
   - **step 2**: `CodeInput`, "Entrar", the resend and "Usar otro correo". Success goes to `/welcome?next=…`;
   - **a 429** on either step shows "Demasiados intentos. Espera un momento e intenta de nuevo." (FR-027);
   - **removals**:
@@ -619,7 +618,7 @@ refused by the store app.
 - [ ] T060 [P] [US6] In `apps/api/test/cash-at-stores-operator.test.ts`, the acceptance on a replaced token sends `{ email, otp }` and still answers `INVALID_INVITATION`.
 - [ ] T061 [P] [US6] Component tests in `apps/red/test/access.test.tsx`, citing `passwordless-access US6`, with handlers in `apps/red/test/msw.ts` for the four store routes and Better Auth's step-up endpoints. The password handlers (`signIn`, `resetPassword`, `verifyEmail`) leave. Mock `@/lib/auth-client`. Against `contracts/store-access.md` § UI:
   - **`/entrar`**:
-    - "Ya no usamos contraseñas…";
+    - no line about passwords: nothing on the screen matches `/contraseña/i` (spec Clarifications, Q4);
     - the key button where supported;
     - the phone normalised to ten digits;
     - a failed key shows "No se pudo usar tu huella o rostro. Entra con un código." (analysis A4);
@@ -684,7 +683,7 @@ refused by the store app.
 
   In step 2, "Reenviar código" confirms with "Código reenviado", as the panel's (the design canvas). A 429 on either step shows "Demasiados intentos. Espera un momento e intenta de nuevo." (FR-027).
 - [ ] T071 [US6] `apps/red/src/features/auth/LoginScreen.tsx` (research D10), per `contracts/store-access.md` § `/entrar`:
-  - **step 1**: the line, the key button and its failure line "No se pudo usar tu huella o rostro. Entra con un código." (analysis A4), the separator "o con un código", the phone through `nationalPhone`, and "Enviar código";
+  - **step 1**: the key button and its failure line "No se pudo usar tu huella o rostro. Entra con un código." (analysis A4), the separator "o con un código", the phone through `nationalPhone`, and "Enviar código";
   - **step 2**: the same-for-every-phone line, `CodeInput`, the resend (it confirms with "Código reenviado"), and "Usar otro teléfono";
   - **a 429** on either step shows "Demasiados intentos. Espera un momento e intenta de nuevo." (FR-027), in place of today's "Demasiados intentos. Espera un momento.";
   - **step 3**: the activation, then `/`.
@@ -708,7 +707,7 @@ and their tests pass.
 
 - [ ] T074 [P] The browser layer for the store app, in `tests/e2e/stubs.ts`, `tests/e2e/contrast.spec.ts` and `tests/e2e/responsive.spec.ts`:
   - `tests/e2e/stubs.ts` stubs the four store routes;
-  - `tests/e2e/contrast.spec.ts` and `tests/e2e/responsive.spec.ts` wait on `/entrar` for "Ya no usamos contraseñas" instead of "Olvidé mi contraseña";
+  - `tests/e2e/contrast.spec.ts` and `tests/e2e/responsive.spec.ts` wait on `/entrar` for "Enviar código" instead of "Olvidé mi contraseña";
   - both suites add the código step, the invitation's three steps and Caja's card, in both themes, at 360/768/1280 and the 1024 px layout (cash-at-stores D32).
 - [ ] T075 [P] `CLAUDE.md`: the store app's line says no account holds a password, and the shopkeeper's código is asked by phone.
 - [ ] T076 The gate before PR 2 merges, following `specs/020-passwordless-access/quickstart.md`:

@@ -173,8 +173,8 @@ intentos. Espera un momento e intenta de nuevo." (FR-027).
 
 **Step 1, "Iniciar sesión":**
 - Description: "Cobra por transferencia con validación automática."
-- One line above the form: "Ya no usamos contraseñas: entra con tu huella o
-  rostro, o con un código." (FR-029)
+- No line about passwords: the screen reads as if it had always been this
+  way (spec Clarifications, Q4).
 - "Entrar con huella o rostro", the primary button, shown only where
   `passkeysSupported()` (D7).
 - Where the key shows, the separator "o con un código" follows it, and

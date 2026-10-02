@@ -256,6 +256,15 @@ same doors; and the `/v1` API keys.
   shopkeeper waits for an email with customers in front of them. Rejected:
   no change (phone and password stay); keeping the password and offering the
   key from the invitation onwards.
+- Q4. Q (asked by the creator after the design): should the screens say that
+  passwords are gone? → A: No. "No veo la necesidad de comunicar en la UI
+  que ya no usamos contraseña": the screens read as if the flow had always
+  been this way. Production holds one business, the pilot, and it is told
+  of changes directly. Rejected: one line on each sign-in screen ("Ya no
+  usamos contraseñas: entra con tu huella o rostro, o con un código."),
+  which speaks to a change only the pilot lives through, which every later
+  visitor would read past, and which named the fingerprint or face on a
+  device that cannot use them (FR-015).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -564,8 +573,9 @@ member's account is still refused by the store app.
 - **A store's account on the panel** is refused with its own screen, as
   today (cash-at-stores D2), whatever the door it came through.
 - **An account that has a password today** loses it at its app's release
-  and enters with its key or a código (FR-029). The sign-in screen says so
-  in one line, so nobody goes looking for the password field.
+  and enters with its key or a código (FR-029). No screen announces it: the
+  screens read as if the flow had always been this way, and the pilot is
+  told directly (Clarifications, Q4).
 - **A panel account whose email was never proven** (a registration that
   stopped before its código, from before the release) never held a session
   or a business. After the release it is not an account: registering with
@@ -710,9 +720,9 @@ member's account is still refused by the store app.
   release of each app's doors without a password, the password stops
   working and is erased. The person enters with their key (one activated
   before keeps working) or a código. No app loses its passwords before its
-  own doors without a password work. Each sign-in screen says so in one
-  line, for example: "Ya no usamos contraseñas: entra con tu huella o
-  rostro, o con un código."
+  own doors without a password work. No screen announces the change: the
+  screens read as if the flow had always been this way, and the pilot is
+  told directly (Clarifications, Q4).
 - **FR-030**: The panel's copy MUST stop promising a password: the passkey
   card ("Tu contraseña sigue funcionando…") and Cuenta's identity card
   ("Para cambiar tu nombre o tu contraseña…"). The rebuilt registration

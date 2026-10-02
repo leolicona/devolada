@@ -99,7 +99,10 @@ pnpm exec playwright test --config playwright.review.config.ts   # design-review
 ```
 
 Local seed: with the API up, `curl -X POST localhost:8787/dev/seed` creates a
-demo ISP (`demo@devolada.app` / `devolada123`). `/dev/*` 404s unless
+demo ISP (`demo@devolada.app`), with no password: the panel signs in with a
+código, which prints in the API's console without `RESEND_API_KEY`, or comes
+from `POST /dev/code {email, type: "sign-in"}` — only for `.invalid` and the
+demo's addresses (passwordless-access D14, D16). `/dev/*` 404s unless
 `ENVIRONMENT=dev`. Secrets go in per-app `.dev.vars` (git-ignored, including
 suffixed copies). The API's optional secrets, each degrading when unset
 (constitution VIII; the authoritative comments live in `apps/api/src/env.ts`):

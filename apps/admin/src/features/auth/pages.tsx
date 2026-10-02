@@ -154,8 +154,9 @@ export function LoginPage() {
             </Button>
           </Pending>
         </form>
+        {/* 48 px, like every control on the access pages (contracts/panel-access.md) */}
         <p className="text-center text-sm">
-          <Link to="/signup" search={{ next }} className="text-link hover:underline">
+          <Link to="/signup" search={{ next }} className="inline-flex min-h-12 items-center text-link hover:underline">
             Crear cuenta
           </Link>
         </p>
@@ -248,7 +249,7 @@ export function SignupPage() {
           </Button>
         </Pending>
         <p className="text-center text-sm">
-          <Link to="/login" search={{ next }} className="text-link hover:underline">
+          <Link to="/login" search={{ next }} className="inline-flex min-h-12 items-center text-link hover:underline">
             Ya tengo cuenta
           </Link>
         </p>

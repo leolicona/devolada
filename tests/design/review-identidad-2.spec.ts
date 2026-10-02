@@ -9,7 +9,10 @@ import { businessActor, feed, stubAdminApi } from "../e2e/stubs";
    D5), the invitation page in its five states (D14), the shell's two
    banners (D5, integrations-hub D10), the share gate on Links, the team
    card with pending invitations and role pickers (D8, D12), the passkey
-   list (D18) and the Sesión card (BUG-016). Run just this file:
+   list (D18) and the Sesión card (BUG-016).
+   passwordless-access T052: the código screen of its own, the recovery and
+   the password field left; the código is a step of /login and /signup now,
+   and a wrong one is named there. Run just this file:
    pnpm exec playwright test --config playwright.review.config.ts tests/design/review-identidad-2.spec.ts */
 
 const OUT = ".design/devolada/screenshots";
@@ -97,36 +100,38 @@ const shots: Shot[] = [
     act: async (page) => {
       await page.getByLabel("Tu nombre").fill("L");
       await page.getByLabel("Correo").fill("leo");
-      await page.getByLabel("Contraseña").fill("corta");
-      await page.getByRole("button", { name: /crear cuenta/i }).click();
-      await expect(page.getByText(/al menos 8 caracteres/i)).toBeVisible();
+      await page.getByRole("button", { name: "Continuar" }).click();
+      await expect(page.getByText(/escribe un correo válido/i)).toBeVisible();
     },
   },
-  { slug: "verify-email", path: "/verify-email?email=leo%40wifiplus.mx", widths: [1280, 768, 375], ready: heading("Confirma tu correo") },
   {
-    slug: "verify-email-error",
-    path: "/verify-email?email=leo%40wifiplus.mx",
-    widths: [1280, 375],
-    arrange: (page) => raw(page, "**/auth/email-otp/verify-email", 400, { code: "INVALID_OTP" }),
-    ready: heading("Confirma tu correo"),
-    act: async (page) => {
-      await page.getByRole("button", { name: /reenviar código/i }).click();
-      await page.getByLabel("Código").fill("000000");
-      await page.getByRole("button", { name: /^confirmar$/i }).click();
-      await expect(page.getByText(/no es válido o ya venció/i)).toBeVisible();
-    },
-  },
-  { slug: "verify-email-typed", path: "/verify-email", widths: [375], ready: heading("Confirma tu correo") },
-  {
-    slug: "recover-code",
-    path: "/recover",
-    widths: [1280, 375],
-    arrange: (page) => raw(page, "**/auth/email-otp/request-password-reset", 200, {}),
-    ready: heading("Recuperar contraseña"),
+    slug: "code-step",
+    path: "/login?next=%2Flinks",
+    widths: [1280, 768, 375],
+    arrange: (page) => raw(page, "**/auth/email-otp/send-verification-otp", 200, { success: true }),
+    ready: heading("Iniciar sesión"),
     act: async (page) => {
       await page.getByLabel("Correo").fill("leo@wifiplus.mx");
-      await page.getByRole("button", { name: /enviar código/i }).click();
-      await expect(page.getByText(/si existe una cuenta/i)).toBeVisible();
+      await page.getByRole("button", { name: "Enviar código" }).click();
+      await expect(page.getByRole("heading", { name: "Escribe tu código" })).toBeVisible();
+    },
+  },
+  {
+    slug: "code-step-error",
+    path: "/login",
+    widths: [1280, 375],
+    arrange: async (page) => {
+      await raw(page, "**/auth/email-otp/send-verification-otp", 200, { success: true });
+      await raw(page, "**/auth/sign-in/email-otp", 400, { code: "INVALID_OTP" });
+    },
+    ready: heading("Iniciar sesión"),
+    act: async (page) => {
+      await page.getByLabel("Correo").fill("leo@wifiplus.mx");
+      await page.getByRole("button", { name: "Enviar código" }).click();
+      await page.getByRole("button", { name: /reenviar código/i }).click();
+      await page.getByLabel("Código").fill("000000");
+      await page.getByRole("button", { name: "Entrar", exact: true }).click();
+      await expect(page.getByText(/no es válido o ya venció/i)).toBeVisible();
     },
   },
   {

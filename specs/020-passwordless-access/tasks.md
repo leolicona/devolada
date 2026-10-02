@@ -553,7 +553,7 @@ Remove a key: the código still works.
 **Purpose**: what spans the panel's stories, and what PR 1 needs before it
 merges.
 
-- [ ] T051 [P] The browser layer for the panel, in `tests/e2e/stubs.ts`, `tests/e2e/contrast.spec.ts` and `tests/e2e/responsive.spec.ts` (constitution IV):
+- [X] T051 [P] The browser layer for the panel, in `tests/e2e/stubs.ts`, `tests/e2e/contrast.spec.ts` and `tests/e2e/responsive.spec.ts` (constitution IV):
   - **Stubs**: `tests/e2e/stubs.ts` stubs Better Auth's access endpoints (`send-verification-otp`, `sign-in/email-otp`, `get-session`, `passkey/list-user-passkeys`) and the invitation preview. Fixtures go through our schemas where the route is ours.
   - **Suites**: `tests/e2e/contrast.spec.ts` and `tests/e2e/responsive.spec.ts` add, in both themes, at 360/768/1280, with touch targets measured:
     - `/login` and `/signup`, both steps;
@@ -561,9 +561,9 @@ merges.
     - the invitation page's states;
     - Seguridad's card;
     - `/login` and `/signup` without passkey support (an init script deletes `PublicKeyCredential`, US3).
-- [ ] T052 [P] The design captures in `tests/design/review-identity.spec.ts` and `tests/design/review-identidad-2.spec.ts` follow the panel's new screens: the password screens and the `sign-in/email` 401 stub leave.
+- [X] T052 [P] The design captures in `tests/design/review-identity.spec.ts` and `tests/design/review-identidad-2.spec.ts` follow the panel's new screens: the password screens and the `sign-in/email` 401 stub leave.
 - [X] T053 [P] Remove the password handlers from `apps/admin/test/msw.ts` (`login`, `signup`, `verifyEmail`, the email-verification `sendCode`, `requestReset`, `resetPassword`) once no test imports them (after T018, T032, T042, T043).
-- [ ] T054 [P] `CLAUDE.md`: the "Local seed" line drops `devolada123`. The demo signs in with a código, which prints in the API's console without `RESEND_API_KEY` or comes from `POST /dev/code` (research D16).
+- [X] T054 [P] `CLAUDE.md`: the "Local seed" line drops `devolada123`. The demo signs in with a código, which prints in the API's console without `RESEND_API_KEY` or comes from `POST /dev/code` (research D16).
 - [ ] T055 The gate before PR 1 merges, following `specs/020-passwordless-access/quickstart.md`:
   1. amendment 1 is applied (T003);
   2. run quickstart §1 in order (`spec-lint`, `gen-banks --check`, `contrast-lint`, `pending-lint`, typecheck, the four test suites, `pnpm e2e`, `pnpm e2e:passkey`);

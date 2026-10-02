@@ -3,9 +3,13 @@ import { ADMIN } from "../../playwright.config";
 import { businessActor, feed, stubAdminApi } from "../e2e/stubs";
 
 /* Design-review captures for the identity journey (US-S04, US-S06,
-   US-B01–B03): login, signup, recovery, the wizard, the invitation page in
-   its three states, the session screens the shell answers with
-   (suspended, choose, revoked) and the team card. Run just this file:
+   US-B01–B03): login, signup, the wizard, the invitation page in its three
+   states, the session screens the shell answers with (suspended, choose,
+   revoked) and the team card.
+   passwordless-access T052: the password screens left — the recovery, the
+   código screen of its own, the password error — and the doors without a
+   password came in: the código step, /welcome's two questions and
+   Seguridad's keys card. Run just this file:
    pnpm exec playwright test --config playwright.review.config.ts tests/design/review-identity.spec.ts */
 
 const OUT = ".design/devolada/screenshots";
@@ -74,16 +78,32 @@ const heading = (name: string | RegExp) => async (page: Page) =>
 const shots: Shot[] = [
   { slug: "login", path: "/login", widths: [1280, 375], ready: heading("Iniciar sesión") },
   {
-    slug: "login-error",
+    slug: "login-code",
     path: "/login",
-    widths: [1280],
-    arrange: (page) => raw(page, "**/auth/sign-in/email", 401, { code: "INVALID_EMAIL_OR_PASSWORD" }),
+    widths: [1280, 375],
+    arrange: (page) => raw(page, "**/auth/email-otp/send-verification-otp", 200, { success: true }),
     ready: heading("Iniciar sesión"),
     act: async (page) => {
       await page.getByLabel("Correo").fill("leo@wifiplus.mx");
-      await page.getByLabel("Contraseña").fill("no-es");
-      await page.getByRole("button", { name: /^entrar$/i }).click();
-      await expect(page.getByText(/correo o contraseña incorrectos/i)).toBeVisible();
+      await page.getByRole("button", { name: "Enviar código" }).click();
+      await expect(page.getByRole("heading", { name: "Escribe tu código" })).toBeVisible();
+    },
+  },
+  {
+    slug: "login-code-error",
+    path: "/login",
+    widths: [1280],
+    arrange: async (page) => {
+      await raw(page, "**/auth/email-otp/send-verification-otp", 200, { success: true });
+      await raw(page, "**/auth/sign-in/email-otp", 400, { code: "INVALID_OTP" });
+    },
+    ready: heading("Iniciar sesión"),
+    act: async (page) => {
+      await page.getByLabel("Correo").fill("leo@wifiplus.mx");
+      await page.getByRole("button", { name: "Enviar código" }).click();
+      await page.getByLabel("Código").fill("000000");
+      await page.getByRole("button", { name: "Entrar", exact: true }).click();
+      await expect(page.getByText(/el código no es válido o ya venció/i)).toBeVisible();
     },
   },
   { slug: "signup", path: "/signup", widths: [1280, 375], ready: heading("Crear cuenta") },
@@ -95,23 +115,43 @@ const shots: Shot[] = [
     act: async (page) => {
       await page.getByLabel("Tu nombre").fill("L");
       await page.getByLabel("Correo").fill("leo");
-      await page.getByLabel("Contraseña").fill("corta");
-      await page.getByRole("button", { name: /crear cuenta/i }).click();
-      await expect(page.getByText(/al menos 8 caracteres/i)).toBeVisible();
+      await page.getByRole("button", { name: "Continuar" }).click();
+      await expect(page.getByText(/escribe un correo válido/i)).toBeVisible();
     },
   },
-  { slug: "recover-email", path: "/recover", widths: [1280, 375], ready: heading("Recuperar contraseña") },
   {
-    slug: "recover-code",
-    path: "/recover",
+    slug: "signup-code",
+    path: "/signup",
     widths: [1280, 375],
-    arrange: (page) => raw(page, "**/auth/email-otp/request-password-reset", 200, {}),
-    ready: heading("Recuperar contraseña"),
+    arrange: (page) => raw(page, "**/auth/email-otp/send-verification-otp", 200, { success: true }),
+    ready: heading("Crear cuenta"),
     act: async (page) => {
+      await page.getByLabel("Tu nombre").fill("Leo Licona");
       await page.getByLabel("Correo").fill("leo@wifiplus.mx");
-      await page.getByRole("button", { name: /enviar código/i }).click();
-      await expect(page.getByText(/si existe una cuenta/i)).toBeVisible();
+      await page.getByRole("button", { name: "Continuar" }).click();
+      await expect(page.getByRole("heading", { name: "Escribe tu código" })).toBeVisible();
     },
+  },
+  {
+    slug: "welcome-name",
+    path: "/welcome?next=/",
+    widths: [1280, 375],
+    arrange: (page) => signedIn(page, { ...sessionUser, name: "", emailVerified: true }),
+    ready: heading("¿Cómo te llamas?"),
+  },
+  {
+    slug: "welcome-offer",
+    path: "/welcome?next=/",
+    widths: [1280, 375],
+    arrange: async (page) => {
+      await signedIn(page, { ...sessionUser, emailVerified: true });
+      /* a device that can verify the person (passwordless-access D7) */
+      await page.addInitScript(() => {
+        const w = window as unknown as { PublicKeyCredential?: { isUserVerifyingPlatformAuthenticatorAvailable?: () => Promise<boolean> } };
+        if (w.PublicKeyCredential) w.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable = async () => true;
+      });
+    },
+    ready: heading("Entra la próxima vez con tu huella o rostro"),
   },
   {
     slug: "wizard-1",
@@ -217,11 +257,17 @@ const shots: Shot[] = [
     ready: (page) => expect(page.getByText("Red Norte Internet")).toBeVisible({ timeout: 15_000 }),
   },
   {
-    /* better-auth D16: the código screen between the account and its session */
-    slug: "verify-email",
-    path: "/verify-email?email=leo%40wifiplus.mx",
+    slug: "security",
+    path: "/settings/security",
     widths: [1280, 375],
-    ready: heading("Confirma tu correo"),
+    arrange: async (page) => {
+      await signedIn(page, { ...sessionUser, emailVerified: true });
+      await raw(page, "**/auth/passkey/list-user-passkeys", 200, [
+        { id: "pk-1", name: "iPhone de Leo", createdAt: "2026-09-20T10:00:00.000Z", backedUp: true, deviceType: "multiDevice" },
+        { id: "pk-2", name: null, createdAt: "2026-10-01T10:00:00.000Z", backedUp: false, deviceType: "singleDevice" },
+      ]);
+    },
+    ready: (page) => expect(page.getByText("Cerrar sesión en los demás dispositivos")).toBeVisible({ timeout: 15_000 }),
   },
   {
     slug: "team",

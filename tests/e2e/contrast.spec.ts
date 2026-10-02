@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { ADMIN, PAGO, RED } from "../../playwright.config";
 import {
+  accessScreens,
   stubAdminApi,
   stubAdminStoreApi,
   stubCashPointsApi,
@@ -285,6 +286,31 @@ for (const theme of ["light", "dark"] as const) {
             } else a.finish();
           }
         });
+
+        const results = await new AxeBuilder({ page }).withRules(["color-contrast", "target-size"]).analyze();
+        const readable = results.violations.map(
+          (v) => `${v.id}: ${v.nodes.map((n) => n.failureSummary?.split("\n").slice(-1)[0]).join(" | ")}`,
+        );
+        expect(readable, `${screen.name} in ${theme}`).toEqual([]);
+      });
+    }
+  });
+}
+
+/* passwordless-access T051 (constitution IV): the access screens — both
+   steps of /login and /signup, /welcome's two questions, the invitation's
+   three states and Seguridad's keys card — measured where their colours
+   actually land, in both themes. The devices without passkey support are
+   among them (US3). */
+for (const theme of ["light", "dark"] as const) {
+  test.describe(`passwordless-access: real contrast in ${theme}`, () => {
+    for (const screen of accessScreens(ADMIN)) {
+      test(`${screen.name} has no contrast violations`, async ({ page }) => {
+        await page.emulateMedia({ colorScheme: theme });
+        await screen.stub(page);
+        await page.goto(screen.url);
+        if (screen.open) await screen.open(page);
+        await expect(page.getByText(screen.ready, { exact: true }).first()).toBeVisible();
 
         const results = await new AxeBuilder({ page }).withRules(["color-contrast", "target-size"]).analyze();
         const readable = results.violations.map(

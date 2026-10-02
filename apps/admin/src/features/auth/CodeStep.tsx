@@ -78,12 +78,12 @@ export function CodeStep({
       </Pending>
       <div className="flex flex-wrap items-center justify-between gap-x-3 text-sm">
         <Pending active={resending} label="Reenviando el código." className="inline-block">
-          <Button size="standard" variant="link" disabled={resending} onClick={() => void resend()}>
+          <Button size="standard" variant="link" className="min-h-12" disabled={resending} onClick={() => void resend()}>
             {resent ? "Código reenviado" : "Reenviar código"}
           </Button>
         </Pending>
         {onOtherEmail && (
-          <Button size="standard" variant="link" onClick={onOtherEmail}>
+          <Button size="standard" variant="link" className="min-h-12" onClick={onOtherEmail}>
             Usar otro correo
           </Button>
         )}

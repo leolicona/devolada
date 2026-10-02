@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ADMIN, RED } from "../../playwright.config";
 import {
+  accessScreens,
   stubAdminApi,
   stubAdminStoreApi,
   stubCashPointsApi,
@@ -440,4 +441,28 @@ test.describe("cash-at-stores US2/US4/US5: the panel's new screens", () => {
     await expect(page.getByRole("group", { name: "Canal" })).toBeVisible();
     await expectTouchTargets(page, 44, 'section[aria-label="Filtros"]');
   });
+});
+
+/* passwordless-access T051 (constitution IV, VI): the access screens hold
+   at the floor and above — no sideways scroll at 360, 768 or 1280 — and
+   every control on an access page is a 48 px target, measured. Seguridad
+   is the panel's desktop-first card, so it is held to the scroll alone. */
+test.describe("passwordless-access: the access screens at 360/768/1280", () => {
+  for (const size of [
+    { name: "phone", ...PHONE },
+    { name: "tablet", ...TABLET },
+    { name: "desktop", ...DESKTOP },
+  ]) {
+    for (const screen of accessScreens(ADMIN)) {
+      test(`${screen.name} fits a ${size.name}`, async ({ page }) => {
+        await page.setViewportSize({ width: size.width, height: size.height });
+        await screen.stub(page);
+        await page.goto(screen.url);
+        if (screen.open) await screen.open(page);
+        await expect(page.getByText(screen.ready, { exact: true }).first()).toBeVisible();
+        await expectNoHorizontalScroll(page);
+        if (screen.touch) await expectTouchTargets(page, 48, "main");
+      });
+    }
+  }
 });

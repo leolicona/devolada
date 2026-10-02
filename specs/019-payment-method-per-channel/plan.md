@@ -113,7 +113,7 @@ specs/019-payment-method-per-channel/
 ├── spec.md
 ├── plan.md              # this file
 ├── research.md          # D1–D16
-├── data-model.md        # no migration; what is read; the widened type
+├── data-model.md        # one additive column; what is read; the widened type
 ├── quickstart.md        # automated proof, demo check, rollout order
 ├── contracts/
 │   ├── action-attempt.md                 # core → adapter (D2)

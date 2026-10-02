@@ -6,9 +6,9 @@ methods, the same day)
 
 **Created**: 2026-10-01 · **Rewritten**: 2026-10-01 · **Revised**: 2026-10-02
 
-**Status**: Draft — no clarification open. M1 and M4 measured on
-2026-10-02 (R8–R11); two facts left to check in the provider's own panel
-before the plan (M2, M3).
+**Status**: Draft — no clarification open. M1, M3 and M4 measured on
+2026-10-02 (R8–R12); one fact left to check in the provider's own panel
+before the plan (M2).
 
 **Input**: User description, in the creator's words (2026-10-01): "Para el
 piloto mi cliente quiere que registremos los pagos en wisphub a nombre de
@@ -98,19 +98,19 @@ de pago de Devolada (ESCRIBE)".
 | R9 (M1) | What does the system answer when a payment names a method that does not exist? | HTTP 400 naming the field: `forma_pago`, "Clave primaria … inválida - objeto no existe". The invoice stays pending: nothing is recorded, so the adapter can fall back at once. A method deleted in the panel (M1b) was not measured; since the adapter finds methods by name in the current list, a deleted method stops being used as soon as the list is read again. |
 | R10 | Do Devolada's two methods and the reference survive a real payment? | Yes. Demo invoices #1 and #2, paid by their total, kept `SPEI - LINK.DEVOLADAPAGO` and `CASH - RED.DEVOLADAPAGO` and the reference character for character, the middle dot included (`DV-PRUEBA1 · MBAN01002610020000001`). The list filter by each method found its invoice; the filter by the cash method found neither. |
 | R11 | Does today's rule for the cash method take one of Devolada's methods? | **Yes, on the demo itself.** The system lists `CASH - RED.DEVOLADAPAGO` before "Cash" and "efectivo", so today's adapter, which takes the first name that says "efect" or "cash", records every payment with it. FR-012 is not hypothetical. |
+| R12 (M3) | Does the system's own screen show the method and the reference on a paid invoice? | Yes. The invoice in the provider's panel, and its PDF, list under *Transacciones* "Forma de Pago: SPEI - LINK.DEVOLADAPAGO - Referencia: DV-PRUEBA1 · MBAN01002610020000001" (invoice #1) and the same for `CASH - RED.DEVOLADAPAGO` and the store's name (invoice #2), middle dot included. Checked by the creator, 2026-10-02. |
 
 ## What must be measured before the plan
 
 These facts decide *how* the promise is kept, and each belongs to the
-adapter (constitution IX). M1 and M4 were answered on 2026-10-02 (R9,
-R8). The two left are checked by the creator in the provider's own panel,
-on the demo invoices #1 and #2 of R10, never with a test write on the
-pilot's live billing.
+adapter (constitution IX). M1, M3 and M4 were answered on 2026-10-02
+(R9, R12, R8). The one left is checked by the creator in the provider's
+own panel, on the demo invoices #1 and #2 of R10, never with a test write
+on the pilot's live billing.
 
 | # | Question | What the answer decides |
 | --- | --- | --- |
 | M2 | Does the system's own screen filter paid invoices by payment method, and does its download carry the method and the reference? | The outcome the business asked for (US1, SC-002). R5 and R10 measured the provider's list filter, not the screen the owner uses. |
-| M3 | Does the system's screen show the reference on a paid invoice, middle dot included? | Whether the owner reads the folio, the clave de rastreo and the store in its own system, or only in a download (US3). |
 
 ## Clarifications
 

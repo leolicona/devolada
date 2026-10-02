@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,10 +31,17 @@
 
 ## Notes
 
-- Iteration 1 (2026-10-02): three markers open, put to the creator as Q1–Q3:
-  Q1 — FR-024, whether the código email also carries a link (constitution VI);
-  Q2 — FR-029, the passwords that exist today and the store app;
-  Q3 — FR-006, whether a device that can use the key may skip it.
+- Iteration 1 (2026-10-02): three markers open, put to the creator as Q1–Q3.
+- Iteration 2 (2026-10-02): all three resolved and recorded under
+  Clarifications. Q1: the código alone, constitution VI stands (FR-024).
+  Q3: the key is offered at once and can be skipped (FR-006, FR-009). Q2,
+  asked twice because the first answer restated User Story 4: the password
+  leaves the panel for everyone (FR-029) and leaves the store app too, which
+  added User Story 6 and FR-031–FR-036. Every item passes.
+- Two guarantees that the password carried were kept on purpose, not lost
+  with it: ending sessions held elsewhere (better-auth D17 → FR-022 in the
+  panel, FR-036 in the store app), and not revealing who has an account
+  (FR-005, FR-013, FR-033, SC-006).
 - Context names Better Auth 1.6.29 only to cite two facts measured on
   2026-10-02 (a código lives five minutes; it is stored as typed). No
   requirement or success criterion prescribes a technology.

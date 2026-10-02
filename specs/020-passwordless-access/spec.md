@@ -4,12 +4,12 @@
 
 **Created**: 2026-10-02
 
-**Status**: Draft — written from the creator's story of 2026-10-02. Three
-decisions are open and marked `[NEEDS CLARIFICATION]`: whether the email
-carries a link as well as the código (Q1, it touches constitution VI), what
-happens to the passwords that exist today (Q2), and whether a device that
-can use the fingerprint or face may skip it (Q3). Numbered 020 because 015,
-016 and 019 are taken by open spec PRs (#258, #259, #272).
+**Status**: Draft — written from the creator's story of 2026-10-02 and
+clarified the same day in two rounds: the email carries the código alone
+(Q1); the password leaves the panel for everyone and leaves the store app
+too (Q2, User Story 6); the fingerprint or face is offered at once and can
+be skipped (Q3). No clarification is open. Numbered 020 because 015, 016
+and 019 are taken by open spec PRs (#258, #259, #272).
 
 **Input**: User description, in the creator's words (2026-10-02):
 
@@ -57,7 +57,7 @@ can use the fingerprint or face may skip it (Q3). Numbered 020 because 015,
 
 ## Context
 
-### How a person gets into the panel today
+### How a person gets in today
 
 As built on `main` at `d1d5fd9`. The rules come from the archive's
 `auth/better-auth.spec.md` (cited here as `better-auth D<n>`) and from
@@ -105,7 +105,9 @@ The creator's request: the password leaves. A person proves their email once
 with a código. From then on their own device is the key: its fingerprint,
 its face, or its screen lock. A device that cannot do that still works, with
 the código alone. The invitation page gets the same "Entrar con huella o
-rostro".
+rostro". The password leaves the store app as well (User Story 6): the
+shopkeeper enters with the fingerprint or face, or with a código sent to
+their email.
 
 What it is worth:
 
@@ -142,10 +144,13 @@ The screens make these promises, so the spec makes them first:
 ### What this asks of the constitution
 
 - **Technology Stack, Auth row**: "email + password with OTP verification"
-  stops describing the panel. The plan proposes the amendment.
-- **Principle VI**, "auth emails carry codes, never links": the creator's
-  story asks for "OTP y magic link". If Q1 keeps a link, VI is amended and
-  the plan answers better-auth D4's three reasons. If not, VI stands.
+  and "`username` plugin for the shopkeeper's phone sign-in" stop
+  describing either app. No one signs in with a password, and the phone no
+  longer signs in: it only names the store account a código is sent for
+  (FR-033). The plan proposes the amendment.
+- **Principle VI**, "auth emails carry codes, never links", stands. The
+  creator's story asked for "OTP y magic link"; asked about the conflict,
+  the creator chose the código alone (Clarifications, Q1).
 - **Principle V** does not change, but this feature must meet it. The
   código becomes the only key of an account without a passkey, so it is
   stored as a hash (FR-025).
@@ -156,14 +161,14 @@ every request.
 
 ### What this replaces
 
-This spec specifies again (constitution I), and replaces for the panel:
+This spec specifies again (constitution I), and replaces, in the panel:
 
-- **better-auth D2**, the daily password. What happens to the passwords
-  that exist today is Q2.
-- **better-auth D7**, "enrolment offered after login, never forced". The
-  activation is offered right after the código: at registration, at every
-  sign-in by código and on the invitation page (FR-006). Whether it may be
-  skipped is Q3.
+- **better-auth D2**, the daily password, for everyone: the passwords that
+  exist today stop working and are erased (FR-029).
+- **better-auth D7**, "enrolment offered after login". The activation is
+  offered right after the código: at registration, at every sign-in by
+  código and on the invitation page (FR-006). D7's "never forced" stands:
+  the person can always say "Ahora no" (Clarifications, Q3).
 - **better-auth D14**, "the only question left is a password". The
   invitation page asks for no password. With an account: the key or a
   código. Without one: the name, then the key.
@@ -186,10 +191,71 @@ This spec specifies again (constitution I), and replaces for the panel:
   funcionando" and Cuenta's "Para cambiar tu nombre o tu contraseña,
   escríbenos" (FR-030).
 
+And in the store app (User Story 6):
+
+- **cash-at-stores FR-009 and D5**, the invitation's "email and password,
+  then a code". It becomes the email, then the código, then the offer of
+  the fingerprint or face.
+- **cash-at-stores FR-010 and D3**, phone and password, and the store half
+  of better-auth D2 ("a shopkeeper mid-queue cannot fetch a code"). D3
+  recorded "an email-only sign-in for shopkeepers" as rejected because the
+  creator chose phone and password; the creator reversed that on
+  2026-10-02 and accepted the wait at the counter (Clarifications, Q2). The
+  phone stays the shopkeeper's name, but it signs nothing in: it says which
+  store account the código goes to (FR-033).
+- **cash-at-stores FR-011**, recovery by código and a new password. There is
+  nothing to recover: the código is the way in. Its "never a link" stays.
+- **The store app's recovery screen** and its "¿Olvidaste tu contraseña?",
+  and the copy that promises a password: the Caja card's "Tu contraseña
+  sigue funcionando" and the sign-in's "Entra con tu teléfono y contraseña"
+  (FR-035).
+- **cash-at-stores D26's Caja card "without its list"**. With no password
+  to reset, the card is how a lost phone is shut out: it lists the keys and
+  ends the other sessions (FR-036).
+
 Not replaced: the business wizard; the member invitation email and its link
 (it carries the invitation, not a proof of an address someone typed); the
 session's terms; suspension; the platform operator's access, which uses the
 same doors; and the `/v1` API keys.
+
+## Clarifications
+
+### Session 2026-10-02
+
+- Q1. Q: The story asks for "código OTP y magic link", but constitution VI says
+  auth emails carry codes, never links (better-auth D4). Does the email
+  carry a link? → A: No — "Solo OTP, como hasta ahora." The email carries
+  the six digits alone, and Principle VI stands. Rejected: the código plus a
+  button that confirms from any device (a person who typed someone else's
+  address gets in the moment the owner, or their mail scanner, presses it,
+  and the account holds the business's CLABE); a classic magic link (the
+  session and the key land on the device that opened the email, and mail
+  scanners burn single-use links).
+- Q3. Q: On a device that can use the fingerprint or face, may the person skip
+  the activation? → A: Yes (option A). It is offered at once, with "Ahora
+  no". It comes back at the next sign-in by código and is always in Cuenta →
+  Seguridad. Rejected: a key required on such a device (a cancelled window or
+  a failing sensor blocks the person, and a shared computer would be made to
+  keep a key that anyone with its PIN can use; it adds no security, because
+  accounts without a key exist anyway on devices without support); one
+  forced attempt before "Ahora no" appears (it hides the way out).
+- Q2. Q: What happens to the passwords that exist today? The creator's first
+  answer restated the invitation page's "inicio de sesión con huella/rostro",
+  which User Story 4 already holds, so the question was asked again in
+  concrete terms: "Ana already signs in to the panel with her password. When
+  this ships, how does she get in?" → A: With her fingerprint or face, or a
+  código; her password stops working (option A). It is erased, and the
+  invitation page offers her the key or the código. Rejected: Ana keeps her
+  password and only new accounts are born without one (two kinds of
+  account, two forms and "Olvidé mi contraseña" to keep, and the one thing
+  a fake page can steal stays).
+- Q2, second half. Q: Does the store app change? → A: Yes, the password
+  leaves it too ("Sin contraseña también"): the shopkeeper enters with the
+  fingerprint or face, or with a código sent to their email. The cost was
+  named and accepted: when the fingerprint fails at the counter, the
+  shopkeeper waits for an email with customers in front of them. Rejected:
+  no change (phone and password stay); keeping the password and offering the
+  key from the invitation onwards.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -227,17 +293,20 @@ alone.
    D12).
 5. **Given** the activation step, **When** the person cancels the device's
    window or it fails, **Then** the screen says so in one line and lets them
-   try again. Whether they may go on without it is Q3 (FR-006).
-6. **Given** a wrong código, **When** it is typed, **Then** the screen says
+   try again or choose "Ahora no".
+6. **Given** the activation step, **When** the person chooses "Ahora no",
+   **Then** they land in the business wizard with no key, and the activation
+   is offered again at their next sign-in by código.
+7. **Given** a wrong código, **When** it is typed, **Then** the screen says
    the código is not valid or has expired and offers to resend it. After
    three wrong tries that código is dead, and only a new one works.
-7. **Given** a código older than ten minutes, **When** it is typed, **Then**
+8. **Given** a código older than ten minutes, **When** it is typed, **Then**
    it is refused the same way.
-8. **Given** the código screen, **When** the person presses "Reenviar
+9. **Given** the código screen, **When** the person presses "Reenviar
    código", **Then** a new código goes out, the earlier one stops working,
    and the screen confirms "Código reenviado".
-9. **Given** a finished registration, **Then** no password exists for that
-   account, anywhere.
+10. **Given** a finished registration, **Then** no password exists for that
+    account, anywhere.
 
 ---
 
@@ -276,6 +345,10 @@ the activation offered on a device that can verify the person.
    without a key types a código only on a device where they hold no session.
 6. **Given** a key activated before this feature (US-S07), **Then** it keeps
    working.
+7. **Given** a person who used to sign in with a password, **When** they open
+   the sign-in screen, **Then** one line tells them passwords are no longer
+   used, next to the key and the código (FR-029); their old password opens
+   nothing.
 
 ---
 
@@ -392,6 +465,61 @@ it no longer signs in, and the código still does.
 
 ---
 
+### User Story 6 - The shopkeeper gets in without a password (Priority: P2)
+
+A shopkeeper opens their store's invitation from WhatsApp. They type their
+email, a código arrives, they type it, and they are in the store app. Their
+phone then offers the fingerprint or face, and from the next day on they
+open the app with one touch. On the day the fingerprint fails at the
+counter, they type their phone number, a código reaches their email, and
+they are back in.
+
+**Why this priority**: the creator chose one way in for all of Devolada
+(Clarifications, Q2). It ships apart from the panel: until it does, the
+store app keeps the phone and the password.
+
+**Independent Test**: accept a store invitation with an email and its
+código, activate the key, sign out, and sign in with the key alone. Sign out
+again, type the store's phone, and sign in with the código that reaches the
+email. Check that the store's account holds no password, and that a business
+member's account is still refused by the store app.
+
+**Acceptance Scenarios**:
+
+1. **Given** a valid store invitation, **When** the shopkeeper types their
+   email and continues, **Then** a código goes to that email. Typing it
+   creates the store's account, signs them in, and offers the activation
+   step, with "Ahora no" (FR-006).
+2. **Given** an email that already belongs to an account, a business
+   member's or a platform operator's, **When** its código is typed, **Then**
+   the invitation says that email cannot be used for a store and asks for
+   another one; the invitation stays open. Before the código, nothing
+   reveals it.
+3. **Given** a shopkeeper whose phone holds their key, **When** they press
+   "Entrar con huella o rostro" and confirm, **Then** they are in, typing
+   nothing.
+4. **Given** the store app's sign-in, **When** the shopkeeper types their
+   phone and asks for a código, **Then** the código goes to the email of the
+   store account that phone names, and typing it signs them in. The screen
+   answers the same way for any phone (cash-at-stores D3: whether a phone is
+   a store's is nobody's to probe).
+5. **Given** an invitation that was used, replaced or is older than seven
+   days, **Then** it says it no longer works, as today.
+6. **Given** a business member's account, **When** it reaches the store app
+   through any door, **Then** it is refused, as today (cash-at-stores
+   FR-013).
+7. **Given** a shopkeeper signed in, **Then** they stay signed in on that
+   phone for 30 days, renewed by use (cash-at-stores FR-010).
+8. **Given** a store account that has a password today, **Then** from this
+   story's release the password stops working; the shopkeeper enters with
+   the key activated in Caja, or with a código (FR-029).
+9. **Given** a shopkeeper who lost their phone, **When** they sign in on a
+   new one and open Caja, **Then** they can remove the old phone's key and
+   choose "Cerrar sesión en los demás dispositivos"; the old phone's session
+   ends at its next request (FR-036).
+
+---
+
 ### Edge Cases
 
 - **Registering with an address that already has an account.** The código
@@ -408,8 +536,10 @@ it no longer signs in, and the código still does.
   is born only when its email is proven (FR-004).
 - **The email is slow, or the provider is down.** "Reenviar código" is the
   retry. In an environment without the email provider, the código is written
-  to the log (constitution VIII). The screen always says where the código
-  went and offers the resend; it never waits in silence.
+  to the log (constitution VIII). The screen always says the código is on its
+  way and offers the resend; it never waits in silence. (The panel names the
+  address the person typed; the store app says "your store's email", because
+  naming it would tell a stranger whose phone it is.)
 - **Two códigos requested.** Only the newest works (FR-003).
 - **The código typed on another device.** It works there: the session opens
   where the código is typed (better-auth D4: "a code is read anywhere and
@@ -419,11 +549,12 @@ it no longer signs in, and the código still does.
   plain message to wait a moment (FR-027).
 - **The tab is closed during the activation step.** The account and the
   session already exist. The next visit goes on as for an account without a
-  key, and the activation comes back at the next sign-in by código (FR-006,
-  Q3).
+  key, and the activation comes back at the next sign-in by código
+  (FR-006).
 - **A shared computer.** A key protected by a shared screen lock lets in
   anyone who knows that lock. The activation step says so in one line
-  (FR-008); what the person can do about it depends on Q3.
+  (FR-008), and "Ahora no" keeps the shared computer without a key
+  (FR-006).
 - **Keys of several accounts on one device.** The device's own window lets
   the person choose the account.
 - **A key from the dev environment** is never offered on production: each
@@ -432,7 +563,21 @@ it no longer signs in, and the código still does.
   today.
 - **A store's account on the panel** is refused with its own screen, as
   today (cash-at-stores D2), whatever the door it came through.
-- **An account that has a password today**: Q2 (FR-029).
+- **An account that has a password today** loses it at its app's release
+  and enters with its key or a código (FR-029). The sign-in screen says so
+  in one line, so nobody goes looking for the password field.
+- **A panel account whose email was never proven** (a registration that
+  stopped before its código, from before the release) never held a session
+  or a business. After the release it is not an account: registering with
+  that address starts over (FR-004).
+- **A shopkeeper who accepted the invitation before the release and never
+  typed the código.** Asking for a código by phone reaches the email they
+  gave; typing it proves it and lets them in.
+- **The inbox and every key are lost.** The person is locked out; today a
+  remembered password would still open the account. The way back: a member
+  gets a new invitation from their business, to a new address; an owner or
+  a shopkeeper goes to Devolada's support. Changing one's email stays out
+  of scope (Assumptions).
 
 ## Requirements *(mandatory)*
 
@@ -446,9 +591,9 @@ it no longer signs in, and the código still does.
 - **FR-002**: "Continuar" MUST send a six-digit código to the email and open
   the código screen. That screen names the address the código went to, and
   offers "Reenviar código" and "Usar otro correo".
-- **FR-003**: A código MUST be valid for ten minutes, for one use, and only
-  for the address it was sent to. A new request ends the previous código.
-  Three wrong tries end it.
+- **FR-003**: A código, in either app, MUST be valid for ten minutes, for
+  one use, and only for the address it was sent to. A new request ends the
+  previous código. Three wrong tries end it.
 - **FR-004**: Typing the right código MUST confirm the email and open the
   session, in one step. An account is born only when its email is proven
   this way, or by an invitation (FR-019): a mistyped address leaves nothing
@@ -460,15 +605,15 @@ it no longer signs in, and the código still does.
 
 **Activation of the fingerprint or face**
 
-- **FR-006**: When a session opens by código (at registration, at sign-in
-  and on the invitation page), and when an invitee's account is born
-  (FR-019), a device that can verify the person itself MUST be offered the
-  activation step at once. Its decisive action opens the device's own
-  window; the person never has to go looking for it. [NEEDS CLARIFICATION:
-  on such a device, may the person say "Ahora no" and go on with the código
-  alone, or is the key required to finish? The story's "para completar la
-  creación de la cuenta" reads as required; better-auth D7 says "never
-  forced". (Q3)]
+- **FR-006**: When a session opens by código (at registration, at sign-in,
+  on the invitation page, and in the store app), and when an invitee's
+  account is born (FR-019), a device that can verify the person itself MUST
+  be offered the activation step at once. Its decisive action opens the
+  device's own window; the person never has to go looking for it. The step
+  MUST also offer "Ahora no", which goes on with the código alone. A person
+  who skipped it is offered it again at their next sign-in by código, and
+  it is always in Cuenta → Seguridad (FR-021), or in the store app's Caja
+  (FR-035).
 - **FR-007**: Confirming in the device's window MUST save the key to the
   account and continue: to the business wizard, to the invitation's
   business, or to the page the person was going to (better-auth D12).
@@ -478,30 +623,32 @@ it no longer signs in, and the código still does.
   their other devices (better-auth D18); and anyone who can unlock a shared
   device can enter with it.
 - **FR-009**: A cancelled or failed activation MUST be named in one line and
-  offer to try again. It never shows a technical error.
+  offer to try again or "Ahora no". It never shows a technical error.
 
 **Sign-in**
 
-- **FR-010**: The sign-in screen MUST offer "Entrar con huella o rostro"
-  wherever the browser supports passkeys, and MUST always offer to enter
-  with a código sent to the email. It MUST have no password field.
+- **FR-010**: The panel's sign-in screen MUST offer "Entrar con huella o
+  rostro" wherever the browser supports passkeys, and MUST always offer to
+  enter with a código sent to the email. It MUST have no password field.
 - **FR-011**: A sign-in with a key MUST need nothing typed: the device's
   window, one confirmation, and the person is in, on the page they were
   going to.
 - **FR-012**: A failed or cancelled sign-in with a key MUST say so in one
   line and offer the código. It never shows a technical error.
-- **FR-013**: Asking for a código on the sign-in screen MUST answer the same
-  way for every well-formed address. For an address without an account,
-  typing the código continues as a registration: the name is asked before
-  anything else, then FR-006.
-- **FR-014**: Sessions MUST keep today's terms: 30 days, renewed by use
-  (better-auth D5), with the suspension check on every request.
+- **FR-013**: Asking for a código on the panel's sign-in screen MUST answer
+  the same way for every well-formed address. For an address without an
+  account, typing the código continues as a registration: the name is asked
+  before anything else, then FR-006.
+- **FR-014**: Sessions in both apps MUST keep today's terms: 30 days, renewed
+  by use (better-auth D5, cash-at-stores FR-010), with the suspension check
+  on every request.
 
 **Devices without passkey support**
 
 - **FR-015**: On a device without passkey support, registration, sign-in and
-  the invitation MUST be complete with the código alone: no activation step,
-  no passkey button, no mention of the fingerprint or face, and no error.
+  the invitation MUST be complete with the código alone, in either app: no
+  activation step, no passkey button, no mention of the fingerprint or face,
+  and no error.
 - **FR-016**: The activation step MUST be offered only where the device can
   verify the person itself. The sign-in button MUST show wherever the
   browser supports passkeys, even on a device that cannot verify the person,
@@ -541,9 +688,8 @@ it no longer signs in, and the código still does.
 
 - **FR-024**: The código email MUST carry the six digits in its subject and
   in its body, in es-MX, and call them "código" — never "OTP", "token" or
-  "enlace". [NEEDS CLARIFICATION: does the email also carry a link, as the
-  story's "OTP y magic link" asks? Constitution VI says auth emails carry
-  codes, never links (better-auth D4). (Q1)]
+  "enlace". It MUST carry no link that signs in or confirms anything
+  (constitution VI, better-auth D4).
 - **FR-025**: A live código MUST be stored only as a hash, never in a form
   anyone can read back (constitution V). Today it is stored as typed.
 - **FR-026**: Without the email provider, the código MUST be written to the
@@ -560,25 +706,64 @@ it no longer signs in, and the código still does.
 
 **Existing accounts and copy**
 
-- **FR-029**: Accounts that have a password today MUST
-  [NEEDS CLARIFICATION: lose it on release and enter with their key or a
-  código, or keep it as a second door? And does the store app's phone and
-  password sign-in stay as it is? (Q2)]
+- **FR-029**: Accounts that have a password today MUST lose it: from the
+  release of each app's doors without a password, the password stops
+  working and is erased. The person enters with their key (one activated
+  before keeps working) or a código. No app loses its passwords before its
+  own doors without a password work. Each sign-in screen says so in one
+  line, for example: "Ya no usamos contraseñas: entra con tu huella o
+  rostro, o con un código."
 - **FR-030**: The panel's copy MUST stop promising a password: the passkey
   card ("Tu contraseña sigue funcionando…") and Cuenta's identity card
   ("Para cambiar tu nombre o tu contraseña…"). The rebuilt registration
   screen names no business type (constitution IX): today's "Tu ISP,
   cobrando por transferencia sin trabajo manual" leaves with the password.
 
+**The store app**
+
+- **FR-031**: The store invitation MUST ask only for the shopkeeper's email.
+  A código goes to it. Typing it creates the store's account, signs it in
+  and offers the activation step (FR-006). The invitation is used up only
+  then: a shopkeeper who leaves before the código can come back to the same
+  invitation while it lasts.
+- **FR-032**: An email that already belongs to an account, or to a platform
+  operator, MUST be refused only after its código is typed. The invitation
+  then says so, asks for another email, and stays open. (cash-at-stores D5
+  refused it before any código, with `EMAIL_TAKEN`.)
+- **FR-033**: The store app's sign-in MUST offer "Entrar con huella o rostro"
+  wherever the browser supports passkeys, and a código: the shopkeeper types
+  their phone, and the código goes to the email of the store account that
+  phone names. Every phone gets the same answer; a phone that names no store
+  gets no código, and nothing on the screen says so (cash-at-stores D3). It
+  MUST have no password field.
+- **FR-034**: The store app MUST never create an account. A store's account
+  is born only from the operator's invitation (cash-at-stores FR-009).
+- **FR-035**: The store app MUST lose its recovery screen, its "¿Olvidaste tu
+  contraseña?" and every password field. The activation is offered right
+  after the invitation's código and after each sign-in by código (FR-006),
+  and stays in Caja (cash-at-stores D26). Its copy stops promising a
+  password: the Caja card's "Tu contraseña sigue funcionando" and the
+  sign-in's "Entra con tu teléfono y contraseña".
+- **FR-036**: Caja's card MUST list the store account's keys, with "Quitar"
+  on each, and offer "Cerrar sesión en los demás dispositivos" (FR-022,
+  FR-023). Today a shopkeeper who lost their phone shuts it out by resetting
+  the password (better-auth D17 holds for store accounts too); without a
+  password, this is the way. The card drops the "one shopkeeper, one phone"
+  shortcut of cash-at-stores D26, which showed no list.
+
 ### Key Entities *(include if feature involves data)*
 
 - **Person (account)**: a name and a proven email. No password. Holds
   sessions and keys, and belongs to businesses through memberships
   (unchanged).
+- **Store account**: the shopkeeper's account, which a store names
+  (cash-at-stores D2). A proven email, where its códigos go, and the store's
+  phone, which names it at the store app's sign-in. No password. Born only
+  from the operator's invitation.
 - **Key (passkey)**: belongs to one person. Holds the public half, an
   identifier, a name ("Llave de acceso" when none), the activation date, and
   whether it is synced. Only the person's device creates one; the person
-  removes it from Seguridad.
+  removes it from Seguridad, or from Caja in the store app.
 - **Código**: six digits for one address. Lives ten minutes, serves once,
   and dies after three wrong tries or when a newer one is requested. Stored
   only as a hash.
@@ -593,16 +778,19 @@ it no longer signs in, and the código still does.
 
 - **SC-001**: A new person goes from "Crear cuenta" to the business wizard in
   under two minutes, when the código email arrives within 30 seconds.
-- **SC-002**: A returning person whose device holds their key signs in within
-  10 seconds, typing nothing.
-- **SC-003**: No account created after the release holds a password: zero.
+- **SC-002**: A returning person, in the panel or at the store, whose device
+  holds their key signs in within 10 seconds, typing nothing.
+- **SC-003**: No account holds a password: zero in the panel from its
+  release, and zero in the store app from User Story 6's release.
 - **SC-004**: On devices without passkey support, 100% of registrations and
   sign-ins finish with the código alone, with no error screen.
 - **SC-005**: In the first four weeks, at least 7 in 10 new accounts
   registered on a device that can verify the person activate a key during
   registration.
 - **SC-006**: Zero screens or answers reveal whether an address has an
-  account, across registration, sign-in and the código screen.
+  account, across registration, sign-in and the código screen, or whether a
+  phone is a store's, at the store app's sign-in. Only a person who typed an
+  address's código may learn what that address holds.
 - **SC-007**: An invitee whose device holds their key joins the business with
   one touch, typing nothing.
 - **SC-008**: No account is ever locked out by a lost device: 100% of
@@ -611,11 +799,21 @@ it no longer signs in, and the código still does.
   other sessions are refused at their next request.
 - **SC-010**: No live código is readable from the database: zero stored as
   typed.
+- **SC-011**: A shopkeeper whose fingerprint fails at the counter is back in
+  by código in under two minutes, when the email arrives within 30 seconds.
 
 ## Assumptions
 
-- **The panel is the scope**: registration, sign-in, the invitation page and
-  Cuenta → Seguridad. Whether the store app joins is Q2.
+- **Both apps are the scope** (Q2). In the panel: registration, sign-in, the
+  invitation page and Cuenta → Seguridad. In the store app: the invitation,
+  the sign-in and Caja's card.
+- **The phone stays the shopkeeper's name in the store app.** When the
+  fingerprint fails, the shopkeeper types their phone, not their email, and
+  the código goes to the email on file. The network knows the shopkeeper by
+  that phone: the operator creates the store with it and sends the
+  invitation to it. Ten digits on a number pad are quicker at the counter
+  than an email, and the shopkeeper need not remember which email they
+  gave.
 - **The name stays at registration.** The creator's story names only the
   email, but the name is still needed: the invitation email says who
   invites, and Usuarios lists people by name. It sits on the same screen as
@@ -634,7 +832,7 @@ it no longer signs in, and the código still does.
   dead end in the middle of a registration. The plan picks the check.
 - **The member invitation email keeps its link** to the invitation page. The
   link carries the invitation; it is not a proof of an address someone typed.
-  Q1 is about the código email.
+  The creator's "solo código" (Q1) is about the email that carries a código.
 - **Sessions do not change** (30 days, renewed by use). That is what makes an
   account without a key livable: a código is typed only on a device with no
   session.
@@ -642,20 +840,32 @@ it no longer signs in, and the código still does.
   rejected it); códigos by SMS or WhatsApp; signing in with Google or Apple;
   security keys as a designed option (the device's window may still offer
   them, and they work); a "remember this device" for códigos.
+- **Losing the inbox and every key is a cost this feature accepts.** Today a
+  person who lost their inbox could still sign in with a remembered
+  password; after this feature, the inbox or a key is the only way in. The
+  way back is a new invitation (a member) or Devolada's support (an owner or
+  a shopkeeper). If it happens often, changing one's email becomes a feature
+  of its own.
 - **Production holds accounts with passwords**: invitations were accepted on
-  production on 2026-10-01 (bug `invitee-lands-own-business`). Q2 decides
-  what happens to them.
+  production on 2026-10-01 (bug `invitee-lands-own-business`), and the
+  store pilot's shopkeepers sign in with one. Those passwords stop working
+  at each app's release (FR-029). Nobody is locked out by it: every panel
+  account holding a session proved its email (better-auth D16), and so did
+  every shopkeeper who ever got in (cash-at-stores D5).
 
 ## Dependencies
 
-- **A constitution amendment**: the Technology Stack's Auth row, and
-  Principle VI only if Q1 keeps a link. The plan proposes it before any code.
+- **A constitution amendment**: the Technology Stack's Auth row. The plan
+  proposes it before any code. Principle VI is not touched (Q1).
 - **The passkey layer** (`tests/passkey`: a real API and Chromium's virtual
-  authenticator) proves the new registration, sign-in and invitation
-  journeys (constitution IV). Its current journeys, which register with a
-  password and enrol later in Cuenta, are rewritten.
+  authenticator) proves the new journeys in both apps (constitution IV). Its
+  current journeys, which register with a password and enrol later (in
+  Cuenta, or in the store app's Caja), are rewritten.
 - **Everything that signs in with a password today**: the dev seed's demo
-  account, the API and component suites, the browser layer's stubs. The plan
-  lists them once Q2 is answered.
+  account, the API and component suites, the browser layer's stubs, the
+  store app's screens. The plan lists them.
+- **The store pilot's shopkeepers are told first.** Before User Story 6
+  ships, the operator tells them that their password stops working and how
+  they will get in. This happens outside the software.
 - **Each environment keeps its own keys**, as configured today (better-auth
   D7): a key made on dev never opens production.

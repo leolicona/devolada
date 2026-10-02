@@ -20,7 +20,7 @@ and write the result in research.md under its decision, with the date.
 | M1 | `send-verification-otp {type: "sign-in"}` for an address with no user, then `sign-in/email-otp {email, otp, name: "Ana López"}` with the código the sender logged | the user row: `email_verified`, `name`; a session cookie in the answer | D1 |
 | M2 | Sign in. Move the session's `created_at` 25 hours back in D1. `GET /auth/passkey/generate-register-options`. Repeat at 23 hours | 403 `SESSION_NOT_FRESH` at 25 h, 200 at 23 h | D8 (and the bug it names in today's card) |
 | M3 | Add `/sign-in/email` to `disabledPaths`. `POST /auth/sign-in/email` over HTTP, then `auth.api.signInEmail` from the server | 404 over HTTP; the server call still reaches it | D4 |
-| M4 | With `storeOTP: "hashed"`, `expiresIn: 600`: read the stored `value`; type the right código once (200), then again (refused); on a new código, type three wrong ones, then the right one | a value with no six digits; the second use refused; `TOO_MANY_ATTEMPTS` after three | D2 |
+| M4 | With `storeOTP: "hashed"`, `expiresIn: 600`: read the stored `value`; type the right código once (200), then again (refused); on a new código, type three wrong ones, then the right one; ask for código A, then B, sign in with B, then try A | a value with no six digits; the second use refused; `TOO_MANY_ATTEMPTS` after three; whether A still opens a session (research D2 says it does, until the `hooks.before` deletes it) | D2 |
 | M5 | Three sessions of one user. `POST /auth/revoke-other-sessions` from one. A request from each | 200 from the caller, 401 from the other two | D11 |
 | M6 | `checkVerificationOTP {type: "sign-in"}` for an address with a user and for one without, with a right and a wrong código. Then `sign-in/email-otp` with the same right código | right + user → 200 and still usable; right + no user → `USER_NOT_FOUND`; wrong → `INVALID_OTP` with tries + 1 | D10 |
 
@@ -57,7 +57,7 @@ The API suite must show, at least:
 | A registration: código → account born verified with its name → session; no `account` row exists for it | US1 |
 | A registration with a taken address answers like a new one, and its código opens the existing account; the typed name is ignored | US1 (FR-005) |
 | A sign-in código for an unknown address creates an account with an empty name | US2 (FR-013) |
-| A código after ten minutes is refused; after three wrong tries, the right one too; a new request kills the old one | US1 (FR-003) |
+| A código after ten minutes is refused; after three wrong tries, the right one too; a new request kills the old one, even after the new one is used | US1 (FR-003) |
 | The stored código's value holds no six digits | US1 (FR-025) |
 | `/auth/sign-in/email` and `/auth/sign-up/email` answer 404 | US2 (FR-010) |
 | The sixth `sign-in/email-otp` from one address in a minute answers 429 | US2 (FR-027) |

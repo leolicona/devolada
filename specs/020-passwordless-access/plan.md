@@ -23,9 +23,11 @@ each traced to its decisions in [research.md](./research.md):
    - It opens an existing account without saying it existed.
    Our `POST /auth/business/signup` retires.
 2. **The código's terms, written down** (D2, D3). Ten minutes, three tries,
-   stored as a SHA-256 hash. Today it lives the library's five minutes and is
-   stored in plain text, against constitution V. The plugin's rate rules
-   stay, plus one custom rule and the store routes' own limits.
+   stored as a SHA-256 hash, and a new request ends the old código (the
+   plugin keeps it alive, so a `hooks.before` deletes it). Today it lives the
+   library's five minutes and is stored in plain text, against
+   constitution V. The plugin's rate rules stay, plus one custom rule and
+   the store routes' own limits.
 3. **The password doors close in two steps** (D4, D16):
    - **PR 1**: the panel's (`/sign-in/email`, `/sign-up/email`);
    - **PR 2**: the store app's, with `emailAndPassword` off.
@@ -208,7 +210,8 @@ specs/020-passwordless-access/
 
 ```text
 apps/api/
-├── src/auth/better.ts                    # emailOTP: expiresIn 600, allowedAttempts 3, storeOTP "hashed" (D2);
+├── src/auth/better.ts                    # emailOTP: expiresIn 600, allowedAttempts 3, storeOTP "hashed";
+│                                         #   hooks.before deletes an address's old códigos on a new request (D2);
 │                                         #   customRules["/sign-in/email-otp"] 5/60 (D3); disabledPaths PR 1 → PR 2 (D4);
 │                                         #   emailAndPassword off (PR 2); verify-email and reset-password rules leave (PR 2)
 ├── src/auth/credentials-sweep.ts         # new: eraseLegacyCredentials (D5); skips store users until PR 2

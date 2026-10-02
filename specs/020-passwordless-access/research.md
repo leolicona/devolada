@@ -83,9 +83,22 @@ The `emailOTP` options gain three explicit values:
 - **Three tries kill a código.** A wrong try puts the row back with its count
   plus one (`atomicVerifyOTP`, routes.mjs line 760). At three, even the right
   código answers `TOO_MANY_ATTEMPTS`.
-- **A new request ends the old código.** `resendStrategy` stays `"rotate"`.
-  With a hash it could not be `"reuse"` anyway (types.d.mts: "Falls back to
-  rotate when OTP is hashed").
+- **A new request must end the old código, and the plugin does not.**
+  `resendStrategy` stays `"rotate"`; with a hash it could not be `"reuse"`
+  anyway (types.d.mts: "Falls back to rotate when OTP is hashed"). But
+  rotating only adds a row:
+  - `resolveOTP` creates the new row without deleting the old one
+    (routes.mjs line 30).
+  - The check consumes the newest row for the address
+    (`consumeVerificationValue`, `db/internal-adapter.mjs` line 675, sorted
+    by `createdAt` descending).
+
+  So an older código fails while a newer one is live, but works again for
+  the rest of its ten minutes once the newer one is used. FR-003 says a new
+  request ends the previous código. Fix: a `hooks.before` on
+  `/email-otp/send-verification-otp` deletes that address's rows of that
+  kind before the plugin writes the new one. It goes in the same
+  `hooks.before` that refuses a `username` (cash-at-stores D3).
 - **The deploy's edge.** A código sent before the deploy is stored plain and
   will not match its hash after it. Codes live five minutes today, so the
   edge is five minutes wide: the person asks for a new one. Nothing migrates.
@@ -676,7 +689,8 @@ fact this research read in the dist and that code will depend on:
   can.
 - **M3**: a `disabledPaths` entry answers 404 over HTTP, while `auth.api`
   still reaches it.
-- **M4**: a hashed código passes once, and dies after three wrong tries.
+- **M4**: a hashed código passes once, dies after three wrong tries, and
+  dies when a newer one is requested, even after the newer one is used.
 - **M5**: `revoke-other-sessions` leaves only the caller's session.
 - **M6**: `checkVerificationOTP` validates without consuming, and answers
   `USER_NOT_FOUND` only after a right código.

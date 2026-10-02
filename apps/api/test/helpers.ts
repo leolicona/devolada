@@ -124,22 +124,22 @@ export async function seedSession(
     });
 }
 
+/* passwordless-access D14: a panel person is born without a password —
+   a `user` row and no `account` row, written through Better Auth's own
+   adapter, as every door of the product now births one. `emailVerified:
+   false` stays possible for the legacy rows the sweep and the session gate
+   are proven against (D5, better-auth D16). */
 async function seedAuthUser(
   name: string,
   email: string,
   opts: { emailVerified?: boolean } = {},
 ) {
-  const { response } = await auth().api.signUpEmail({
-    body: { name, email, password: PASSWORD },
-    returnHeaders: true,
+  const user = await (await auth().$context).internalAdapter.createUser({
+    name,
+    email,
+    emailVerified: opts.emailVerified !== false,
   });
-  if (opts.emailVerified !== false) {
-    await drizzle(env.DB)
-      .update(userTable)
-      .set({ emailVerified: true })
-      .where(eq(userTable.id, response.user.id));
-  }
-  return response.user.id;
+  return user.id;
 }
 
 /* A business with its auth twin and one owner (business-and-memberships
@@ -293,6 +293,28 @@ export async function lastCodeFor(email: string): Promise<string> {
   const match = /\d{6}/.exec(row.value);
   if (!match) throw new Error(`no 6-digit code in: ${row.value}`);
   return match[0];
+}
+
+/* passwordless-access D14: the last código the sender logged for an
+   address (setup.ts keeps them). Flow tests use it — the registration, the
+   sign-in — because they must prove the código reached the address. */
+export function sentCode(email: string): string {
+  const codes = (globalThis as { [k: symbol]: Map<string, string> | undefined })[Symbol.for("devolada.test.sentCodes")];
+  const code = codes?.get(email.toLowerCase());
+  if (!code) throw new Error(`sentCode: no código was logged for ${email} in this test`);
+  return code;
+}
+
+/* passwordless-access D14: a fresh código for an address, through the
+   plugin's own server-only door (the one D9 uses). The address's live rows
+   of that kind go first, as T005's hook does for a request, so the minted
+   código is the only one. For tests whose subject is not the email. */
+export async function mintCode(
+  email: string,
+  type: "sign-in" | "email-verification" | "forget-password" = "sign-in",
+): Promise<string> {
+  await drizzle(env.DB).delete(verification).where(eq(verification.identifier, `${type}-otp-${email.toLowerCase()}`));
+  return auth().api.createVerificationOTP({ body: { email, type } });
 }
 
 /* A browser always sends Origin on POST; Better Auth's CSRF check

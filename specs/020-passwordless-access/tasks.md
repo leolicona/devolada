@@ -111,19 +111,19 @@ yet, except the código email's wording.
 
 **⚠️ CRITICAL**: no user story work begins until this phase is complete.
 
-- [ ] T005 The código's terms in `apps/api/src/auth/better.ts` (research D2, D3):
+- [X] T005 The código's terms in `apps/api/src/auth/better.ts` (research D2, D3):
   - **`emailOTP({ expiresIn: 600, allowedAttempts: 3, storeOTP: "hashed", … })`**. Each value carries a comment citing `passwordless-access D2`: the defaults nobody chose (300 s, plain text, read in 1.6.29's dist on 2026-10-02), and constitution V for the hash.
   - **In `hooks.before`**, beside the `username` refusal: on `/email-otp/send-verification-otp`, delete the `verification` rows whose identifier is `` `${type}-otp-${email.toLowerCase()}` `` before the plugin writes the new one. The comment says why: the plugin keeps old rows, and consumes the newest, so an old código comes back to life after the new one is used (D2).
   - **In the same `hooks.before`** (analysis A3): when a body to `/sign-in/email-otp` or `/update-user` carries `name`, it must be 2–80 characters once trimmed, or the request answers 400 `INVALID_NAME`. The screens check it first; this is the server's half of data-model.md's rule.
   - **`rateLimit.customRules["/sign-in/email-otp"] = { window: 60, max: 5 }`** (D3). Rewrite the limiter's comment: the plugin sets 3 per 60 s on its four paths, and `customRules` override it.
-- [ ] T006 [P] The código email in `apps/api/src/email/sender.ts`, per `contracts/codigo-email.md` (D13):
+- [X] T006 [P] The código email in `apps/api/src/email/sender.ts`, per `contracts/codigo-email.md` (D13):
   - The `sign-in` template:
     - subject: `` `${otp} es tu código para entrar — Devolada` ``;
     - body: "Escribe este código en Devolada para entrar:", the digits large and spaced, "Vence en 10 minutos.", "Si no fuiste tú, ignora este mensaje.".
   - **No `<a>` and no URL** in the template.
   - The header comment keeps "Codes, never links" and cites `passwordless-access D13` beside better-auth D4.
   - The other two templates stay until T067.
-- [ ] T007 API test helpers in `apps/api/test/helpers.ts` and `apps/api/test/setup.ts` (research D14):
+- [X] T007 API test helpers in `apps/api/test/helpers.ts` and `apps/api/test/setup.ts` (research D14):
   - **`sentCode(email)`**: the last código the sender logged for that address.
     - `setup.ts` installs a `console.log` spy in its `beforeEach`. The spy keeps every `` `[código:${kind}] ${to} → ${otp}` `` line in a map keyed by address, and the map is reset in the same `beforeEach` (constitution IV: a test starts from empty).
     - `sentCode` reads the map, and throws a named error when the address has none.
@@ -131,7 +131,7 @@ yet, except the código email's wording.
   - **`seedAuthUser` births the user without a password**: `(await auth().$context).internalAdapter.createUser({ name, email, emailVerified: true })`, with no `account` row. `seedBusiness` and `seedMember` keep their shape.
   - **`PASSWORD` and `seedPlainUser` stay until T057.** The store suite still proves the password door it keeps until PR 2.
   - **Expect failures.** The suites that sign in with a password fail until their story tasks rewrite them: T022 (`isp-signup` and one `cash-at-stores-access` case), T029, T030, T031, T040 and T041. The store side's cases that read a código, or sign the operator in with a password, are T077's, still in this phase.
-- [ ] T008 [P] Dev routes in `apps/api/src/routes/dev.ts` (research D14, D16), per `contracts/panel-access.md` § "Dev only":
+- [X] T008 [P] Dev routes in `apps/api/src/routes/dev.ts` (research D14, D16), per `contracts/panel-access.md` § "Dev only":
   - **`POST /dev/code {email, type}`**:
     - it answers only for a test address, through `testAddress()` from `bug: dev-code-readable` (PR #273): an address ending in `.invalid`, or equal to one of `DEMO`'s addresses. Anything else gets 403 `TEST_ADDRESS_ONLY`, the refusal `/dev/last-invitation` already gives;
     - it deletes the live rows, mints with `createVerificationOTP`, and answers `{ code }`;
@@ -141,11 +141,11 @@ yet, except the código email's wording.
     - `seedUser` births through `createVerificationOTP` and `signInEmailOTP({ body: { email, otp, name } })`;
     - an adopted orphan user is marked verified as today, and holds no password;
     - the seed's answer drops `admin.password`, and `DEMO.password` leaves.
-- [ ] T009 [P] `canVerifyPerson()` in `apps/admin/src/lib/auth-client.ts`, beside `passkeysSupported()` (research D7):
+- [X] T009 [P] `canVerifyPerson()` in `apps/admin/src/lib/auth-client.ts`, beside `passkeysSupported()` (research D7):
   - a promise memoized for the page's life, of `PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()`;
   - `false` when the class or the method is missing, or the call throws;
   - the comment cites D7: why the activation needs more than `window.PublicKeyCredential`.
-- [ ] T010 [P] Access helpers in `apps/admin/src/features/auth/session.ts` (research D1, D11):
+- [X] T010 [P] Access helpers in `apps/admin/src/features/auth/session.ts` (research D1, D11):
   - `sendCode(email)` → `baPost("/auth/email-otp/send-verification-otp", { email, type: "sign-in" })`;
   - `signInWithCode(email, otp, name?)` → `baPostJson("/auth/sign-in/email-otp", { email, otp, …(name ? { name } : {}) })`, returning `{ user }`;
   - `updateName(name)` → `baPost("/auth/update-user", { name })`;
@@ -182,14 +182,14 @@ yet, except the código email's wording.
   - **It never mentions a password.**
   - The test covers the list, the empty state, the step-up, both actions, and axe.
 - [ ] T014 Export `CodeInput`, `PasskeyOffer` and `KeysCard` from `packages/ui/src/index.ts`, and show each in `packages/ui/src/playground/Showcase.tsx` in both themes (depends on T011–T013).
-- [ ] T015 MSW handlers in `apps/admin/test/msw.ts` for Better Auth's access endpoints, in Better Auth's own shapes (envelope-exempt, as `baPost` expects):
+- [X] T015 MSW handlers in `apps/admin/test/msw.ts` for Better Auth's access endpoints, in Better Auth's own shapes (envelope-exempt, as `baPost` expects):
   - `POST /auth/email-otp/send-verification-otp` → `{ success: true }`;
   - `POST /auth/sign-in/email-otp` → `{ token, user }`, plus an `INVALID_OTP` variant;
   - `POST /auth/update-user` → `{ status: true }`;
   - `POST /auth/revoke-other-sessions` → `{ status: true }`.
 
   The password handlers stay until T053.
-- [ ] T077 Keep the store side green through PR 1 (analysis I1), in `apps/api/test/cash-at-stores-access.test.ts` and `tests/passkey/red.spec.ts`. PR 1 closes three things the store-side tests lean on, and the passkey layer gates the deploy to dev:
+- [X] T077 Keep the store side green through PR 1 (analysis I1), in `apps/api/test/cash-at-stores-access.test.ts` and `tests/passkey/red.spec.ts`. PR 1 closes three things the store-side tests lean on, and the passkey layer gates the deploy to dev:
   - **T005 hashes the códigos**, so `lastCodeFor` reads nothing. The three store cases that read one (lines 237, 256 and 315 on 2026-10-02) take it from `sentCode`. `lastCodeFor` itself leaves `helpers.ts` with T029, which rewrites its last reader, instead of in T057;
   - **T021 closes `/auth/sign-up/email`.** The `username` refusals sent there (lines 61–73) move to `/sign-in/email-otp` and `/update-user`, which stay open. T016 asserts the 404;
   - **T034 closes `/auth/sign-in/email`, and T008 seeds the demo without a password and retires `/dev/last-code`.** In `red.spec.ts`, the operator gets in with `POST /dev/code` and `sign-in/email-otp` (lines 37–38), and the shopkeeper's verification código comes from `POST /dev/code {type: "email-verification"}` (line 58).

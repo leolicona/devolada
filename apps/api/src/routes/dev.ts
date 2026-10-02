@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings } from "../env";
-import { businesses, invitation, member, organization, user as userTable, verification } from "../db/schema";
+import { account, businesses, invitation, member, organization, user as userTable, verification } from "../db/schema";
 import { upsertIntegration } from "../integrations/store";
 import { issueCredential, listCredentials, revokeCredential } from "../api-clients/store";
 import { makeAuth } from "../auth/better";
@@ -18,9 +18,11 @@ import { tailOf } from "../consta/bundle/match";
 
 export const dev = new Hono<{ Bindings: Bindings }>();
 
+/* passwordless-access D16: the demo holds no password. A developer gets in
+   with a código — from the API's console, where it prints without
+   RESEND_API_KEY, or from `POST /dev/code` below. */
 const DEMO = {
   ispEmail: "demo@devolada.app",
-  password: "devolada123",
   credential: "Demo (real)",
   testCredential: "Demo (prueba)",
 };
@@ -76,7 +78,7 @@ dev.post("/direct-payment-sweep", async (c) => {
    (wrangler.jsonc `env.dev`), so what an email would carry is read only for
    a test address: one in `.invalid`, the domain RFC 2606 reserves so no
    mailbox can exist there (no real person owns, verifies or is invited at
-   one), or the demo account, whose password /dev/seed already hands out.
+   one), or the demo account, whose código /dev/code hands out by design.
    Anything else, the empty query included, is refused before a row is read. */
 const testAddress = (email: string | undefined): string | null => {
   const address = (email ?? "").trim().toLowerCase();
@@ -84,20 +86,33 @@ const testAddress = (email: string | undefined): string | null => {
 };
 const notTestAddress = { success: false, error: { code: "TEST_ADDRESS_ONLY" } } as const;
 
-/* The journey e2e (tests/passkey/identity-journey.spec.ts) reads what
-   the emails would carry: the last código for an address, and the last
-   invitation id sent to one. */
-dev.get("/last-code", async (c) => {
-  const address = testAddress(c.req.query("email"));
+const CODE_TYPES = new Set(["sign-in", "email-verification", "forget-password"]);
+
+/* passwordless-access D14, D15: the passkey journeys get what an email
+   would carry. Códigos are stored hashed now (D2), so there are no digits
+   to read back: this mints a fresh one through the plugin's own
+   server-only door and answers it, replacing the address's live código of
+   that kind (one live row per address, as T005's hook keeps it). Only for
+   a test address (`testAddress`, bug: dev-code-readable): the deployed dev
+   Worker runs with ENVIRONMENT=dev too, and a código for any address would
+   open any account there. `GET /dev/last-code` retired with it. */
+dev.post("/code", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { email?: unknown; type?: unknown };
+  const address = testAddress(typeof body.email === "string" ? body.email : undefined);
   if (!address) return c.json(notTestAddress, 403);
-  const rows = await drizzle(c.env.DB).select().from(verification);
-  /* The identifier ends in "-<address>" (`sign-in-otp-…`): matched whole,
-     never as a substring — `ana.invalid` is inside a real
-     `sign-in-otp-ana.invalid@gmail.com` (bug: dev-code-readable) */
-  const row = rows.filter((r) => r.identifier.toLowerCase().endsWith(`-${address}`)).at(-1);
-  const code = row ? /\d{6}/.exec(row.value)?.[0] : undefined;
-  return c.json({ success: true, data: { code: code ?? null } });
+  const type = body.type ?? "sign-in";
+  if (typeof type !== "string" || !CODE_TYPES.has(type)) {
+    return c.json({ success: false, error: { code: "VALIDATION" } }, 400);
+  }
+  await drizzle(c.env.DB).delete(verification).where(eq(verification.identifier, `${type}-otp-${address}`));
+  const code = await makeAuth(c.env).api.createVerificationOTP({
+    body: { email: address, type: type as "sign-in" | "email-verification" | "forget-password" },
+  });
+  return c.json({ success: true, data: { code } });
 });
+
+/* The journey e2e (tests/passkey/identity-journey.spec.ts) reads the last
+   invitation id sent to an address: what the invitation email would carry. */
 
 dev.get("/last-invitation", async (c) => {
   const email = testAddress(c.req.query("email"));
@@ -111,26 +126,28 @@ dev.post("/seed", async (c) => {
   const db = drizzle(c.env.DB);
   const ba = makeAuth(c.env);
 
-  /* Creates the Better Auth user (email pre-verified: demo data) and
-     returns its id. The signup OTP goes to the console — harmless. */
+  /* passwordless-access D16: the demo user is born the way every person
+     is now — through the email-OTP plugin's door, by a código minted and
+     consumed on the spot — so it is verified, named, and holds no
+     password. */
   async function seedUser(name: string, email: string) {
-    const { response } = await ba.api.signUpEmail({
-      body: { name, email, password: DEMO.password },
-      returnHeaders: true,
-    });
-    await db
-      .update(userTable)
-      .set({ emailVerified: true })
-      .where(eq(userTable.id, response.user.id));
-    return response.user.id;
+    await db.delete(verification).where(eq(verification.identifier, `sign-in-otp-${email}`));
+    const otp = await ba.api.createVerificationOTP({ body: { email, type: "sign-in" } });
+    const { user } = await ba.api.signInEmailOTP({ body: { email, otp, name } });
+    return user.id;
   }
 
   let [demoUser] = await db.select().from(userTable).where(eq(userTable.email, DEMO.ispEmail));
   const userId = demoUser ? demoUser.id : await seedUser("ISP Demo", DEMO.ispEmail);
   /* An adopted orphan is demo data too: verified, or the gate (better-auth
-     D16) would send the demo password to the código screen. */
-  if (demoUser && !demoUser.emailVerified) {
-    await db.update(userTable).set({ emailVerified: true }).where(eq(userTable.id, demoUser.id));
+     D16) would revoke its session; and, like every account now, without a
+     password (passwordless-access D5 — the sweep would erase it within a
+     minute anyway; the seed does not wait for it). */
+  if (demoUser) {
+    if (!demoUser.emailVerified) {
+      await db.update(userTable).set({ emailVerified: true }).where(eq(userTable.id, demoUser.id));
+    }
+    await db.delete(account).where(and(eq(account.userId, demoUser.id), eq(account.providerId, "credential")));
   }
 
   let [business] = await db.select().from(businesses).where(eq(businesses.email, DEMO.ispEmail));
@@ -197,7 +214,7 @@ dev.post("/seed", async (c) => {
   return c.json({
     success: true,
     data: {
-      admin: { email: DEMO.ispEmail, password: DEMO.password },
+      admin: { email: DEMO.ispEmail },
       /* `Authorization: Bearer <key>` on /v1; `testKey` runs the whole
          flow with no bank transfer (contracts/public-api.md) */
       api: { key: real.plaintext, testKey: test.plaintext },

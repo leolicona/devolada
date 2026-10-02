@@ -36,6 +36,14 @@ export const fail = (code: string, status: number) =>
 export const baOk = () => HttpResponse.json({});
 export const baFail = (code: string, status: number) =>
   HttpResponse.json({ code }, { status });
+export const baStatus = (body: Record<string, unknown>) => HttpResponse.json(body);
+
+/* passwordless-access D1: `sign-in/email-otp`'s answer — the session token
+   and the user (the cookie is the browser's business, not the test's) */
+export const baSignedIn = (user: { id: string; name: string; email: string; emailVerified: boolean } = sessionUser) =>
+  HttpResponse.json({ token: "test-session-token", user });
+/* Better Auth's limiter answers 429 with its own body (D3, FR-027) */
+export const baTooMany = () => HttpResponse.json({ message: "Too many requests. Please try again later." }, { status: 429 });
 
 export const handlers = {
   session: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/auth/me", () => r()),
@@ -46,6 +54,17 @@ export const handlers = {
   sendCode: (r: (info: { request: Request }) => ReturnType<typeof baOk | typeof baFail> | Promise<ReturnType<typeof baOk | typeof baFail>>) =>
     http.post("/auth/email-otp/send-verification-otp", ({ request }) => r({ request })),
   /* better-auth D18: the passkey list and its "Quitar" */
+  /* passwordless-access D1, D11, D14: Better Auth's access endpoints, in
+     Better Auth's own shapes (envelope-exempt, as `baPost` expects). Each
+     handler hands the request over, so a test can read the body it sent. */
+  requestCode: (r: (body: Record<string, unknown>) => Response | Promise<Response> = () => baStatus({ success: true })) =>
+    http.post("/auth/email-otp/send-verification-otp", async ({ request }) => r((await request.json()) as Record<string, unknown>)),
+  signInCode: (r: (body: Record<string, unknown>) => Response | Promise<Response> = () => baSignedIn()) =>
+    http.post("/auth/sign-in/email-otp", async ({ request }) => r((await request.json()) as Record<string, unknown>)),
+  updateUser: (r: (body: Record<string, unknown>) => Response | Promise<Response> = () => baStatus({ status: true })) =>
+    http.post("/auth/update-user", async ({ request }) => r((await request.json()) as Record<string, unknown>)),
+  revokeOtherSessions: (r: () => Response | Promise<Response> = () => baStatus({ status: true })) =>
+    http.post("/auth/revoke-other-sessions", () => r()),
   passkeyList: (r: () => Response) => http.get("/auth/passkey/list-user-passkeys", () => r()),
   passkeyDelete: (r: (body: unknown) => ReturnType<typeof baOk | typeof baFail>) =>
     http.post("/auth/passkey/delete-passkey", async ({ request }) => r(await request.json())),

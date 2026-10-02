@@ -4,7 +4,14 @@ import type { Bindings } from "../env";
    link signs in the device that opens the email; a code is read anywhere
    and typed where the session belongs. Copy is es-MX product copy.
    With RESEND_API_KEY it posts to Resend; without it (dev) it logs the
-   code so the flow stays fully testable. */
+   code so the flow stays fully testable.
+
+   passwordless-access D13 (contracts/codigo-email.md): the `sign-in`
+   template is the one email for registration and sign-in alike — the
+   server must not say which is happening (FR-005). The digits ride the
+   subject so a phone's notification shows them, and the email carries no
+   `<a>` and no URL (FR-024). The log line below is a contract too: the API
+   suite's `sentCode` reads it (D14). */
 
 const templates = {
   "email-verification": {
@@ -15,7 +22,7 @@ const templates = {
   "sign-in": {
     subject: (otp: string) => `${otp} es tu código para entrar — Devolada`,
     body: (otp: string) =>
-      `<p>Escribe este código en Devolada para entrar:</p><p style="font-size:24px;font-weight:bold;letter-spacing:4px">${otp}</p><p>Si no fuiste tú, ignora este mensaje.</p>`,
+      `<p>Escribe este código en Devolada para entrar:</p><p style="font-size:32px;font-weight:bold;letter-spacing:8px">${otp}</p><p>Vence en 10 minutos.</p><p>Si no fuiste tú, ignora este mensaje.</p>`,
   },
   "forget-password": {
     subject: (otp: string) => `${otp} es tu código para recuperar tu acceso — Devolada`,

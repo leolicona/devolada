@@ -4,14 +4,20 @@ import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { organization, session as sessionTable, storeInvitations, stores, user as userTable } from "../src/db/schema";
 import type { Bindings } from "../src/env";
-import { app, json, lastCodeFor, PASSWORD, seedBusiness, sessionCookieHeader, sessionOf } from "./helpers";
+import { app, json, mintCode, PASSWORD, seedBusiness, sentCode, sessionCookieHeader, sessionOf } from "./helpers";
 import { seedActiveStore, seedStore, seedStoreChannel, storeSession } from "./store-helpers";
 
 /* cash-at-stores US3 (T014, T041) — the shopkeeper is a second kind of
    actor (D2): refused by every business door, resolved by its own row on
    every request, signed in by phone through the username plugin, which
    only the acceptance route may write (D3). The M1 measurements of
-   quickstart §0 are the first describe: they decide D3 and D5. */
+   quickstart §0 are the first describe: they decide D3 and D5.
+
+   passwordless-access US2 (T077): the panel's password doors close in PR 1
+   while the store keeps its phone and password until US6. The códigos are
+   hashed now (D2), so they come from the sender's log (`sentCode`), and the
+   `username` refusals once proven on `/sign-up/email` — closed, 404 — are
+   proven on the doors that stay open. */
 
 beforeAll(() => {
   fetchMock.activate();
@@ -58,23 +64,31 @@ describe("cash-at-stores US3 — M1: the username plugin on a local D1 (D3, D5)"
     expect(((await res.json()) as { code: string }).code).toBe(((await unknown.json()) as { code: string }).code);
   });
 
-  it("POST /auth/sign-up/email with a username is refused, and no user is born", async () => {
+  it("a right código with a username in the body is refused, and no user is born (passwordless-access US2)", async () => {
+    const otp = await mintCode("intruso@correo.mx");
     const res = await call(
-      "/auth/sign-up/email",
-      json({ name: "Intruso", email: "intruso@correo.mx", password: PASSWORD, username: "5512345678" }),
+      "/auth/sign-in/email-otp",
+      json({ email: "intruso@correo.mx", otp, name: "Intruso", username: "5512345678" }),
     );
     expect(res.status).toBe(400);
     expect(((await res.json()) as { code: string }).code).toBe("USERNAME_NOT_ALLOWED");
     expect(await db().select().from(userTable).where(eq(userTable.email, "intruso@correo.mx"))).toHaveLength(0);
   });
 
-  it("a displayUsername on sign-up is refused too — the plugin would copy it into username (measured)", async () => {
+  it("a displayUsername is refused too, on the código door and on update-user — the plugin would copy it into username (measured)", async () => {
+    const otp = await mintCode("intruso@correo.mx");
     const res = await call(
-      "/auth/sign-up/email",
-      json({ name: "Intruso", email: "intruso@correo.mx", password: PASSWORD, displayUsername: "5512345678" }),
+      "/auth/sign-in/email-otp",
+      json({ email: "intruso@correo.mx", otp, name: "Intruso", displayUsername: "5512345678" }),
     );
     expect(res.status).toBe(400);
     expect(((await res.json()) as { code: string }).code).toBe("USERNAME_NOT_ALLOWED");
+
+    await seedBusiness();
+    const cookie = await sessionCookieHeader("demo@devolada.app");
+    const update = await call("/auth/update-user", withCookie(cookie, json({ displayUsername: "5512345678" })));
+    expect(update.status).toBe(400);
+    expect(((await update.json()) as { code: string }).code).toBe("USERNAME_NOT_ALLOWED");
   });
 
   it("POST /auth/update-user {username} is refused for a signed-in user", async () => {
@@ -234,7 +248,7 @@ describe("cash-at-stores US3 — the invitation: preview, acceptance, the códig
     const early = await call("/auth/sign-in/username", json({ username: "5512345678", password: "secreta123" }));
     expect(early.status).toBe(403);
 
-    const verified = await call("/auth/email-otp/verify-email", json({ email: "lupita@correo.mx", otp: await lastCodeFor("lupita@correo.mx") }));
+    const verified = await call("/auth/email-otp/verify-email", json({ email: "lupita@correo.mx", otp: sentCode("lupita@correo.mx") }));
     expect(verified.status).toBe(200);
     const me = await call("/auth/me", withCookie(sessionOf(verified)));
     expect((await me.json()).data).toMatchObject({ type: "store", storeId: store.id });
@@ -253,7 +267,7 @@ describe("cash-at-stores US3 — the invitation: preview, acceptance, the códig
     const [row] = await db().select().from(stores).where(eq(stores.id, store.id));
     expect(row.userId).toBe(user.id);
     /* the password still opens the door once the código is typed */
-    const verified = await call("/auth/email-otp/verify-email", json({ email: "lupita@correo.mx", otp: await lastCodeFor("lupita@correo.mx") }));
+    const verified = await call("/auth/email-otp/verify-email", json({ email: "lupita@correo.mx", otp: sentCode("lupita@correo.mx") }));
     expect(verified.status).toBe(200);
     const signIn = await call("/auth/sign-in/username", json({ username: "5512345678", password: "secreta123" }));
     expect(signIn.status).toBe(200);
@@ -312,7 +326,7 @@ describe("cash-at-stores US3 — the invitation: preview, acceptance, the códig
   it("recovery: the forget-password código resets the password, and the phone signs in with the new one (FR-011)", async () => {
     const { email } = await seedActiveStore({ phone: "5512345678" });
     expect((await call("/auth/email-otp/send-verification-otp", json({ email, type: "forget-password" }))).status).toBe(200);
-    const reset = await call("/auth/email-otp/reset-password", json({ email, otp: await lastCodeFor(email), password: "nueva-clave-1" }));
+    const reset = await call("/auth/email-otp/reset-password", json({ email, otp: sentCode(email), password: "nueva-clave-1" }));
     expect(reset.status).toBe(200);
     expect((await call("/auth/sign-in/username", json({ username: "5512345678", password: PASSWORD }))).status).toBe(401);
     expect((await call("/auth/sign-in/username", json({ username: "5512345678", password: "nueva-clave-1" }))).status).toBe(200);

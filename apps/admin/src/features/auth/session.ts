@@ -77,6 +77,22 @@ export const signup = (name: string, email: string, password: string) =>
 
 export const logout = () => baPost("/auth/sign-out");
 
+/* passwordless-access D1: one door for registration and sign-in — the
+   email-OTP plugin's. A código goes out for any well-formed address, and
+   the account is born, verified and named, only when it is typed (FR-004,
+   FR-005, FR-013). `name` rides only from the registration screen. */
+export const sendCode = (email: string) =>
+  baPost("/auth/email-otp/send-verification-otp", { email, type: "sign-in" });
+
+export const signInWithCode = (email: string, otp: string, name?: string) =>
+  baPostJson<{ user: SessionUser }>("/auth/sign-in/email-otp", { email, otp, ...(name ? { name } : {}) });
+
+/* D1, D6: a person born through the sign-in door has no name yet; /welcome asks */
+export const updateName = (name: string) => baPost("/auth/update-user", { name });
+
+/* D11: better-auth D17's guarantee without a password — every other session ends */
+export const revokeOtherSessions = () => baPost("/auth/revoke-other-sessions");
+
 /* The user behind the session, business or not — the wizard and the
    invitation page need it before any membership exists (US-B01/B02). */
 export type SessionUser = { id: string; name: string; email: string; emailVerified: boolean };

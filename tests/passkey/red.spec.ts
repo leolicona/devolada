@@ -6,7 +6,13 @@ import { createStoreResponse } from "../../apps/api/src/routes/platform/schema";
    shopkeeper accepts the invitation with an email and a password, types
    the código, lands on the counter, turns on *huella o rostro* in Caja,
    signs out, and signs back in with the passkey alone. Chromium's virtual
-   authenticator plays the phone. */
+   authenticator plays the phone.
+
+   passwordless-access US2 (T077): the panel's password door closed in PR 1
+   and the demo holds no password, so the operator gets in with a código
+   from `POST /dev/code`; códigos are hashed (D2), so the shopkeeper's is
+   minted there too instead of read back. The store app itself keeps its
+   phone and password until US6. */
 
 const API = "http://localhost:8794";
 const ADMIN = "http://localhost:5174";
@@ -35,7 +41,9 @@ test("cash-at-stores US3: a shopkeeper accepts, enrols a passkey on red, and sig
      signs in from the panel's origin and creates the store */
   const operator = await request.newContext({ baseURL: API, extraHTTPHeaders: { Origin: ADMIN } });
   expect((await operator.post("/dev/seed")).ok()).toBe(true);
-  const signIn = await operator.post("/auth/sign-in/email", { data: { email: "demo@devolada.app", password: "devolada123" } });
+  const minted = await operator.post("/dev/code", { data: { email: "demo@devolada.app", type: "sign-in" } });
+  const { code: operatorCode } = ((await minted.json()) as { data: { code: string } }).data;
+  const signIn = await operator.post("/auth/sign-in/email-otp", { data: { email: "demo@devolada.app", otp: operatorCode } });
   expect(signIn.ok(), await signIn.text()).toBe(true);
   const created = await operator.post("/platform/stores", {
     data: { name: `Tienda ${stamp}`, address: "Calle de Prueba 1, Centro", shopkeeperName: "Tendero de Prueba", phone },
@@ -55,7 +63,7 @@ test("cash-at-stores US3: a shopkeeper accepts, enrols a passkey on red, and sig
   await expect(page.getByText(`Te enviamos un código a ${email}`)).toBeVisible();
 
   const reader = await browser.newContext();
-  const res = await reader.request.get(`${API}/dev/last-code?email=${encodeURIComponent(email)}`);
+  const res = await reader.request.post(`${API}/dev/code`, { data: { email, type: "email-verification" } });
   const { code } = ((await res.json()) as { data: { code: string | null } }).data;
   await reader.close();
   expect(code).toMatch(/^\d{6}$/);

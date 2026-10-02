@@ -41,6 +41,11 @@
   removed the choice screen, the per-store methods, the per-payment mark in
   Pagos and the new entity. The Clarifications keep both sessions, and
   mark what the second one replaced.
+- The same day the creator fixed the final names, `SPEI -
+  LINK.DEVOLADAPAGO` and `CASH - RED.DEVOLADAPAGO`. Reading the adapter
+  showed that "CASH" matches today's rule for the cash method, so FR-012
+  (the cash method is never one of Devolada's) and an edge case on rollout
+  order were added, and FR-003's tolerance now names the dot.
 - The method names appear in the spec because they are product copy the
   business types into its own system, and the creator fixed them. FR-011
   places them in the adapter, so the core never carries them.

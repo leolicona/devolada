@@ -18,7 +18,9 @@ tienda", and then "Sí, reescribe la spec 019 con formas de pago". On
 2026-10-02: "devoladapago determina el nombre y descripción de la forma de
 pago: ejemplo 1: SPEI - LINK DEVOLADAPAGO. Ejemplo 2: EFECTIVO - RED
 DEVOLADAPAGO. Este incremento va a nivel de adaptador, en este caso, del
-adaptador wisphub."
+adaptador wisphub." The same day, the final names: "El nombre exacto como
+lo registres es SPEI - LINK.DEVOLADAPAGO y CASH - RED.DEVOLADAPAGO, me
+parecen mas adecuados."
 
 ## Where this comes from
 
@@ -48,8 +50,7 @@ the whole increment lives in the adapter.
 
 So this feature keeps one promise: **every payment Devolada records in a
 business's system carries the payment method Devolada named for where the
-money came in — `SPEI - LINK DEVOLADAPAGO` for SPEI, `EFECTIVO - RED
-DEVOLADAPAGO` for cash at the network's stores — whenever the business has
+money came in — `SPEI - LINK.DEVOLADAPAGO` for SPEI, `CASH - RED.DEVOLADAPAGO` for cash at the network's stores — whenever the business has
 created it, and a reference that ties it back to Devolada.** The business
 filters its own system by that method and downloads the list.
 
@@ -63,8 +64,7 @@ filters its own system by that method and downloads the list.
   at any store, spec 018). The core already records it on every payment.
 - **Devolada's methods**: the two payment methods Devolada names, one per
   channel. The names belong to the adapter that records the payment; for
-  the WispHub adapter they are `SPEI - LINK DEVOLADAPAGO` and `EFECTIVO -
-  RED DEVOLADAPAGO`. The business creates each one, once, in its own
+  the WispHub adapter they are `SPEI - LINK.DEVOLADAPAGO` and `CASH - RED.DEVOLADAPAGO`. The business creates each one, once, in its own
   system (R6).
 - **The cash method**: the method Devolada uses today for every payment,
   found in the business's system the way it is found today. It stays the
@@ -102,7 +102,7 @@ any code, never with a test write on the pilot's live billing.
 | M1 | What does the business's system answer when a payment names a method that does not exist, or one that was deleted? | How the adapter falls back (FR-004) when a method disappears between the moment it was read and the moment the payment is recorded, without leaving the action waiting. |
 | M2 | Does the system's own screen filter paid invoices by payment method, and does its download carry the method and the reference? | The outcome the business asked for (US1, SC-002). R5 measured the provider's list filter, not the screen the owner uses. |
 | M3 | Does the system's screen show the reference on a paid invoice? | Whether the owner reads the folio, the clave de rastreo and the store in its own system, or only in a download (US3). |
-| M4 | When the business creates a method, does the system keep its name exactly as typed (capitals, accents, the dash and its spaces), and does a method have a description of its own? | How tolerant the match by name must be (FR-003), and what the setup instructions ask the business to type (FR-008). |
+| M4 | When the business creates a method, does the system keep its name exactly as typed (capitals, accents, the dash, the dot and their spaces), and does a method have a description of its own? | How tolerant the match by name must be (FR-003), and what the setup instructions ask the business to type (FR-008). |
 
 ## Clarifications
 
@@ -126,11 +126,21 @@ any code, never with a test write on the pilot's live billing.
 
 ### Session 2026-10-02
 
-- Q: Who names the payment methods? → A: **Devolada.** `SPEI - LINK
-  DEVOLADAPAGO` for SPEI, `EFECTIVO - RED DEVOLADAPAGO` for cash at the
-  network's stores. This replaces the business choosing from its list in
-  Devolada. The business still creates each method once in its own system,
-  with that name, because Devolada cannot (R6).
+- Q: Who names the payment methods? → A: **Devolada.** `SPEI -
+  LINK.DEVOLADAPAGO` for SPEI, `CASH - RED.DEVOLADAPAGO` for cash at the
+  network's stores (the creator's final names; the first example read
+  `SPEI - LINK DEVOLADAPAGO` and `EFECTIVO - RED DEVOLADAPAGO`). This
+  replaces the business choosing from its list in Devolada. The business
+  still creates each method once in its own system, with that name,
+  because Devolada cannot (R6).
+- Q: The network's name says "CASH", and today the adapter takes as the
+  cash method the first method whose name says "efect" or "cash". Could it
+  take `CASH - RED.DEVOLADAPAGO` instead of the business's own cash
+  method? → A: **Yes, depending on the order the business's system lists
+  its methods** (read in the adapter, 2026-10-02). A business whose cash
+  method is called "Efectivo" would get `CASH - RED.DEVOLADAPAGO` first.
+  So the cash method must never be one of Devolada's methods (FR-012), and
+  no business creates `CASH - RED.DEVOLADAPAGO` before this feature ships.
 - Q: One method per store, or one for the network? → A: **One for the
   whole network**, from the creator's example. The per-store detail is not
   lost: the reference carries the store's name (US3), and Puntos de pago
@@ -146,8 +156,7 @@ any code, never with a test write on the pilot's live billing.
 
 ### User Story 1 - The business downloads what came in by SPEI (Priority: P1)
 
-The owner creates, once, a payment method called `SPEI - LINK
-DEVOLADAPAGO` in their own system. From then on, every SPEI payment
+The owner creates, once, a payment method called `SPEI - LINK.DEVOLADAPAGO` in their own system. From then on, every SPEI payment
 Devolada records carries that method; nothing has to be chosen in
 Devolada. In their own system, the owner filters the paid invoices by that
 method and a date range, and downloads the list. Every SPEI payment
@@ -158,14 +167,13 @@ counter is.
 business cannot tell Devolada's payments from its counter's, and it cannot
 reconcile either.
 
-**Independent Test**: On the demo tenant, create `SPEI - LINK
-DEVOLADAPAGO`. Pay two links by SPEI, and collect one invoice at the
+**Independent Test**: On the demo tenant, create `SPEI - LINK.DEVOLADAPAGO`. Pay two links by SPEI, and collect one invoice at the
 counter with the cash method. Filter the paid invoices by the new method:
 the two links' invoices are there and the counter's is not.
 
 **Acceptance Scenarios**:
 
-1. **Given** a business whose system has `SPEI - LINK DEVOLADAPAGO`,
+1. **Given** a business whose system has `SPEI - LINK.DEVOLADAPAGO`,
    **When** a payer pays a link and Devolada records the payment, **Then**
    the business's system shows that method on the payment.
 2. **Given** the same business, **When** a payment is recorded and leaves
@@ -190,7 +198,7 @@ the two links' invoices are there and the counter's is not.
 ### User Story 2 - The network's cash under its own method (Priority: P2)
 
 For a business with the store channel on, the owner creates, once, a
-payment method called `EFECTIVO - RED DEVOLADAPAGO`. Every cash payment any
+payment method called `CASH - RED.DEVOLADAPAGO`. Every cash payment any
 store of the network records for the business carries that method. The
 owner filters by it to see all the network's cash in their system, and
 checks it against the hand-overs in Puntos de pago. The store of each
@@ -199,20 +207,19 @@ payment is in its reference (US3).
 **Why this priority**: SPEI is the pilot's request and the larger flow.
 The store channel is newer (spec 018).
 
-**Independent Test**: On the demo tenant, create `EFECTIVO - RED
-DEVOLADAPAGO`, and record one cash payment at each of two stores. Filter by
+**Independent Test**: On the demo tenant, create `CASH - RED.DEVOLADAPAGO`, and record one cash payment at each of two stores. Filter by
 the method: both invoices are there, neither appears under the SPEI
 method, and each reference names its own store.
 
 **Acceptance Scenarios**:
 
-1. **Given** a business whose system has `EFECTIVO - RED DEVOLADAPAGO`,
+1. **Given** a business whose system has `CASH - RED.DEVOLADAPAGO`,
    **When** any store records a cash payment for it, **Then** the
    business's system shows that method on the payment.
 2. **Given** a business whose system does not have it, **When** a store
    records a cash payment, **Then** Devolada records it with the cash
    method, exactly as today, and the action runs without waiting.
-3. **Given** a business that created only `SPEI - LINK DEVOLADAPAGO`,
+3. **Given** a business that created only `SPEI - LINK.DEVOLADAPAGO`,
    **When** a store records a cash payment, **Then** it is recorded with
    the cash method; the two channels are independent.
 4. **Given** a business whose store channel is off, **When** a member opens
@@ -292,6 +299,12 @@ one, run the test: it shows found, the other still missing.
 - **A business that never creates the methods** sees no change in how its
   payments are recorded: the cash method, as today. The integration's
   screen shows the setup steps (US4) and nothing else.
+- **A business creates the methods before this feature ships.** Today's
+  adapter does not know them: `SPEI - LINK.DEVOLADAPAGO` is ignored, but
+  `CASH - RED.DEVOLADAPAGO` may be taken as the cash method for every
+  payment, SPEI included (Clarifications 2026-10-02). The setup
+  instructions reach a business only with the release that carries
+  FR-012.
 - **Someone at the counter uses one of Devolada's methods by hand.** Those
   payments appear in the list too, and Devolada cannot tell them apart.
   The screen asks the business to use these methods only for Devolada
@@ -307,7 +320,7 @@ one, run the test: it shows found, the other still missing.
   in the new account. If they do not exist there, payments fall back until
   the business creates them.
 - **A store collects for two businesses.** Each business has its own
-  `EFECTIVO - RED DEVOLADAPAGO` in its own system. A method is never
+  `CASH - RED.DEVOLADAPAGO` in its own system. A method is never
   shared between businesses.
 - **A payment that needs an invoice Devolada creates to carry it** (the
   customer owes only a carried balance). The payment carries the method
@@ -326,16 +339,16 @@ one, run the test: it shows found, the other still missing.
 ### Functional Requirements
 
 - **FR-001**: Every SPEI payment Devolada records in the business's system
-  MUST carry the method named `SPEI - LINK DEVOLADAPAGO`, when the
+  MUST carry the method named `SPEI - LINK.DEVOLADAPAGO`, when the
   business's system has it.
 - **FR-002**: Every store cash payment Devolada records in the business's
-  system MUST carry the method named `EFECTIVO - RED DEVOLADAPAGO`, when the
+  system MUST carry the method named `CASH - RED.DEVOLADAPAGO`, when the
   business's system has it, whichever store recorded it.
 - **FR-003**: Each method MUST be found by its name in the business's
   system, read from that system, never by an identity remembered from
   another account. The match MUST forgive capitals, accents and the spaces
-  around the dash, within what M4 measures. When two methods match, the
-  same one MUST be used every time.
+  around the dash and the dot, within what M4 measures. When two methods
+  match, the same one MUST be used every time.
 - **FR-004**: When the business's system has no method with the channel's
   name, or the method disappears before the payment is recorded (M1),
   Devolada MUST record the payment with the cash method, exactly as today.
@@ -375,6 +388,12 @@ one, run the test: it shows found, the other still missing.
   payments. The core adds no choice, no table and no screen of its own,
   and an adapter whose system has no payment methods ignores what it
   does not use.
+- **FR-012**: The cash method — the fallback, and the method every payment
+  carries while no Devolada method exists — MUST never be one of
+  Devolada's methods, whatever their names say and in whatever order the
+  business's system lists them. A business that has only Devolada's
+  methods and no cash method of its own MUST keep the behaviour it has
+  today for that case.
 
 ### Key Entities
 
@@ -390,11 +409,10 @@ No new entity. The feature reads what exists:
 
 ### Measurable Outcomes
 
-- **SC-001**: From the moment a business creates `SPEI - LINK
-  DEVOLADAPAGO`, 100% of the SPEI payments Devolada records carry it,
+- **SC-001**: From the moment a business creates `SPEI - LINK.DEVOLADAPAGO`, 100% of the SPEI payments Devolada records carry it,
   checked on the pilot's first 30 payments after it is created.
 - **SC-002**: For any month after that, the number of paid invoices in the
-  business's own download, filtered by `SPEI - LINK DEVOLADAPAGO`, equals
+  business's own download, filtered by `SPEI - LINK.DEVOLADAPAGO`, equals
   the number of SPEI payments Devolada's Pagos shows as recorded in the
   business's system in that month: zero missing, zero extra.
 - **SC-003**: The owner gets that download in under 2 minutes with their
@@ -405,8 +423,7 @@ No new entity. The feature reads what exists:
   choose in Devolada.
 - **SC-005**: No action waits because of a payment method: zero payments
   queued for a missing method.
-- **SC-006**: For any period, the cash recorded under `EFECTIVO - RED
-  DEVOLADAPAGO` in the business's system equals the store cash Devolada's
+- **SC-006**: For any period, the cash recorded under `CASH - RED.DEVOLADAPAGO` in the business's system equals the store cash Devolada's
   Pagos shows for that business in the same period; per store, the
   references add up to each store's cash.
 

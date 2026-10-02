@@ -751,6 +751,16 @@ export const integrations = sqliteTable(
        zero writes to WispHub. New rows are born observing; the phase-5
        migration backfilled existing businesses with true. */
     actionsEnabled: integer("actions_enabled", { mode: "boolean" }).notNull().default(false),
+    /* payment-method-per-channel D16: the last moment Devolada read this
+       business's payment methods fresh, for the stored key and
+       installation, and the provider answered — the setup read, the test
+       of the saved connection, a passing execution gate (D14) — or saved
+       a new key or installation (no provider call for that). The
+       adapter's method-list cache key carries it as its version, so a
+       new stamp makes the next payment, in any data center, read the
+       list again (FR-014). The setup routes write it; the adapter only
+       reads it from the row its caller holds. Null until the first. */
+    paymentMethodsSeenAt: integer("payment_methods_seen_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("integrations_business_idx").on(t.businessId)],

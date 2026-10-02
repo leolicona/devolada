@@ -12,6 +12,7 @@ import {
   ArrowDownToLine,
   Check,
   CheckCircle2,
+  CircleDashed,
   CircleMinus,
   CirclePlus,
   Clock3,
@@ -121,7 +122,16 @@ export type Status =
      for that customer could not confirm it. The second is never a zero:
      warning, so it reads as "we don't know", not as "paid up". */
   | "debtNone"
-  | "debtUnconfirmed";
+  | "debtUnconfirmed"
+  /* payment-method-per-channel D8, US4: whether one of Devolada's payment
+     methods exists in the business's WispHub. Missing is a setup step,
+     not a failure (FR-008): info, never red — until it exists the
+     payments record as cash, as they always did. Two with one name is
+     warning: it works (the oldest is used, FR-003) and someone should
+     tidy it. */
+  | "methodFound"
+  | "methodMissing"
+  | "methodDuplicate";
 
 type Tone = "success" | "warning" | "error" | "info";
 
@@ -175,6 +185,9 @@ const statuses: Record<
   installationAssumed: { tone: "info", icon: CircleHelp, label: "Asumida" },
   debtNone: { tone: "success", icon: Check, label: "Sin adeudo" },
   debtUnconfirmed: { tone: "warning", icon: CircleHelp, label: "Sin confirmar" },
+  methodFound: { tone: "success", icon: Check, label: "Creada" },
+  methodMissing: { tone: "info", icon: CircleDashed, label: "Falta crearla" },
+  methodDuplicate: { tone: "warning", icon: AlertTriangle, label: "Repetida" },
 };
 
 /* The shared control-size vocabulary (feedback-vocabulary-rollout D11,

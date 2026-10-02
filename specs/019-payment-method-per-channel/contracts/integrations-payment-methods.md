@@ -143,7 +143,10 @@ A block *Formas de pago de Devolada* on the WispHub screen:
   `PAYMENT_METHODS_MISSING` → *"Aún falta crear una forma de pago de
   Devolada en WispHub."*; `PAYMENT_METHODS_UNCHECKED` → *"No pudimos
   revisar tus formas de pago en WispHub. Vuelve a intentar."*
-- When "Probar conexión" or a save answers `devoladaMethods`, a block
-  replaces the card's; `null` leaves the card as it is.
+- When "Probar conexión" of the saved connection, or a save, answers
+  `devoladaMethods`, a block replaces the card's; `null` leaves the card
+  as it is. A test of a typed key or another installation never touches
+  the card: the card speaks for the connection the execution gate checks
+  (`/speckit-analyze` U1, 2026-10-02).
 - While the read runs, the waiting label sits inside `<Pending>`
   (pending-lint).

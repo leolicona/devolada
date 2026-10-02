@@ -8,6 +8,7 @@ import { sweepReconnections } from "../src/reconnection/queue";
 import { app, seedBusiness, seedConfirmedPayment, seedMember, sessionCookieHeader } from "./helpers";
 import { devoladaMethods } from "../src/routes/integrations/schema";
 import { paymentMethods, rememberPaymentMethods } from "../src/wisphub/cache";
+import { cashMethodOf } from "../src/wisphub/payment-methods";
 import { WispHub } from "../src/wisphub/client";
 import {
   businessToday,
@@ -294,6 +295,24 @@ describe("payment-method-per-channel US1: the business downloads what came in by
     await sweepReconnections(env);
     expect(again.map((b) => b.forma_pago)).toEqual([7]);
     expect((await reload(next.row.id)).actionOutcome).toBe("done");
+  });
+
+  it("FR-012: with only Devolada's methods, the cash method is today's — the one that says cash, whatever the order", () => {
+    expect(cashMethodOf([SPEI, NETWORK]).id).toBe(13);
+    expect(cashMethodOf([NETWORK, SPEI]).id).toBe(13);
+    /* nothing says cash: the first, as today */
+    expect(cashMethodOf([SPEI]).id).toBe(12);
+  });
+
+  it("D6, FR-004: the method just refused is never sent again — with only Devolada's methods, the payment lands at once", async () => {
+    const { row } = await seedQueued();
+    const sent = mockRecording([SPEI, NETWORK], {
+      answers: [{ status: 400, body: { forma_pago: ['Clave primaria "12" inválida - objeto no existe.'] } }],
+      calls: 2,
+    });
+    await sweepReconnections(env);
+    expect(sent.map((b) => b.forma_pago)).toEqual([12, 13]);
+    expect(await reload(row.id)).toMatchObject({ actionOutcome: "done", actionError: null });
   });
 
   it("D6: a 400 naming another field is not a missing method — one call, and the action stays queued", async () => {

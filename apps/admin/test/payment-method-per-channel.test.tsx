@@ -204,6 +204,26 @@ describe("payment-method-per-channel US4: Formas de pago de Devolada", () => {
     await expectNoViolations(document.body);
   });
 
+  it("U1: a test of a typed key that is not saved never changes the card — it speaks for the saved connection", async () => {
+    const bodies: unknown[] = [];
+    open({ methods: () => ok(methodsBlock("missing")) });
+    server.use(
+      handlers.testWisphubIntegration((body) => {
+        bodies.push(body);
+        return ok(testResult(methodsBlock("found")));
+      }),
+    );
+    const block = await card();
+    await block.findByText("Falta crearla");
+
+    await userEvent.type(screen.getByLabelText("Nueva llave"), "otra-llave-12345");
+    await userEvent.click(screen.getByRole("button", { name: "Probar conexión" }));
+    await screen.findByText(/Conexión correcta con wisphub\.net\./);
+    expect(bodies).toEqual([{ apiKey: "otra-llave-12345" }]);
+    expect(block.getByText("Falta crearla")).toBeInTheDocument();
+    expect(block.queryByText("Creada")).not.toBeInTheDocument();
+  });
+
   it("D8: Probar conexión answering a block replaces the card's; an answer of null leaves it as it was", async () => {
     let answer: unknown = testResult(null);
     open({ methods: () => ok(methodsBlock("missing")) });

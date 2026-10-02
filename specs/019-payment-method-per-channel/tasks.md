@@ -81,6 +81,19 @@ green. The IX grep finds the two names only in the adapter. Browser layer:
 repo pins a newer one, so the run used a throwaway config pointing at the
 installed Chromium; CI runs its own.
 
+**T037 (2026-10-02)**: `/speckit-analyze` after implementation found no
+critical issue. Resolved with the creator's go-ahead:
+- C1: with only Devolada's methods the cash method follows today's rule
+  over the whole list, and a refused method is never sent again in the
+  same attempt (FR-012, FR-004; D4, D6 corrected; two tests in
+  `apps/api/test/payment-method-per-channel.test.ts`).
+- U1: the methods card takes only a test of the saved connection; a typed
+  key's test stays in the connection card (contract corrected; one test
+  in `apps/admin/test/payment-method-per-channel.test.tsx`).
+- I1–I5: research D3, plan IV, the data model, T025 and the spec's status
+  now say what was built.
+The related suites were run again: API 7 files / 103 tests, admin 3 / 47.
+
 **Release rule (D12), before any code**: the pilot must not create
 `CASH - RED.DEVOLADAPAGO` before the release that carries FR-012. Today's
 adapter would record every payment with it (R11).
@@ -240,7 +253,7 @@ reopen, and it turns on (quickstart §2, steps 3, 6–7).
 - [X] T024 [P] [US4] In `packages/ui/src/components/status-badge.tsx`, add `methodFound` (success, check, "Creada"), `methodMissing` (info, "Falta crearla") and `methodDuplicate` (warning, "Repetida"), each with a lucide icon, with a comment citing payment-method-per-channel D8 and why missing is not a failure (FR-008).
 - [X] T025 [US4] In `apps/admin/src/features/integrations/WispHubScreen.tsx`:
   - a `PaymentMethodsCard` between `KeyCard` and `MappingCard`: without a key (`wisphub.configured` false) no query and *"Conecta WispHub para revisar tus formas de pago."*; otherwise a query on `GET /integrations/wisphub/payment-methods` (its own loading inside `<Pending>`, its own error state with retry; a `409 WISPHUB_NOT_CONFIGURED` reads as the no-key text, with no retry), one line per method — the name in the mono face and the description, each field itself a `<button>` that copies its value in place (label with a copy icon, then the value; after copying, a check and "Copiado"; `navigator.clipboard.writeText`, as `ApiScreen.tsx` does), the `StatusBadge` — and the copy of `contracts/integrations-payment-methods.md` ("The screen");
-  - the network's line only when `session.storeChannel.on`;
+  - the network's line only when `session.storeChannel.on` (as built: when the block's `network` is not null, which the API derives from the same `store_channel_on`, read per request);
   - `SwitchesCard`: the switch cannot be turned on while the integration has no key (`wisphub.configured` false: "Primero conecta WispHub."), while a required line is `missing`, or while the block is unchecked, and says why, pointing at the block; it can always be turned off; the three refusal codes (`WISPHUB_NOT_CONFIGURED`, `PAYMENT_METHODS_MISSING`, `PAYMENT_METHODS_UNCHECKED`) get their es-MX copy;
   - when "Probar conexión" or a save answers `devoladaMethods`, a block replaces the card's cached block; `null` leaves it as it is.
   - Depends on T019, T024.
@@ -303,7 +316,7 @@ record lands on the invoice with the network's method (quickstart §2).
 - [X] T034 Run quickstart §1 end to end: the API and admin suites, `pnpm -r --if-present typecheck`, `node scripts/spec-lint.mjs`, `node scripts/contrast-lint.mjs`, `node scripts/pending-lint.mjs`, `node scripts/gen-banks.mjs --check`.
 - [X] T035 [P] Constitution IX check: `rg -n "DEVOLADAPAGO" apps packages --glob '!apps/api/src/wisphub/**' --glob '!**/test/**' --glob '!tests/**'` returns nothing — the names live in the adapter only (D1); the admin shows them from the contract.
 - [X] T036 [P] `pnpm e2e` (contrast and responsive on the WispHub screen, both themes).
-- [ ] T037 Run `/speckit-analyze` and resolve every CRITICAL finding before the PR is marked ready.
+- [X] T037 Run `/speckit-analyze` and resolve every CRITICAL finding before the PR is marked ready.
 - [ ] T038 Release (D12), with the creator:
   - before the `v*` tag: confirm the pilot has not created `CASH - RED.DEVOLADAPAGO`;
   - on dev, the creator runs quickstart §2 on the demo (steps 3–7);

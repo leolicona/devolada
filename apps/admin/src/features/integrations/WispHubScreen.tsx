@@ -178,18 +178,24 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
   };
 
   const keepMethods = useKeepMethods();
-  const test = useMutation<WispHubTestResponse, ApiError, string | undefined>({
-    onSuccess: (data) => keepMethods(data.devoladaMethods),
-    mutationFn: (apiKey) =>
+  /* The candidate is fixed when the button is pressed: a typed key, and
+     the installation while the pick differs from the one in use */
+  const test = useMutation<WispHubTestResponse, ApiError, { apiKey?: string; installation?: InstallationKey }>({
+    /* payment-method-per-channel D8 (/speckit-analyze U1, 2026-10-02):
+       the methods card speaks for the saved connection, the one the
+       execution gate checks. A test of a typed key or another
+       installation answers about an account not in use, so its block
+       stays in this card's result and never replaces the methods card. */
+    onSuccess: (data, candidate) => {
+      if (!candidate.apiKey && !candidate.installation) keepMethods(data.devoladaMethods);
+    },
+    mutationFn: (candidate) =>
       api<WispHubTestResponse>("/integrations/wisphub/test", {
         method: "POST",
-        body: JSON.stringify({
-          ...(apiKey ? { apiKey } : {}),
-          /* T045: while the pick differs from what is in use, the test is
-             about the door on screen. Sending nothing means the stored
-             one, which is what an unmoved picker wants. */
-          ...(moved ? { installation } : {}),
-        }),
+        /* T045: while the pick differs from what is in use, the test is
+           about the door on screen. Sending nothing means the stored
+           one, which is what an unmoved picker wants. */
+        body: JSON.stringify(candidate),
       }),
   });
   const result = test.data;
@@ -315,7 +321,7 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
           announced at the control they used. Disabled plus a changed word is
           not a signal — it is silent to a screen reader and easy to miss. */}
         <Pending active={test.isPending} label="Probando la conexión.">
-          <Button size="compact" variant="secondary" disabled={test.isPending} onClick={() => test.mutate(key.trim() || undefined)}>
+          <Button size="compact" variant="secondary" disabled={test.isPending} onClick={() => test.mutate({ apiKey: key.trim() || undefined, installation: moved ? installation : undefined })}>
             <KeyRound className="size-4" aria-hidden />
             {test.isPending ? "Probando…" : "Probar conexión"}
           </Button>

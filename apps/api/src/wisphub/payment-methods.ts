@@ -87,12 +87,19 @@ function isDevoladas(method: PaymentMethod): boolean {
    every payment with Devolada's method. Only the two names are set
    aside: a business's own "Devoladapago" stays a candidate, so no
    business's cash method changes. None left → the first method that is
-   not Devolada's; still none → the first method, today's answer for a
-   business that has only Devolada's. An empty list is today's error. */
+   not Devolada's. A business with only Devolada's methods keeps today's
+   rule whole, over the whole list (FR-012's last sentence): the first
+   that says "efect" or "cash" — `CASH - RED.DEVOLADAPAGO` when listed —
+   else the first; never "the first" alone, which would make the order of
+   the list pick the channel (/speckit-analyze C1, 2026-10-02). An empty
+   list is today's error. */
+const CASH_NAME = /efect|cash/i;
+
 export function cashMethodOf(methods: PaymentMethod[]): PaymentMethod {
   if (!methods.length) throw new WispHubError("WISPHUB_UNAVAILABLE", "no payment methods");
   const others = methods.filter((m) => !isDevoladas(m));
-  return others.find((m) => /efect|cash/i.test(m.nombre)) ?? others[0] ?? methods[0];
+  if (others.length) return others.find((m) => CASH_NAME.test(m.nombre)) ?? others[0];
+  return methods.find((m) => CASH_NAME.test(m.nombre)) ?? methods[0];
 }
 
 /* D8, US4: one line of the setup block — the name and description to

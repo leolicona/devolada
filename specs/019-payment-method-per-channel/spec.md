@@ -12,8 +12,9 @@ are a requirement for turning on automatic execution (FR-013), the
 business copies a description with each name, and a method Devolada has
 seen is used by the next payment (FR-014). Revised again after
 `/speckit-analyze` (2026-10-02): execution needs a saved connection
-(FR-013). [plan.md](plan.md) and [tasks.md](tasks.md) carry all of it;
-next is `/speckit-implement`.
+(FR-013). [plan.md](plan.md) and [tasks.md](tasks.md) carry all of it.
+**Implemented** (2026-10-02, `/speckit-implement`, T001–T037): the
+remaining step is the release with the creator (T038, D12).
 
 **Input**: User description, in the creator's words (2026-10-01): "Para el
 piloto mi cliente quiere que registremos los pagos en wisphub a nombre de

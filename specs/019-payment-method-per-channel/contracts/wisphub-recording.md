@@ -33,7 +33,9 @@ many methods could have Devolada's on the second.
    matches → the lowest `id`.
 2. No match → the cash method: the first `nombre` matching `/efect|cash/i`
    that is not one of Devolada's two names; else the first method that is
-   not one of them; else the first method (D4).
+   not one of them. With only Devolada's methods: today's rule over the
+   whole list — the first matching `/efect|cash/i`, else the first (D4).
+   After a refusal (§3), the method just refused is left out (D6).
 
 ## 3. Record
 

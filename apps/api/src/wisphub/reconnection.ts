@@ -87,7 +87,10 @@ export async function attemptReconnection(
          never one of Devolada's names as the cash method (FR-012). The
          action never waits for the business's setup (FR-004). */
       const devolada = devoladaMethodFor(methods, record.channel);
-      const cash = cashMethodOf(methods);
+      /* Chosen here, before any invoice is looked up or created: a tenant
+         with no payment method at all fails as it always did, without an
+         invoice left behind */
+      const method = devolada ?? cashMethodOf(methods);
 
       /* D1 (pays TD-009): reuse before creating. The id we already
          stored wins; otherwise ask WispHub for a pending one; only then
@@ -125,7 +128,7 @@ export async function attemptReconnection(
         }
       };
       try {
-        await register((devolada ?? cash).id);
+        await register(method.id);
       } catch (e) {
         /* payment-method-per-channel D6: the provider refused Devolada's
            method — deleted or renamed since the list was read. Measured
@@ -135,11 +138,15 @@ export async function attemptReconnection(
            list this data center holds is dropped and the same payment
            goes once more, at once, with the cash method. Any other 400 is
            what it was (WISPHUB_UNAVAILABLE): an amount or a date refused
-           under another method would hide the real error. */
+           under another method would hide the real error.
+           The cash method is chosen without the method just refused: a
+           business with only Devolada's methods could otherwise get the
+           refused one back, and the action would wait in the queue for
+           nothing (FR-004; /speckit-analyze C1, 2026-10-02). */
         const missingMethod = e instanceof WispHubError && e.status === 400 && (e.fields ?? []).includes("forma_pago");
         if (!devolada || !missingMethod) throw e;
         await forgetPaymentMethods(business.id, wisphub, record.methodsSeenAt);
-        await register(cash.id);
+        await register(cashMethodOf(methods.filter((m) => m.id !== devolada.id)).id);
       }
       paymentRegistered = true;
     }

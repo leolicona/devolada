@@ -49,7 +49,7 @@ whose system has no payment methods ignores the new fields (FR-011).
 | The cache key's version | `payment_methods_seen_at` in ms, or none | Taken from the integration row; a new stamp is a new key in every data center (D16) |
 | Devolada's descriptions | es-MX text, one per name | Constants beside the names, given to copy, never checked (D15) |
 | A payment method | `{ id: number, nombre: string }` | As the provider lists it; cached per business, address and seen stamp for ten minutes (D3, D16) |
-| The chosen method | `{ id, kind: "devolada" \| "cash" }` | The channel's method by normalized name, lowest id; otherwise the cash method without Devolada's names (D4, D5) |
+| The chosen method | `{ id, nombre }`, one of the provider's | The channel's method by normalized name, lowest id; otherwise the cash method without Devolada's names; after a refusal, without the refused one (D4–D6) |
 | The reference | string, ≤ 200 characters | `folio · clave` or `folio · tienda`; only the store's name is shortened (D7) |
 
 ## The setup state (integration contract)

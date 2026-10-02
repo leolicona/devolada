@@ -88,19 +88,23 @@ describe("passwordless-access US6 — /entrar step 1", () => {
     expect(screen.getByText("o con un código")).toBeInTheDocument();
     const order = Array.from(document.querySelectorAll("button, input"));
     expect(order.indexOf(key)).toBeLessThan(order.indexOf(screen.getByLabelText("Tu teléfono")));
-    expect(screen.getByRole("button", { name: "Enviar código" })).toBeInTheDocument();
+    expect(key).toHaveClass("bg-accent");
+    expect(screen.getByRole("button", { name: "Enviar código" })).not.toHaveClass("bg-accent");
     expect(screen.queryByText(/contraseña/i)).not.toBeInTheDocument();
     expect(document.querySelector('input[type="password"]')).toBeNull();
     expect(screen.queryByRole("link", { name: /olvidé/i })).not.toBeInTheDocument();
     await expectNoViolations(container);
   });
 
-  it("without passkey support there is no key button and no separator", async () => {
+  it("without passkey support there is no key button and no separator, and «Enviar código» is the primary", async () => {
     signedOutUntil();
-    renderApp("/entrar");
+    const { container } = renderApp("/entrar");
     await screen.findByLabelText("Tu teléfono");
     expect(screen.queryByRole("button", { name: /huella o rostro/ })).not.toBeInTheDocument();
     expect(screen.queryByText("o con un código")).not.toBeInTheDocument();
+    /* the primary's fill (packages/ui Button), not the secondary's border */
+    expect(screen.getByRole("button", { name: "Enviar código" })).toHaveClass("bg-accent");
+    await expectNoViolations(container);
   });
 
   it("the key lands on the counter, typing nothing (FR-011)", async () => {
@@ -474,6 +478,12 @@ describe("passwordless-access US6 — the invitation's three steps (D10)", () =>
     await userEvent.clear(screen.getByLabelText("Código"));
     await typeCode("111111");
     expect(await screen.findByText(TOO_MANY)).toBeInTheDocument();
+
+    /* and on «Reenviar código»: the resend takes back its «Código reenviado» */
+    server.use(handlers.invitationCode(() => tooMany()));
+    await userEvent.click(screen.getByRole("button", { name: "Reenviar código" }));
+    expect(await screen.findByText(TOO_MANY)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reenviar código" })).toBeInTheDocument();
   });
 
   it("a device that cannot verify the person goes straight to the counter (D7)", async () => {
@@ -498,10 +508,11 @@ describe("passwordless-access US6 — the invitation's three steps (D10)", () =>
 describe("passwordless-access US6 — /recuperar (D10)", () => {
   it("lands on /entrar: there is no password to recover", async () => {
     signedOutUntil();
-    const { router } = renderApp("/recuperar");
+    const { router, container } = renderApp("/recuperar");
     expect(await screen.findByLabelText("Tu teléfono")).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/entrar");
     expect(screen.queryByText(/contraseña/i)).not.toBeInTheDocument();
+    await expectNoViolations(container);
   });
 });
 
@@ -658,6 +669,22 @@ describe("passwordless-access US6 — Caja's keys card (D8, D11, D12; FR-036)", 
     await userEvent.click(await screen.findByRole("button", { name: "Cerrar sesión en los demás dispositivos" }));
     expect(await screen.findByText("Listo. Solo este teléfono sigue con tu sesión abierta.")).toBeInTheDocument();
     expect(revoked).toBe(true);
+  });
+
+  it("on a computer the close-others line names «esta computadora» (cash-at-stores D32)", async () => {
+    atWidth(1280);
+    server.use(...caja(), handlers.handovers(() => ok(handoverList([]))), handlers.revokeOtherSessions());
+    renderApp("/caja");
+    await userEvent.click(await screen.findByRole("button", { name: "Cerrar sesión en los demás dispositivos" }));
+    expect(await screen.findByText("Listo. Solo esta computadora sigue con tu sesión abierta.")).toBeInTheDocument();
+  });
+
+  it("a close that fails says so, and the button stays to try again", async () => {
+    server.use(...caja(), handlers.revokeOtherSessions(() => baFail("FAILED_TO_REVOKE", 500)));
+    renderApp("/caja");
+    await userEvent.click(await screen.findByRole("button", { name: "Cerrar sesión en los demás dispositivos" }));
+    expect(await screen.findByText("No pudimos cerrar las demás sesiones. Intenta de nuevo.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cerrar sesión en los demás dispositivos" })).toBeEnabled();
   });
 });
 

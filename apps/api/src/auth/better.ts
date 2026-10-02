@@ -49,11 +49,12 @@ const NAME_INPUT_PATHS = new Set(["/sign-in/email-otp", "/update-user"]);
 const NAME_MIN = 2;
 const NAME_MAX = 80;
 
-/* The plugin's own kinds of código (email-otp `routes.mjs`, `types`): only
-   these name an identifier the plugin writes. passwordless-access D4 (PR 2):
-   only `sign-in` has a door left; the other two stay listed so a request
-   for one still ends that kind's previous código. */
-const OTP_TYPES = new Set(["email-verification", "sign-in", "forget-password"]);
+/* The plugin's own kinds of código (email-otp `routes.mjs`, `types`) are
+   three; passwordless-access D4 (PR 2): only `sign-in` has a door left —
+   `verify-email`, the password reset and the check are disabled above. A
+   código of the other two kinds would reach an inbox reading "your código"
+   and open nothing, so it is never minted (adversarial review, 2026-10-02). */
+const OTP_TYPE = "sign-in";
 
 /* Better Auth instance (better-auth.spec.md). Per-request construction is
    the Workers pattern: the D1 binding only exists inside a request. */
@@ -135,8 +136,11 @@ export function makeAuth(env: Bindings) {
            per address, so there is no tie to lose. */
         if (ctx.path === "/email-otp/send-verification-otp" && body) {
           const { email, type } = body;
-          if (typeof email === "string" && typeof type === "string" && OTP_TYPES.has(type)) {
-            await db.delete(verification).where(eq(verification.identifier, `${type}-otp-${email.toLowerCase()}`));
+          if (type !== OTP_TYPE) {
+            throw new APIError("BAD_REQUEST", { code: "OTP_TYPE_NOT_ALLOWED", message: "OTP_TYPE_NOT_ALLOWED" });
+          }
+          if (typeof email === "string") {
+            await db.delete(verification).where(eq(verification.identifier, `${OTP_TYPE}-otp-${email.toLowerCase()}`));
           }
         }
 

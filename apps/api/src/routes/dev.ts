@@ -86,8 +86,6 @@ const testAddress = (email: string | undefined): string | null => {
 };
 const notTestAddress = { success: false, error: { code: "TEST_ADDRESS_ONLY" } } as const;
 
-const CODE_TYPES = new Set(["sign-in", "email-verification", "forget-password"]);
-
 /* passwordless-access D14, D15: the passkey journeys get what an email
    would carry. Códigos are stored hashed now (D2), so there are no digits
    to read back: this mints a fresh one through the plugin's own
@@ -95,19 +93,17 @@ const CODE_TYPES = new Set(["sign-in", "email-verification", "forget-password"])
    that kind (one live row per address, as T005's hook keeps it). Only for
    a test address (`testAddress`, bug: dev-code-readable): the deployed dev
    Worker runs with ENVIRONMENT=dev too, and a código for any address would
-   open any account there. `GET /dev/last-code` retired with it. */
+   open any account there. `GET /dev/last-code` retired with it. Only the
+   sign-in kind: since PR 2 (D4) it is the one a door accepts. */
 dev.post("/code", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { email?: unknown; type?: unknown };
   const address = testAddress(typeof body.email === "string" ? body.email : undefined);
   if (!address) return c.json(notTestAddress, 403);
-  const type = body.type ?? "sign-in";
-  if (typeof type !== "string" || !CODE_TYPES.has(type)) {
+  if ((body.type ?? "sign-in") !== "sign-in") {
     return c.json({ success: false, error: { code: "VALIDATION" } }, 400);
   }
-  await drizzle(c.env.DB).delete(verification).where(eq(verification.identifier, `${type}-otp-${address}`));
-  const code = await makeAuth(c.env).api.createVerificationOTP({
-    body: { email: address, type: type as "sign-in" | "email-verification" | "forget-password" },
-  });
+  await drizzle(c.env.DB).delete(verification).where(eq(verification.identifier, `sign-in-otp-${address}`));
+  const code = await makeAuth(c.env).api.createVerificationOTP({ body: { email: address, type: "sign-in" } });
   return c.json({ success: true, data: { code } });
 });
 

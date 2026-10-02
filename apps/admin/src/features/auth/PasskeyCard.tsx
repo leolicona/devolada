@@ -35,7 +35,7 @@ export function PasskeyCard() {
   const [activation, setActivation] = useState<"idle" | "busy" | "done" | "failed">("idle");
   const [removeFailed, setRemoveFailed] = useState(false);
   const [stepUp, setStepUp] = useState<Omit<KeysCardStepUp, "email" | "onCodeChange" | "onSubmit" | "onCancel"> | null>(null);
-  const [others, setOthers] = useState<"idle" | "busy" | "done">("idle");
+  const [others, setOthers] = useState<"idle" | "busy" | "done" | "failed">("idle");
 
   useEffect(() => {
     let live = true;
@@ -124,7 +124,7 @@ export function PasskeyCard() {
           await revokeOtherSessions();
           setOthers("done");
         } catch {
-          setOthers("idle");
+          setOthers("failed");
         }
       }}
     />

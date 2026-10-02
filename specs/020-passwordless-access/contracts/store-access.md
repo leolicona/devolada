@@ -14,7 +14,8 @@ body is `VALIDATION_ERROR`, the store area's word since cash-at-stores
 the area's word). These routes
 are browser-facing: no `message`, no `retryable` (constitution III). The
 códigos' error codes are the plugin's own, carried through the envelope:
-`INVALID_OTP`, `OTP_EXPIRED`, `TOO_MANY_ATTEMPTS`.
+`INVALID_OTP`, `OTP_EXPIRED`, `TOO_MANY_ATTEMPTS` — except on
+`POST /store/sign-in`, which folds them into `INVALID_OTP` (below).
 
 None of these routes ever creates an account except the invitation's
 acceptance (FR-034).
@@ -83,8 +84,10 @@ Rate-limited 3 per 60 s per address (D3).
 `nationalPhone` normalises the number to ten digits.
 
 - **200** `{ "success": true, "data": { "sent": true } }` for **every**
-  well-formed phone. A código goes to the store account's email only when a
-  store names that phone (FR-033, cash-at-stores D3).
+  well-formed phone, and as fast: the código is written and sent after the
+  answer (`waitUntil`), so timing cannot tell the phones apart either. A
+  código goes to the store account's email only when a store names that
+  phone (FR-033, cash-at-stores D3).
 - **400** `VALIDATION_ERROR`: not ten national digits. **429**.
 
 ### `POST /store/sign-in`: new
@@ -97,9 +100,12 @@ Rate-limited 5 per 60 s per address (D3).
 
 - **200** `{ "success": true, "data": { "storeName": "Abarrotes Lupita" } }`
   with the session cookie.
-- **400** `INVALID_OTP`, also for a phone that names no store, so the
-  answer cannot tell the two apart; `OTP_EXPIRED`; **403**
-  `TOO_MANY_ATTEMPTS`.
+- **400** `INVALID_OTP` for every refusal of the código — a wrong one, an
+  expired one, one past its three tries — and for a phone that names no
+  store, so the answer cannot tell them apart (FR-033). `OTP_EXPIRED` and
+  `TOO_MANY_ATTEMPTS` exist only for an address that holds a código, so
+  this route never carries them (adversarial review, 2026-10-02). The
+  store app reads all three alike anyway.
 - **403** `STORE_SUSPENDED`: a suspended store, as `requireStore` answers
   today. No session is kept.
 - **429**.

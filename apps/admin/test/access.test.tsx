@@ -30,7 +30,15 @@ describe("cash-at-stores US3: a store account in the panel", () => {
     let signedOut = false;
     server.use(
       handlers.session(() =>
-        ok(storeMeResponse.parse({ type: "store", storeId: "store-1", name: "Abarrotes Lupita", businessName: "ISP Demo" })),
+        ok(
+          storeMeResponse.parse({
+            type: "store",
+            storeId: "store-1",
+            name: "Abarrotes Lupita",
+            businessName: "ISP Demo",
+            email: "lupita@correo.mx",
+          }),
+        ),
       ),
       handlers.logout(() => {
         signedOut = true;

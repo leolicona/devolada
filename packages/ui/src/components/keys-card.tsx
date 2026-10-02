@@ -60,7 +60,10 @@ export interface KeysCardProps {
      the server answers SESSION_NOT_FRESH, the app sends a código and opens
      this; null, the activate button is back. */
   stepUp: null | KeysCardStepUp;
-  signOutOthers: "idle" | "busy" | "done";
+  /* "failed" says so and keeps the button (adversarial review,
+     2026-10-02): a person shutting out a lost phone must never read a
+     failure as silence */
+  signOutOthers: "idle" | "busy" | "done" | "failed";
   onSignOutOthers: () => void;
   /* The panel is desktop-first and aims with a pointer (compact, 40px); the
      store app is phone-first and aims with a thumb (standard, 48px, full
@@ -317,6 +320,12 @@ export function KeysCard({
               {signOutOthers === "busy" ? "Cerrando sesiones…" : "Cerrar sesión en los demás dispositivos"}
             </Button>
           </Pending>
+        )}
+        {signOutOthers === "failed" && (
+          <Alert variant="destructive" layout="icon">
+            <CircleX aria-hidden />
+            <span>No pudimos cerrar las demás sesiones. Intenta de nuevo.</span>
+          </Alert>
         )}
       </div>
     </Card>

@@ -315,15 +315,12 @@ export function sentCode(email: string): string {
 }
 
 /* passwordless-access D14: a fresh código for an address, through the
-   plugin's own server-only door (the one D9 uses). The address's live rows
-   of that kind go first, as T005's hook does for a request, so the minted
-   código is the only one. For tests whose subject is not the email. */
-export async function mintCode(
-  email: string,
-  type: "sign-in" | "email-verification" | "forget-password" = "sign-in",
-): Promise<string> {
-  await drizzle(env.DB).delete(verification).where(eq(verification.identifier, `${type}-otp-${email.toLowerCase()}`));
-  return auth().api.createVerificationOTP({ body: { email, type } });
+   plugin's own server-only door (the one D9 uses). The address's live
+   sign-in código goes first, as T005's hook does for a request, so the
+   minted código is the only one. For tests whose subject is not the email. */
+export async function mintCode(email: string): Promise<string> {
+  await drizzle(env.DB).delete(verification).where(eq(verification.identifier, `sign-in-otp-${email.toLowerCase()}`));
+  return auth().api.createVerificationOTP({ body: { email, type: "sign-in" } });
 }
 
 /* A browser always sends Origin on POST; Better Auth's CSRF check

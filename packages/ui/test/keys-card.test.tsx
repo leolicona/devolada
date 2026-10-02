@@ -87,6 +87,7 @@ describe("passwordless-access US5: the card says what it is for", () => {
       { activation: "done", signOutOthers: "done" },
       { stepUp: stepUp({ error: "invalid" }) },
       { stepUp: stepUp({ error: "tooMany", busy: true }), signOutOthers: "busy" },
+      { signOutOthers: "failed" },
     ];
     for (const state of states) {
       const { container, unmount } = card(state);
@@ -370,6 +371,16 @@ describe("passwordless-access US5: signing out the other devices (research D11)"
       "Listo. Solo este dispositivo sigue con tu sesión abierta.",
     );
     expect(screen.queryByRole("button", { name: SIGN_OUT_OTHERS })).not.toBeInTheDocument();
+    await expectNoViolations(container);
+  });
+
+  it("failed: one line saying so, the button still there to try again", async () => {
+    const { container, onSignOutOthers } = card({ signOutOthers: "failed" });
+
+    expect(screen.getByText("No pudimos cerrar las demás sesiones. Intenta de nuevo.")).toBeInTheDocument();
+    expect(screen.queryByText(/sigue con tu sesión abierta/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: SIGN_OUT_OTHERS }));
+    expect(onSignOutOthers).toHaveBeenCalledTimes(1);
     await expectNoViolations(container);
   });
 });

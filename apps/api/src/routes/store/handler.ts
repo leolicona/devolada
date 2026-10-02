@@ -519,11 +519,35 @@ export async function previewInvitation(c: Ctx, token: string) {
 
 /* D5's rollback: the user the acceptance made, and nothing else of it.
    passwordless-access D10: its keys too — none of the four cascades, so
-   they go first, in one batch with the user. */
-async function removeUser(db: DB, userId: string) {
+   they go first, in one batch with the user.
+
+   Only a user that holds nothing but this request's session is removed
+   (adversarial review, 2026-10-02): the race guard reads "born in this
+   second, no membership, no store", and a panel registration of the same
+   address in the same second reads the same — removing that user would
+   erase someone's new account. A user holding any other session, an
+   account, a key, a membership or a store keeps all of it; only this
+   request's session goes. The email-OTP sign-in births a user with no
+   `account` row (1.6.29 `routes.mjs`: `createUser` alone), so an account
+   row is someone else's too. */
+async function undoAcceptance(db: DB, userId: string, sessionToken: string) {
+  const [[otherSession], [account], [key], [membership], [ownStore]] = await Promise.all([
+    db
+      .select({ id: sessionTable.id })
+      .from(sessionTable)
+      .where(and(eq(sessionTable.userId, userId), ne(sessionTable.token, sessionToken)))
+      .limit(1),
+    db.select({ id: accountTable.id }).from(accountTable).where(eq(accountTable.userId, userId)).limit(1),
+    db.select({ id: passkeyTable.id }).from(passkeyTable).where(eq(passkeyTable.userId, userId)).limit(1),
+    db.select({ id: member.id }).from(member).where(eq(member.userId, userId)).limit(1),
+    db.select({ id: stores.id }).from(stores).where(eq(stores.userId, userId)).limit(1),
+  ]);
+  if (otherSession || account || key || membership || ownStore) {
+    await db.delete(sessionTable).where(eq(sessionTable.token, sessionToken));
+    return;
+  }
   await db.batch([
     db.delete(sessionTable).where(eq(sessionTable.userId, userId)),
-    db.delete(accountTable).where(eq(accountTable.userId, userId)),
     db.delete(passkeyTable).where(eq(passkeyTable.userId, userId)),
     db.delete(userTable).where(eq(userTable.id, userId)),
   ]);
@@ -594,8 +618,8 @@ export async function sendInvitationCode(c: Ctx, token: string, body: StoreInvit
         `accepted` only if the link is this user's;
      6. the cookies are forwarded. The store becomes `active` here, at the
         código, never at the email (FR-031).
-   Step 5 failing removes the user step 3 made (D5's rollback), and the
-   invitation stays `sent`. */
+   Step 5 failing removes the user step 3 made (D5's rollback,
+   `undoAcceptance`), and the invitation stays `sent`. */
 export async function acceptInvitation(c: Ctx, token: string, body: AcceptStoreInvitationRequest) {
   const db = drizzle(c.env.DB);
   const now = new Date();
@@ -675,11 +699,11 @@ export async function acceptInvitation(c: Ctx, token: string, body: AcceptStoreI
         .where(and(eq(storeInvitations.id, invitation.id), eq(storeInvitations.status, "sent"), linkedHere)),
     ]);
     if (linked.length === 0) {
-      await removeUser(db, userId);
+      await undoAcceptance(db, userId, response.token);
       return refuse(c, "INVALID_INVITATION", 400);
     }
   } catch (e) {
-    await removeUser(db, userId);
+    await undoAcceptance(db, userId, response.token);
     /* the phone taken in between, by a path D3 does not foresee: the
        same answer as the race, never a 500 */
     if (isUniqueViolation(e)) return refuse(c, "INVALID_INVITATION", 400);
@@ -715,20 +739,40 @@ async function storeByPhone(db: DB, phone: string) {
 const badPhone = (c: Ctx) => refuse(c, "VALIDATION_ERROR", 400);
 
 /* POST /store/sign-in/code {phone} — always `{sent: true}` for a
-   well-formed phone; the código goes out only when a store names it */
+   well-formed phone; the código goes out only when a store names it.
+
+   The same answer must also come as fast (FR-033; adversarial review,
+   2026-10-02): writing the código and handing it to the email provider
+   takes a round trip a stranger's phone never waits for, so a stopwatch
+   would tell a store's phone from anyone's. In a Worker the send rides
+   `waitUntil`, past the answer; with no execution context (a test calling
+   `app.request`) it is awaited, so the suite reads the código it sent.
+   The sender never throws (better.ts), and a failed send is logged, never
+   answered — "Reenviar código" retries. */
 export async function sendSignInCode(c: Ctx, body: StoreSignInCodeRequest) {
   const phone = nationalPhone(body.phone);
   if (!phone) return badPhone(c);
   const found = await storeByPhone(drizzle(c.env.DB), phone);
   if (found) {
-    await makeAuth(c.env).api.sendVerificationOTP({ body: { email: found.email, type: "sign-in" } });
+    const send = makeAuth(c.env)
+      .api.sendVerificationOTP({ body: { email: found.email, type: "sign-in" } })
+      .catch((e: unknown) => console.error("store sign-in código failed", e));
+    const defer = deferOf(c);
+    if (defer) defer(send);
+    else await send;
   }
   const data: StoreSignInCodeResponse = { sent: true };
   return c.json({ success: true, data });
 }
 
 /* POST /store/sign-in {phone, otp}. A phone no store names answers
-   INVALID_OTP, exactly as a wrong código does. The código is checked
+   INVALID_OTP, exactly as a wrong código does — and so does every refusal
+   of the código itself (adversarial review, 2026-10-02): the plugin's
+   OTP_EXPIRED and TOO_MANY_ATTEMPTS exist only for an address that holds a
+   código, so passing them through would let four tries tell a store's
+   phone from a stranger's (FR-033). The store app reads the three alike
+   already ("El código no es válido o ya venció. Pide uno nuevo."), so the
+   shopkeeper loses no word. The código is checked
    before the store's status, so a suspension is said only to whoever
    holds the store's código — and the session that check opened goes at
    once, as `requireStore` deletes a suspended store's (FR-014). A legacy
@@ -749,8 +793,8 @@ export async function signInWithCode(c: Ctx, body: StoreSignInRequest) {
       returnHeaders: true,
     });
   } catch (e) {
-    const refused = otpRefusal(c, e);
-    if (refused) return refused;
+    const code = codeOf(e);
+    if (code && code in OTP_REFUSALS) return refuse(c, "INVALID_OTP", 400);
     throw e;
   }
   if (found.status === "suspended") {

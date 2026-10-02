@@ -228,8 +228,12 @@ describe("passwordless-access US6 — the acceptance, a taken address (D10, FR-0
 /* The race D10 guards: the address gains an account between the taken
    check and the código's sign-in. The binding the app gets runs the
    real D1, and the moment the taken check has read "no user", the other
-   request lands — a verified account with a membership. */
-function racingDB(onChecked: () => Promise<void>): D1Database {
+   request lands — a verified account with a membership. `at` names the
+   one query after which the other request lands: by default the taken
+   check; the rollback's cases pass the race guard's own store read. */
+const TAKEN_CHECK = /^select "id" from "user" where "user"\."email" = \?/;
+const GUARD_STORE_READ = /^select "id" from "stores" where "stores"\."user_id" = \?/;
+function racingDB(onChecked: () => Promise<void>, at: RegExp = TAKEN_CHECK): D1Database {
   const real = env.DB;
   let fired = false;
   const wrap = (stmt: D1PreparedStatement): D1PreparedStatement =>
@@ -255,8 +259,8 @@ function racingDB(onChecked: () => Promise<void>): D1Database {
       if (prop === "prepare") {
         return (query: string) => {
           const stmt = target.prepare(query);
-          /* the handler's taken check, and nothing else */
-          return !fired && /^select "id" from "user" where "user"\."email" = \?/.test(query) ? wrap(stmt) : stmt;
+          /* the one query `at` names, and nothing else */
+          return !fired && at.test(query) ? wrap(stmt) : stmt;
         };
       }
       const value = Reflect.get(target, prop);
@@ -300,6 +304,70 @@ describe("passwordless-access US6 — the race guard (D10)", () => {
     expect(await userOf("lupita@correo.mx")).toMatchObject({ id: racerId, name: "Otra Persona", username: null });
     expect(await storeRow(store.id)).toMatchObject({ status: "invited", userId: null });
     expect((await invitationRow()).status).toBe("sent");
+  });
+});
+
+/* D5's rollback (cash-at-stores T089, `undoAcceptance`): the store is
+   linked to someone else after the race guard passed — another acceptance
+   won it. The guard's store read is where the other request lands. */
+async function winStoreElsewhere(storeId: string) {
+  const winner = await (await makeAuth(env as unknown as Bindings).$context).internalAdapter.createUser({
+    name: "Ganadora",
+    email: "ganadora@correo.mx",
+    emailVerified: true,
+  });
+  await db().update(stores).set({ userId: winner.id, status: "active" }).where(eq(stores.id, storeId));
+  return winner.id;
+}
+
+describe("passwordless-access US6 — the acceptance's rollback (D10, cash-at-stores D5)", () => {
+  it("a store won by another acceptance after the guard: INVALID_INVITATION, and the user this request made is gone", async () => {
+    const { store, token } = await invite();
+    await askCode(token, "lupita@correo.mx");
+    let winnerId = "";
+    const racing = {
+      ...(env as unknown as Bindings),
+      DB: racingDB(async () => {
+        winnerId = await winStoreElsewhere(store.id);
+      }, GUARD_STORE_READ),
+    };
+
+    const res = await acceptWith(token, "lupita@correo.mx", sentCode("lupita@correo.mx"), racing);
+    expect(winnerId).not.toBe("");
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("INVALID_INVITATION");
+    expect(cookiesOf(res).some((c) => c.includes("session_token"))).toBe(false);
+    expect(await userOf("lupita@correo.mx")).toBeUndefined();
+    /* the winner's link stands; the invitation is left as the winner left it */
+    expect(await storeRow(store.id)).toMatchObject({ status: "active", userId: winnerId });
+    expect((await invitationRow()).status).toBe("sent");
+  });
+
+  it("a user that holds anything besides this request's session is kept: only that session goes", async () => {
+    const { store, token } = await invite();
+    await askCode(token, "lupita@correo.mx");
+    let otherToken = "";
+    const racing = {
+      ...(env as unknown as Bindings),
+      DB: racingDB(async () => {
+        await winStoreElsewhere(store.id);
+        /* the same address, signed in at the panel within the same second */
+        const born = await userOf("lupita@correo.mx");
+        otherToken = crypto.randomUUID();
+        const now = new Date();
+        await db()
+          .insert(sessionTable)
+          .values({ id: crypto.randomUUID(), token: otherToken, userId: born.id, expiresAt: new Date(now.getTime() + 60_000), createdAt: now, updatedAt: now });
+      }, GUARD_STORE_READ),
+    };
+
+    const res = await acceptWith(token, "lupita@correo.mx", sentCode("lupita@correo.mx"), racing);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("INVALID_INVITATION");
+    expect(cookiesOf(res).some((c) => c.includes("session_token"))).toBe(false);
+    const kept = await userOf("lupita@correo.mx");
+    expect(kept).toBeDefined();
+    expect((await sessionsOf(kept.id)).map((row) => row.token)).toEqual([otherToken]);
   });
 });
 
@@ -364,6 +432,30 @@ describe("passwordless-access US6 — the phone door (D10, FR-033, FR-034)", () 
     expect(cookiesOf(wrong).some((c) => c.includes("session_token"))).toBe(false);
   });
 
+  it("a store's phone answers exactly as a stranger's: before a código, past its three tries, and once it died (FR-033)", async () => {
+    const { email } = await seedActiveStore({ phone: "5512345678" });
+    const stranger = await signIn("5599999999", "123456");
+    const strangerBody = await stranger.text();
+    expect(stranger.status).toBe(400);
+    expect(JSON.parse(strangerBody)).toEqual({ success: false, error: { code: "INVALID_OTP" } });
+
+    /* no código asked yet */
+    const answers = [await signIn("5512345678", "123456")];
+    await askPhoneCode("5512345678");
+    const right = sentCode(email);
+    const wrong = right === "000000" ? "111111" : "000000";
+    /* the plugin says TOO_MANY_ATTEMPTS past the third (D2); here it reads INVALID_OTP */
+    for (let i = 0; i < 4; i++) answers.push(await signIn("5512345678", wrong));
+    /* the código died with its tries: its own right digits open nothing now */
+    answers.push(await signIn("5512345678", right));
+
+    for (const res of answers) {
+      expect(res.status).toBe(400);
+      expect(await res.text()).toBe(strangerBody);
+      expect(cookiesOf(res).some((c) => c.includes("session_token"))).toBe(false);
+    }
+  });
+
   it("a phone that is not ten national digits is VALIDATION_ERROR on both calls", async () => {
     for (const res of [await askPhoneCode("12345"), await signIn("12345", "123456")]) {
       expect(res.status).toBe(400);
@@ -408,6 +500,11 @@ describe("passwordless-access US6 — a legacy shopkeeper (analysis G1, D5)", ()
     const me = await call("/auth/me", { headers: { Cookie: sessionOf(res) } });
     expect(me.status).toBe(200);
     expect((await me.json()).data).toMatchObject({ type: "store", storeId: store.id, email: "lupita@correo.mx" });
+    /* the código proved the address, and the plugin dropped the password an
+       unproven account held at that moment (1.6.29 revokeUnprovenAccountAccess) */
+    expect(
+      await db().select().from(account).where(and(eq(account.userId, userId), eq(account.providerId, "credential"))),
+    ).toHaveLength(0);
 
     /* and the sweep, past its grace, leaves them no password (T064) */
     await eraseLegacyCredentials(env as unknown as Bindings, new Date(Date.now() + 60 * 60_000));
@@ -415,6 +512,27 @@ describe("passwordless-access US6 — a legacy shopkeeper (analysis G1, D5)", ()
       await db().select().from(account).where(and(eq(account.userId, userId), eq(account.providerId, "credential"))),
     ).toHaveLength(0);
     expect(await userOf("lupita@correo.mx")).toBeDefined();
+  });
+
+  it("who had verified their address (cash-at-stores D5) gets in by phone too; the sweep erases the password and keeps them", async () => {
+    const store = await seedStore({ status: "invited", phone: "5512345678" });
+    const userId = await seedLegacyUser("Lupita Hernández", "lupita@correo.mx", { emailVerified: true });
+    await db().update(userTable).set({ username: "5512345678", displayUsername: "5512345678" }).where(eq(userTable.id, userId));
+    await db().update(stores).set({ userId, status: "active" }).where(eq(stores.id, store.id));
+    await db().update(storeInvitations).set({ status: "accepted" });
+
+    await askPhoneCode("5512345678");
+    const res = await signIn("5512345678", sentCode("lupita@correo.mx"));
+    expect(res.status).toBe(200);
+    expect(storeSignInResponse.parse((await res.json()).data)).toEqual({ storeName: store.name });
+
+    await eraseLegacyCredentials(env as unknown as Bindings, new Date(Date.now() + 60 * 60_000));
+    expect(
+      await db().select().from(account).where(and(eq(account.userId, userId), eq(account.providerId, "credential"))),
+    ).toHaveLength(0);
+    /* the store's link and the session the código opened both stand */
+    expect(await storeRow(store.id)).toMatchObject({ status: "active", userId });
+    expect(await sessionsOf(userId)).toHaveLength(1);
   });
 });
 

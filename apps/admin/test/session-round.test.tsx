@@ -209,4 +209,13 @@ describe("passwordless-access US5 — closing the other sessions (D11, FR-022)",
     expect(await screen.findByText("Listo. Solo este dispositivo sigue con tu sesión abierta.")).toBeInTheDocument();
     expect(revoked).toBe(true);
   });
+
+  it("a close that fails says so, and the button stays to try again", async () => {
+    server.use(...security(), handlers.revokeOtherSessions(() => baFail("FAILED_TO_REVOKE", 500)));
+    renderApp("/settings/security");
+    await userEvent.click(await screen.findByRole("button", { name: "Cerrar sesión en los demás dispositivos" }));
+    expect(await screen.findByText("No pudimos cerrar las demás sesiones. Intenta de nuevo.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cerrar sesión en los demás dispositivos" })).toBeEnabled();
+    expect(screen.queryByText(/sigue con tu sesión abierta/)).not.toBeInTheDocument();
+  });
 });

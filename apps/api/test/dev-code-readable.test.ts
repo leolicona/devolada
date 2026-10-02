@@ -54,12 +54,19 @@ describe("bug: dev-code-readable — /dev/code mints only for a test address (pa
   });
 
   it("still mints for a `.invalid` address and the demo account's, as the passkey journeys do", async () => {
-    const verify = await devCode({ email: "owner@journey.invalid", type: "email-verification" });
-    expect(((await verify.json()) as { data: { code: string } }).data.code).toMatch(/^\d{6}$/);
+    const journey = await devCode({ email: "owner@journey.invalid" });
+    expect(((await journey.json()) as { data: { code: string } }).data.code).toMatch(/^\d{6}$/);
     /* typed in any case: the plugin keys the address lowercased */
     const demo = await devCode({ email: "Demo@Devolada.app", type: "sign-in" });
     const otp = ((await demo.json()) as { data: { code: string } }).data.code;
     expect((await enter("demo@devolada.app", otp)).status).toBe(200);
+  });
+
+  it("passwordless-access US6 (D4): mints only the sign-in kind, the one a door still accepts", async () => {
+    for (const type of ["email-verification", "forget-password"]) {
+      expect((await devCode({ email: "owner@journey.invalid", type })).status).toBe(400);
+    }
+    expect(await drizzle(env.DB).select().from(verification)).toHaveLength(0);
   });
 
   it("GET /dev/last-code is gone", async () => {

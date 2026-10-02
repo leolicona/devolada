@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { and, eq } from "drizzle-orm";
-import { account, passkey, session as sessionTable, user as userTable } from "../src/db/schema";
+import { account, passkey, session as sessionTable, user as userTable, verification } from "../src/db/schema";
 import { app, json, seedBusiness, seedLegacyUser, seedSession, sentCode, sessionCookieHeader, sessionOf } from "./helpers";
 
 /* passwordless-access US2 (contracts/panel-access.md): the sign-in is the
@@ -52,11 +52,23 @@ describe("passwordless-access US2 — the código opens an existing account (D1,
 });
 
 describe("passwordless-access US2 — the password door is closed (D4, FR-010)", () => {
-  it("POST /auth/sign-in/email answers 404, even with a password that once worked", async () => {
+  it("POST /auth/sign-in/email answers 404, even for an account that still holds a password", async () => {
     await seedLegacyUser("Ana", "ana@negocio.mx", { emailVerified: true });
     const res = await call("/auth/sign-in/email", json({ email: "ana@negocio.mx", password: "una-clave-123" }));
     expect(res.status).toBe(404);
     expect(res.headers.get("set-cookie")).toBeNull();
+  });
+});
+
+describe("passwordless-access US6 — only the sign-in kind of código is ever sent (D4)", () => {
+  it("asking for an email-verification or a password-reset código is refused, and nothing is written or sent", async () => {
+    for (const type of ["email-verification", "forget-password"]) {
+      const res = await call("/auth/email-otp/send-verification-otp", json({ email: "ana@negocio.mx", type }));
+      expect(res.status, type).toBe(400);
+      expect((await res.json()).code, type).toBe("OTP_TYPE_NOT_ALLOWED");
+    }
+    expect(await db().select().from(verification)).toHaveLength(0);
+    expect(() => sentCode("ana@negocio.mx")).toThrow();
   });
 });
 

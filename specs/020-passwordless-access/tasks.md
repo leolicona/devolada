@@ -5,6 +5,18 @@ description: "Task list for Passwordless Access"
 
 # Tasks: Passwordless Access
 
+> **Drift check (T002), 2026-10-02**, against research D16's inventory:
+> - PR #273 (`bug: dev-code-readable`) is already merged into `main`, and
+>   this branch starts from it: `testAddress()` and
+>   `apps/api/test/dev-code-readable.test.ts` are in the tree. The "merge
+>   `main` before T008 and T031" step is satisfied.
+> - Every caller of the password doors, every reader of `lastCodeFor`,
+>   `PASSWORD` and `/dev/last-code`, and every consumer of the three schemas
+>   is one the inventory names. No new one appeared.
+> - The measurements (T001) change no task. M4 changes the *reason* for
+>   T005's `hooks.before`: two códigos asked for in the same second tie on
+>   `created_at`, and the plugin may check the older one (research D2).
+
 **Input**: Design documents from `specs/020-passwordless-access/`
 
 **Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md),
@@ -65,7 +77,7 @@ Paths are as `plan.md` fixes them:
 **Purpose**: confirm what the design read in the library, check the tree,
 and put the amendment in motion. No behaviour changes in this phase.
 
-- [ ] T001 Run quickstart §0's measurements M1–M6 as a throwaway case in `apps/api/test/` (deleted afterwards). Record each result, with its date, under its decision in `specs/020-passwordless-access/research.md`:
+- [X] T001 Run quickstart §0's measurements M1–M6 as a throwaway case in `apps/api/test/` (deleted afterwards). Record each result, with its date, under its decision in `specs/020-passwordless-access/research.md`:
   - **M1 → D1**: a sign-in código for an unknown address creates a verified user with the name sent.
   - **M2 → D8**: a session 25 hours old cannot register a key; one 23 hours old can.
   - **M3 → D4**: a `disabledPaths` entry answers 404 over HTTP, while `auth.api` still reaches it.
@@ -80,7 +92,7 @@ and put the amendment in motion. No behaviour changes in this phase.
   - **If M1 fails**, stop and take quickstart §0's fallback to the creator before T016.
   - **If M2 shows a day-old session can register a key**, drop the step-up from T049 and T073 and its cases from T048 and T061.
   - **If M6 consumes the código**, T065 uses quickstart §0's alternative.
-- [ ] T002 Check the consumers this feature changes against the tree, and note any drift at the top of `specs/020-passwordless-access/tasks.md` before editing. Compare with research D16's inventory (taken 2026-10-02):
+- [X] T002 Check the consumers this feature changes against the tree, and note any drift at the top of `specs/020-passwordless-access/tasks.md` before editing. Compare with research D16's inventory (taken 2026-10-02):
   - every caller of `/auth/sign-in/email`, `/auth/sign-up/email`, `/auth/business/signup`, `/auth/sign-in/username`, `/auth/email-otp/verify-email`, `/auth/email-otp/request-password-reset`, `/auth/email-otp/reset-password`, `signUpEmail` and `signInEmail`, in `apps/` and `tests/`;
   - every reader of `lastCodeFor`, `PASSWORD` and `/dev/last-code`;
   - every consumer of `AcceptInvitationNewRequest`, `AcceptStoreInvitationRequest` and `StoreMeResponse` (the schemas, `apps/admin/test/msw.ts`, `apps/red/test/msw.ts`, `tests/e2e/stubs.ts`);

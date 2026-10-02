@@ -54,6 +54,12 @@ user `user.name || user.id` (`@better-auth/passkey` `index.mjs`, around line
 165), so a key made before the name would show the device's account picker a
 random id.
 
+**Measured 2026-10-02 (M1)**: `send-verification-otp {type: "sign-in"}` for
+an address with no user answers 200 and writes no `user` row. The código
+the sender logged, sent to `sign-in/email-otp` with `name: "Ana López"`,
+answers 200 with a session cookie, and the user is born
+`email_verified = 1`, named "Ana López", with no `account` row. D1 holds.
+
 **Alternatives considered**:
 - Keep `POST /auth/business/signup` and give it a código instead of a
   password. Rejected: the plugin already creates the account at the right
@@ -105,6 +111,26 @@ The `emailOTP` options gain three explicit values:
 
 This is a guarantee that lived in a default and was nobody's (the lesson of
 business-and-memberships D8 and better-auth D11).
+
+**Measured 2026-10-02 (M4)**, with `storeOTP: "hashed"`, `expiresIn: 600`,
+`allowedAttempts: 3` and no `hooks.before` yet:
+- the stored value is `<43 base64url characters>:0`, and the six digits are
+  not in it;
+- the right código opens a session once; the second use is `INVALID_OTP`;
+- three wrong tries, then the right código: 403 `TOO_MANY_ATTEMPTS`;
+- **códigos A then B, asked for in the same second: two rows, and A opened a
+  session while B was live; B was then refused.** The rows' `created_at` is
+  stored to the second, so "the newest row" is a tie, and the plugin checked
+  the older one. A second run (B typed first) refused B and let A in.
+- **What the reading above got wrong**: once a row is consumed, the
+  plugin's `consumeVerificationValue` deletes *every* row of the identifier
+  (`db/internal-adapter.mjs`, the `deleteMany` inside the consume), so an
+  old código never comes back after a use. The failure is the tie, not a
+  revival.
+
+The `hooks.before` decision stands, for a sharper reason: with one live row
+per address there is no tie to lose, and FR-003's "a new request ends the
+previous código" becomes true by construction instead of by the clock.
 
 **Alternatives considered**:
 - `storeOTP: "encrypted"`. Rejected: a código is only ever compared, never
@@ -187,6 +213,11 @@ doors are `/sign-in/username` and `/email-otp/reset-password`, and both need
   still merge the two if the notice is given first.
 - Removing the `username` plugin. Rejected: `auth-schema.ts` comes from the
   generator (better-auth D10), and the column is still the store's phone.
+
+**Measured 2026-10-02 (M3)**: with `/sign-in/email` in `disabledPaths`,
+`POST /auth/sign-in/email` over HTTP answers 404, and
+`auth.api.signInEmail` from the server still signs the same account in.
+D4 holds: the server's own calls (D9, D10) keep their doors.
 
 ---
 
@@ -370,6 +401,11 @@ ends it on request.
 - Show "Activar" only while the session is fresh. Rejected: it hides a promise
   the spec makes (FR-006: "always in Cuenta → Seguridad").
 
+**Measured 2026-10-02 (M2)**: a session whose `created_at` is 25 hours old
+gets 403 `SESSION_NOT_FRESH` from `GET /auth/passkey/generate-register-options`;
+the same session at 23 hours gets 200 with the options. The bug named above
+is real, and the step-up stays in the tasks (T048, T049, T061, T073).
+
 ---
 
 ## D9 — The member invitation page
@@ -468,6 +504,19 @@ unchanged: status, business, role, email and `hasAccount`.
 - One `/store/sign-in` call that sends and checks. Rejected: two steps keep
   each answer the same for every phone.
 
+**Measured 2026-10-02 (M6)**: `auth.api.checkVerificationOTP {type:
+"sign-in"}`:
+- right código, address with a user: `{success: true}`, and the row is left
+  as it was (`…:0`): the same código then opens a session with
+  `sign-in/email-otp`. It validates without consuming;
+- wrong código, address without a user: `INVALID_OTP`, and the row's tries
+  go to 1;
+- right código, address without a user: `USER_NOT_FOUND`, and no user is
+  created.
+
+D10's taken check holds as written; quickstart §0's alternative is not
+needed.
+
 ---
 
 ## D11 — "Cerrar sesión en los demás dispositivos": Better Auth's own endpoint
@@ -484,6 +533,11 @@ The session cookie cache is off (better-auth D5), so the API's middleware
 reads the session row on every request. The other devices find themselves
 signed out at their next request (FR-022, SC-009). One button, in both cards,
 with a one-line confirmation of what it did.
+
+**Measured 2026-10-02 (M5)**: three sessions of one user;
+`POST /auth/revoke-other-sessions` from the first answers 200
+`{"status": true}`. `get-session` then answers the caller's session, and
+`null` for the other two; one `session` row is left.
 
 ---
 

@@ -72,19 +72,36 @@ dev.post("/direct-payment-sweep", async (c) => {
   return c.json({ success: true, data: { ...report, released, topUps, webhooks, validating: await validatingCount(c.env) } });
 });
 
+/* bug: dev-code-readable — "dev" is also the deployed dev Worker
+   (wrangler.jsonc `env.dev`), so what an email would carry is read only for
+   a test address: one in `.invalid`, the domain RFC 2606 reserves so no
+   mailbox can exist there (no real person owns, verifies or is invited at
+   one), or the demo account, whose password /dev/seed already hands out.
+   Anything else, the empty query included, is refused before a row is read. */
+const testAddress = (email: string | undefined): string | null => {
+  const address = (email ?? "").trim().toLowerCase();
+  return address.endsWith(".invalid") || address === DEMO.ispEmail ? address : null;
+};
+const notTestAddress = { success: false, error: { code: "TEST_ADDRESS_ONLY" } } as const;
+
 /* The journey e2e (tests/passkey/identity-journey.spec.ts) reads what
    the emails would carry: the last código for an address, and the last
-   invitation id sent to one. Dev only, like everything here. */
+   invitation id sent to one. */
 dev.get("/last-code", async (c) => {
-  const email = c.req.query("email") ?? "";
+  const address = testAddress(c.req.query("email"));
+  if (!address) return c.json(notTestAddress, 403);
   const rows = await drizzle(c.env.DB).select().from(verification);
-  const row = rows.filter((r) => r.identifier.includes(email)).at(-1);
+  /* The identifier ends in "-<address>" (`sign-in-otp-…`): matched whole,
+     never as a substring — `ana.invalid` is inside a real
+     `sign-in-otp-ana.invalid@gmail.com` (bug: dev-code-readable) */
+  const row = rows.filter((r) => r.identifier.toLowerCase().endsWith(`-${address}`)).at(-1);
   const code = row ? /\d{6}/.exec(row.value)?.[0] : undefined;
   return c.json({ success: true, data: { code: code ?? null } });
 });
 
 dev.get("/last-invitation", async (c) => {
-  const email = c.req.query("email") ?? "";
+  const email = testAddress(c.req.query("email"));
+  if (!email) return c.json(notTestAddress, 403);
   const rows = await drizzle(c.env.DB).select().from(invitation).where(eq(invitation.email, email));
   const row = rows.at(-1);
   return c.json({ success: true, data: { id: row?.id ?? null } });

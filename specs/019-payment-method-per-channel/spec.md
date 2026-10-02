@@ -6,8 +6,9 @@ methods, the same day)
 
 **Created**: 2026-10-01 · **Rewritten**: 2026-10-01 · **Revised**: 2026-10-02
 
-**Status**: Draft — no clarification open, nothing left to measure
-(R1–R13). Ready for `/speckit-plan`.
+**Status**: Planned — no clarification open, nothing left to measure
+(R1–R13). [plan.md](plan.md) passes the Constitution Check; next is
+`/speckit-tasks`.
 
 **Input**: User description, in the creator's words (2026-10-01): "Para el
 piloto mi cliente quiere que registremos los pagos en wisphub a nombre de

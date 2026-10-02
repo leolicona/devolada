@@ -1,7 +1,19 @@
 # Data model: payment-method-per-channel
 
-**No migration.** No table, column or index is added, changed or removed
-(D11). The feature reads what exists and widens one in-process type.
+**One additive column, no table** (D11, D16). The feature reads what
+exists, widens one in-process type, and adds one nullable column to the
+integration row.
+
+## The new column
+
+| Table | Column | Type | Written by | Read by |
+| --- | --- | --- | --- | --- |
+| `integrations` | `payment_methods_seen_at` | integer, timestamp ms, nullable | the setup read, the test of the saved connection, and the gate (D14), each time the provider answers a fresh list for the stored key and installation | the adapter, from the integration row its caller already holds, as the version of the method-list cache key (D16) |
+
+Nullable and additive: existing rows read `null`, which is a version of
+its own, so nothing changes for them until a setup read stamps it. It
+carries `business_id` through its row (constitution V). One migration,
+generated with `pnpm --filter @devolada/api db:generate`.
 
 ## What is read
 
@@ -34,8 +46,9 @@ whose system has no payment methods ignores the new fields (FR-011).
 | Value | Shape | Rule |
 | --- | --- | --- |
 | Devolada's names | `{ spei: "SPEI - LINK.DEVOLADAPAGO", store: "CASH - RED.DEVOLADAPAGO" }` | Constants (D1) |
+| The cache key's version | `payment_methods_seen_at` in ms, or none | Taken from the integration row; a new stamp is a new key in every data center (D16) |
 | Devolada's descriptions | es-MX text, one per name | Constants beside the names, given to copy, never checked (D15) |
-| A payment method | `{ id: number, nombre: string }` | As the provider lists it; cached per business and address for ten minutes (D3) |
+| A payment method | `{ id: number, nombre: string }` | As the provider lists it; cached per business, address and seen stamp for ten minutes (D3, D16) |
 | The chosen method | `{ id, kind: "devolada" \| "cash" }` | The channel's method by normalized name, lowest id; otherwise the cash method without Devolada's names (D4, D5) |
 | The reference | string, ≤ 200 characters | `folio · clave` or `folio · tienda`; only the store's name is shortened (D7) |
 
@@ -54,8 +67,8 @@ Returned by the setup read and by the connection test (D8). See
 ## State transitions
 
 One new guard, on an existing transition: `integrations.actions_enabled`
-false → true requires every required line of the setup block to be
-`found` or `duplicate` (D14). true → false is unguarded, and nothing
+false → true requires a saved key and every required line of the setup
+block to be `found` or `duplicate` (D14). true → false is unguarded, and nothing
 moves true → false on its own.
 
 Nothing else is new. A payment's life (`validating → confirmed …`, the action queue

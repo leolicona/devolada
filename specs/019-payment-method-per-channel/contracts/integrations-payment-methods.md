@@ -41,6 +41,9 @@ export const devoladaMethods = z.discriminatedUnion("checked", [
 - Success: `{ success: true, data: DevoladaMethods }`.
 - A refused key reads as `checked: false` here; "Probar conexión" is where
   a refused key is explained (provider-address-per-isp FR-010).
+- Reads the list fresh. When the provider answered, it stamps the
+  integration's `payment_methods_seen_at` (D16), so the next payment
+  anywhere uses what it found.
 
 ## `POST /integrations/wisphub/test` (extended)
 
@@ -56,6 +59,15 @@ the same block.
 devoladaMethods: devoladaMethods.nullable(),
 ```
 
+| The `payment_methods` probe | `devoladaMethods` |
+| --- | --- |
+| Answered | The block (`checked: true`) |
+| Ran and failed (refused, timed out, unusable answer) | `{ checked: false }`, never "missing" (FR-009) |
+| Never ran: the test stopped at an earlier probe | `null`; the screen keeps the card it already shows |
+
+Only a test of the saved key and installation stamps
+`payment_methods_seen_at` (D16); a candidate's test stamps nothing.
+
 The `payment_methods` probe reads the whole list (contract
 [wisphub-recording.md](wisphub-recording.md) §1) instead of one row, with
 the candidate key and installation the test was given. The probe's own
@@ -64,16 +76,19 @@ depend on whether Devolada's methods exist.
 
 The handler asks the adapter for the block
 (`wisphub/payment-methods.ts`); it builds no provider path and parses no
-provider payload, as `testWisphubKey` already does for its probes
-(constitution IX).
+provider payload (constitution IX). Only the capability entry point and
+the integration's own setup routes reach the adapter: the rule recorded in
+the debt `core-reads-provider-directly` ("Confirm on the tree").
 
 ## `PATCH /integrations/wisphub` turning execution on (D14)
 
-When the patch carries `actionsEnabled: true` and the row has it false:
+When the patch carries `actionsEnabled: true` and the row has it false
+(or there is no row yet):
 
-| The block, read with the key and installation the row will have | Answer | Saved |
+| The key and installation the row will have, and the block read with them | Answer | Saved |
 | --- | --- | --- |
-| Every required line `found` or `duplicate` (SPEI always; the network's when the store channel is on) | `200`, as today | The whole patch |
+| No key | `409` `WISPHUB_NOT_CONFIGURED`, before any provider call | Nothing |
+| Every required line `found` or `duplicate` (SPEI always; the network's when the store channel is on) | `200`, as today | The whole patch, and `payment_methods_seen_at` (D16) |
 | A required line `missing` | `409` `PAYMENT_METHODS_MISSING` | Nothing |
 | `checked: false` | `503` `PAYMENT_METHODS_UNCHECKED` | Nothing |
 
@@ -104,12 +119,17 @@ A block *Formas de pago de Devolada* on the WispHub screen:
 - `checked: false`: *"No pudimos revisar tus formas de pago en WispHub.
   Vuelve a intentar."* Never shown as missing (FR-009).
 - The network's line only when `session.storeChannel.on`.
-- *Ejecución*: while the block says a required method is missing, the
-  switch cannot be turned on, and reads *"Para encender la ejecución,
-  primero crea tus formas de pago de Devolada."* with a link to the
-  block. It can always be turned off. The refusals, when the API has the
-  last word: `PAYMENT_METHODS_MISSING` → *"Aún falta crear una forma de
-  pago de Devolada en WispHub."*; `PAYMENT_METHODS_UNCHECKED` → *"No
-  pudimos revisar tus formas de pago en WispHub. Vuelve a intentar."*
+- *Ejecución*: the switch cannot be turned on, and says why, in three
+  cases: no key saved → *"Primero conecta WispHub."*; a required method
+  missing → *"Para encender la ejecución, primero crea tus formas de pago
+  de Devolada."* with a link to the block; the block not checked → *"No
+  pudimos revisar tus formas de pago en WispHub. Vuelve a intentar."* It
+  can always be turned off. The refusals, when the API has the last word:
+  `WISPHUB_NOT_CONFIGURED` → *"Primero conecta WispHub."*;
+  `PAYMENT_METHODS_MISSING` → *"Aún falta crear una forma de pago de
+  Devolada en WispHub."*; `PAYMENT_METHODS_UNCHECKED` → *"No pudimos
+  revisar tus formas de pago en WispHub. Vuelve a intentar."*
+- When "Probar conexión" or a save answers `devoladaMethods`, a block
+  replaces the card's; `null` leaves the card as it is.
 - While the read runs, the waiting label sits inside `<Pending>`
   (pending-lint).

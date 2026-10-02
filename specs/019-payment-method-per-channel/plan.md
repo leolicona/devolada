@@ -22,12 +22,16 @@ show whether each method exists, with its name and description ready to
 copy (US4). Turning on automatic execution requires the methods of the
 business's channels (FR-013): a business collects from the connection on,
 in observation mode, and Devolada starts writing in its system only once
-the methods exist. Devolada never turns an execution off (D14).
+the methods exist, and never before the business has connected.
+Devolada never turns an execution off (D14). A method Devolada has seen —
+on the screen, in the test, at the gate — is used by the next payment
+wherever it is recorded (FR-014, D16).
 
 The increment lives in the adapter (FR-011, constitution IX). The core's
 only change is to hand the adapter the payment's channel and the parts of
 its reference through the capability it already calls
-(`paymentActions.attempt`, D2). No migration, no table, no new trigger.
+(`paymentActions.attempt`, D2). One additive column on the integration row
+(D16), no table, no new trigger.
 
 ## Technical Context
 
@@ -36,9 +40,11 @@ its reference through the capability it already calls
 **Primary Dependencies**: Hono 4 + `@hono/zod-validator`, Drizzle ORM, zod;
 React 19, TanStack Query, `@devolada/ui` (admin)
 
-**Storage**: D1 — read only (`payments.channel`, `folio`, `tracking_key`,
-`store_id` → `stores.name`, `businesses.store_channel_on`); the Cache API
-for the provider's method list (ten minutes, per business and address)
+**Storage**: D1 — reads `payments.channel`, `folio`, `tracking_key`,
+`store_id` → `stores.name`, `businesses.store_channel_on`; one additive
+nullable column, `integrations.payment_methods_seen_at` (D16); the Cache
+API for the provider's method list (ten minutes, per business, address
+and seen stamp)
 
 **Testing**: Vitest in workerd (`vitest-pool-workers`, real D1, WispHub
 at its origin with `fetchMock`); happy-dom + Testing Library + MSW + axe
@@ -78,8 +84,8 @@ All of it was known before the plan: the spec closed M1–M4 (R8–R13) on
 | VI. Visual foundations | Three statuses join `StatusBadge` (icon + text, tones from tokens); method names in JetBrains Mono; the waiting label inside `<Pending>`; es-MX copy | PASS |
 | VII. Every test cites its story | `payment-method-per-channel US1`–`US4` on every new test; tasks carry `[US<n>]` | PASS |
 | VIII. Absent config degrades | A missing method degrades to cash, as today, and the screen says so as a setup step; an unreachable provider reads `checked: false`, never "missing" (FR-009). The gate (D14) guards only the act of turning execution on: collecting never waits on it, and nothing working is ever turned off — not at the release, not when a method disappears. No new binding or secret | PASS |
-| IX. Core generic, adapters translate | Names, the list, the choice rule, the normalization, the reference's format and limit, and the 400 fallback all live in `wisphub/` (D1, D3–D7). The core passes `channel` and `recordReference` in its own words (D2) and names no method. The new route and the gate are the WispHub integration's own setup, where the provider's name may appear; the handler asks the adapter and builds no path, as `testWisphubKey` does today. Collecting, the core's own feature, does not depend on the methods (FR-013). No new leak. The existing debt `core-reads-provider-directly` is untouched: the three call sites already reach the adapter through the capability (`cash-at-stores` D9) | PASS |
-| Stack & constraints | No new dependency; no migration (D11); no new trigger — the queue sweep is the existing one | PASS |
+| IX. Core generic, adapters translate | Names, the list, the choice rule, the normalization, the reference's format and limit, and the 400 fallback all live in `wisphub/` (D1, D3–D7). The core passes `channel` and `recordReference` in its own words (D2) and names no method. The new route and the gate are the WispHub integration's own setup, where the provider's name may appear; the handler asks the adapter and builds no path. Only the capability entry point and the integration's own setup routes reach the adapter — the rule recorded in the debt `core-reads-provider-directly` ("Confirm on the tree"). The adapter reads the seen stamp from the row its caller holds and never writes a core row (D16). Collecting, the core's own feature, does not depend on the methods (FR-013). No new leak. The existing debt `core-reads-provider-directly` is untouched: the three call sites already reach the adapter through the capability (`cash-at-stores` D9) | PASS |
+| Stack & constraints | No new dependency; one additive migration (D11, D16), safe for the per-PR preview against the live dev database; no new trigger — the queue sweep is the existing one | PASS |
 
 **Post-design re-check** (after research, data model and contracts): no
 change. The contracts add one in-process type widening, one browser
@@ -91,6 +97,13 @@ above. Complexity Tracking stays empty.
 the execution gate and the descriptions, D14 and D15): re-checked; every
 gate still passes.
 
+**Revision after `/speckit-analyze`** (2026-10-02): execution needs a
+saved key (D14); the setup reads stamp the integration and the cache key
+carries the stamp (D16, the creator's choice of an exact switch-over),
+which brings one additive column; FR-005's other recording paths and the
+connection test's failed probe are specified. Re-checked: every gate
+still passes.
+
 ## Project Structure
 
 ### Documentation (this feature)
@@ -99,7 +112,7 @@ gate still passes.
 specs/019-payment-method-per-channel/
 ├── spec.md
 ├── plan.md              # this file
-├── research.md          # D1–D15
+├── research.md          # D1–D16
 ├── data-model.md        # no migration; what is read; the widened type
 ├── quickstart.md        # automated proof, demo check, rollout order
 ├── contracts/
@@ -114,19 +127,22 @@ specs/019-payment-method-per-channel/
 
 ```text
 apps/api/src/
+├── db/schema.ts                      # integrations.payment_methods_seen_at (D16), and its generated migration in apps/api/migrations/
 ├── integrations/capabilities.ts      # ActionAttemptInput gains channel + recordReference (D2)
+├── direct-payments/record-reference.ts  # NEW: storeNamesFor, recordReferenceOf (D2, D10)
 ├── wisphub/
 │   ├── payment-methods.ts            # NEW: the two names and descriptions, normalize, choose, reference, setup block (D1, D4, D5, D7, D8, D15)
 │   ├── client.ts                     # list all methods (paged); registerPayment sends referencia; WispHubError keeps a 400's field names (D6)
-│   ├── cache.ts                      # cashPaymentMethodId → paymentMethods (the list), same key and TTL; drop on refusal (D3, D6)
+│   ├── cache.ts                      # cashPaymentMethodId → paymentMethods (the list), keyed also by the seen stamp; drop on refusal (D3, D6, D16)
 │   ├── reconnection.ts               # attemptReconnection picks the channel's method, falls back once on a forma_pago 400 (D4, D6, D9)
-│   └── actions.ts                    # passes the new input through
+│   ├── actions.ts                    # passes the new input and the row's seen stamp through
+│   └── receivables.ts                # wisphubCapabilities takes the integration with its seen stamp
 ├── direct-payments/validation.ts     # settleConfirmed fills channel + recordReference (folio, clave, store name)
 ├── routes/payments/handler.ts        # dispatchObserved fills them (Ejecutar ahora, the held accept)
 ├── reconnection/queue.ts             # the sweep fills them; store names read once per batch (D10)
 └── routes/integrations/
     ├── index.ts                      # GET /wisphub/payment-methods
-    ├── handler.ts                    # the read; the payment_methods probe returns the block; patchWisphub's gate on turning execution on (D14)
+    ├── handler.ts                    # the read and the probe (both stamp, D16); patchWisphub's gate on turning execution on (D14)
     └── schema.ts                     # devoladaMethods; wisphubTestResponse.devoladaMethods
 
 apps/api/test/

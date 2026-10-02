@@ -1,6 +1,8 @@
 # Research: payment-method-per-channel
 
 Every decision below is cited in code as `payment-method-per-channel D<n>`.
+D1–D15 come from the plan; D16 and the D14 refusal without a key from
+the revision after `/speckit-analyze` (2026-10-02).
 The provider facts it rests on are the spec's R1–R13, measured on the demo
 tenant on 2026-10-01 and 2026-10-02. None of them is re-measured here.
 
@@ -62,16 +64,18 @@ writes it).
 **Decision**: `wisphub/cache.ts` caches the whole list of the business's
 payment methods (`id`, `nombre`) instead of the single cash id, with the
 same key (business + installation address, provider-address-per-isp
-T046) and the same ten minutes (provider-latency D5). The adapter picks the
-channel's method and the cash method from that one read.
+T046) plus the integration's `payment_methods_seen_at` as its version
+(D16), and the same ten minutes (provider-latency D5). The adapter picks
+the channel's method and the cash method from that one read.
 
 **Rationale**: One read already happens per recording today; the list is
 the same call without `find()`, paged with `limit` and `offset` while the
 provider reports more. Today's call reads only the provider's first page;
 how many methods fit on it was not measured, and a business with many
-methods could have Devolada's on the second. A method the business creates appears at
-the latest ten minutes later, the same promise the cash method has had
-since provider-latency D5.
+methods could have Devolada's on the second. A method the business
+creates appears at the latest ten minutes later, the same promise the cash
+method has had since provider-latency D5 — and at once once Devolada has
+seen it, because the key also carries the moment it was last seen (D16).
 
 **Alternatives considered**: no cache (rejected: one more provider call per
 recording on the money path, provider-latency D5's reason); caching the
@@ -203,11 +207,16 @@ Referencia: …", R12); the customer's name (rejected: FR-007).
   payment methods, then execution (spec Clarifications 2026-10-02).
 - The setup read, the probe and the gate (D14) read the list fresh, never
   from the cache: a business that just created a method and comes back to
-  check must see it. When the read is for the stored key and
-  installation, it also writes the fresh list into D3's cache, so the next
-  payment uses the method at once instead of up to ten minutes later. A
-  test of a candidate key or installation writes nothing (it may be the
-  door the business is walking away from).
+  check must see it. When the read is for the stored key and installation
+  and the provider answered, it stamps the moment it was seen (D16), so
+  the next payment, wherever it runs, reads the list again; the place that
+  read it keeps it under the new stamp. A test of a candidate key or
+  installation stamps nothing (it may be the door the business is walking
+  away from).
+- In "Probar conexión", the block follows the probe: the probe answered →
+  the block; the probe ran and failed (refused, timed out) →
+  `{ checked: false }`, never "missing" (FR-009); the test stopped before
+  the probe → `null`, and the screen keeps the card it already shows.
 
 **Rationale**: FR-008 and FR-009. Constitution VIII: a typo must not send
 payments to cash in silence. Keeping it off `GET /integrations` keeps the
@@ -248,14 +257,17 @@ entity).
 
 ---
 
-## D11 — No migration, no new table, no mark in Pagos
+## D11 — One additive column, no new table, no mark in Pagos
 
-**Decision**: nothing in the database changes. A payment that fell back is
-not marked one by one; the integration's screen carries the setup state
-(D8).
+**Decision**: the only database change is D16's column on the
+integration row, `payment_methods_seen_at`, nullable and additive. No
+table, and a payment that fell back is not marked one by one; the
+integration's screen carries the setup state (D8).
 
-**Rationale**: the spec's Key Entities and Assumptions. The reason for a
-fallback is a setup state of the business, not of the payment.
+**Rationale**: the spec's Key Entities and Assumptions: the reason for a
+fallback is a setup state of the business, not of the payment. The column
+was added on 2026-10-02, after `/speckit-analyze`, when the creator chose
+an exact switch-over (FR-014); the first plan had no migration.
 
 ---
 
@@ -301,6 +313,14 @@ today until it creates the methods, then records with them.
   already on → saved and no provider call; a duplicate → saved. The
   component suite: the switch cannot be turned on while the block says
   missing, can always be turned off, and both refusals have es-MX copy.
+- **Every way a payment is recorded** (FR-005): besides the verdict,
+  *Ejecutar ahora* and the sweep, a partial payment (`reconnect: false`),
+  a payment carried by an invoice Devolada creates (no pending invoice →
+  `createInvoice`, then `registrar-pago` with the method), and a held
+  payment the business accepts (`reviewDecision`'s accept).
+- **Freshness** (D16): a list cached under an old stamp is not used once
+  the stamp moves; a setup read with the stored key moves it; a test of a
+  candidate key does not.
 - Existing suites keep their `formas-de-pago` stub (`efectivo`, id 7):
   with no Devolada method the adapter records exactly as today, which is
   FR-003's "no change" and keeps them green.
@@ -329,6 +349,13 @@ patch turns `actionsEnabled` from false to true:
    way the whole patch is refused and nothing is saved, so a combined
    patch never half-applies.
 
+Without a key after the patch, turning on is refused with
+`409 WISPHUB_NOT_CONFIGURED`, the code the hub already answers for "no
+key yet", before any provider call: there is nothing to check, and a
+business that turned execution on first and connected afterwards would
+skip the requirement (found by `/speckit-analyze`, 2026-10-02). A
+successful check stamps `payment_methods_seen_at` in the same write (D16).
+
 No check, and no provider call, when a patch turns execution off, leaves
 it as it is, or sets it to true on a row already on. Nothing else writes
 `actions_enabled` to true outside `/dev/seed`, which stays as it is
@@ -336,9 +363,10 @@ it as it is, or sets it to true on a row already on. Nothing else writes
 the release, not a missing method, not the store channel switched on
 later (FR-013).
 
-In the panel, the *Ejecución* switch cannot be turned on while the block
-says a required method is missing, and says why, pointing at the block;
-it can always be turned off. The API is the authority: the block on
+In the panel, the *Ejecución* switch cannot be turned on while the
+integration has no key ("Primero conecta WispHub"), while the block says a
+required method is missing, or while the block could not be checked, and
+says why; it can always be turned off. The API is the authority: the block on
 screen can be ten minutes old (D3), so both refusals have es-MX copy too.
 
 **Rationale**: the creator's decision of 2026-10-02 (spec FR-013, SC-007).
@@ -396,3 +424,36 @@ typed the old text loses nothing, since the description is never read.
 adapter, D1); checking the description (impossible through the API, R8);
 «desde cualquier banco o app» instead of naming the apps (the creator
 preferred the names, for the staff who read them).
+
+---
+
+## D16 — A method Devolada has seen is used by the next payment, everywhere
+
+**Decision**: the integration row gains `payment_methods_seen_at`
+(timestamp ms, nullable). Every fresh read of the methods for the stored
+key and installation that the provider answers — the screen's read, the
+test of the saved connection, the gate (D14) — stamps it with the moment
+of the read. D3's cache key carries that stamp as its version, the way the
+pending list's key carries the tenant's last registration
+(presence-freshness D6): a new stamp is a new key in every data center,
+so the next payment anywhere reads the list again. The adapter takes the
+stamp from the integration row its caller already holds, so the recording
+path makes no extra query.
+
+**Rationale**: the creator's decision of 2026-10-02 (spec FR-014, SC-001).
+`cache.delete` reaches one data center only (`wisphub/cache.ts`), so
+writing the fresh list where the screen was read would leave the others
+on the old one for up to ten minutes, and a payment recorded with the cash
+method meanwhile stays so (FR-006). The pilot is the case: it will create
+the methods while its execution is on. The stamp moves on every
+successful read, found or not; the cost is one list read per data center
+after each screen visit.
+
+**Alternatives considered**: accepting up to ten minutes (rejected by the
+creator: SC-001 would start ten minutes late); no cache (rejected: every
+payment would wait on the business's system, provider-latency D5);
+stamping only when the list changed (rejected: it needs the old list to
+compare, which is what the cache cannot give across data centers); the
+adapter stamping on a refused method (D6) (rejected: an adapter does not
+write the core's rows, constitution IX; that payment falls back correctly
+anyway, since the method does not exist).

@@ -82,3 +82,11 @@
   US4 rose from P3 to P2 and gained the gate's scenarios. The business
   also copies a description with each name (FR-008); the API returns no
   description (R8), so it is never checked.
+- Revised after `/speckit-analyze` (2026-10-02). H1: execution could be
+  turned on before a key was saved, which skipped FR-013; it now needs a
+  saved connection. M1: FR-005's partial payment, created invoice and
+  accepted hold are tested. M2: the connection test's failed probe reads
+  "could not be checked". And the creator chose an exact switch-over once
+  Devolada has seen a method (FR-014, SC-001 reworded): the integration
+  row gains one additive column whose stamp versions the method cache in
+  every data center (D16). L1–L5 aligned wording across the artifacts.

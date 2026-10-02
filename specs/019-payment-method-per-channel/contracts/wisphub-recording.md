@@ -18,7 +18,9 @@ many methods could have Devolada's on the second.
 
 - Each method has only `id` and `nombre` (R8). The list is read-only
   (R6): Devolada never creates, edits or deletes a method (FR-010).
-- Cached per business and installation address for ten minutes (D3).
+- Cached per business, installation address and the integration's
+  `payment_methods_seen_at` for ten minutes (D3, D16): a setup read that
+  stamps a new moment makes every data center read the list again.
   Dropping the entry (D6) clears it in this data center only
   (`cache.delete` is per colo, `wisphub/cache.ts`); elsewhere the same
   400 falls back the same way until the entry expires.

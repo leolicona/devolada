@@ -22,6 +22,9 @@ Expected:
 | SPEI verdict, both methods exist | `forma_pago` = the SPEI method's id; `referencia` = `DV-… · <clave>` |
 | A store's record, store channel on | `forma_pago` = the network method's id; `referencia` = `DV-… · <store name>` |
 | *Ejecutar ahora* on a queued SPEI payment | Same as the SPEI verdict |
+| A partial payment (the service left cut) | Same method; `accion: 0` |
+| A customer with no pending invoice (Devolada creates the invoice) | The created invoice is paid with the same method |
+| A held payment the business accepts | Same method |
 | The queue sweep on a queued store payment | Same as the store's record |
 | No Devolada method | The cash method, as today; reference still written |
 | The list has `CASH - RED.DEVOLADAPAGO` before "Cash" (R11) and no SPEI method | A SPEI payment records with "Cash", never with Devolada's name |
@@ -38,10 +41,15 @@ Expected:
 | One missing | `missing` on that line |
 | Two with one name | `duplicate` |
 | WispHub times out | `checked: false` — never `missing` |
+| "Probar conexión": the methods probe refused or timed out | `devoladaMethods: { checked: false }` |
+| "Probar conexión": the test stopped at an earlier probe | `devoladaMethods: null` |
+| A list cached under an old stamp, then a setup read with the saved key | The next payment reads the list again and uses the new method (D16) |
+| A test of a candidate key | No stamp; the cache is untouched |
 
 | Scenario (turning execution on, D14) | Answer |
 | --- | --- |
-| Observing; the channels' methods exist | `200`; execution on |
+| No key saved | `409 WISPHUB_NOT_CONFIGURED`; no WispHub call |
+| Observing; the channels' methods exist | `200`; execution on; the seen stamp moves |
 | Observing; the SPEI method missing | `409 PAYMENT_METHODS_MISSING`; still observing |
 | Store channel on; only the SPEI method | `409 PAYMENT_METHODS_MISSING` |
 | Store channel off; only the SPEI method | `200` |
@@ -92,6 +100,10 @@ them with the pilot's key.
 7. FR-013, with the name still renamed: turn *Ejecución* off. It turns
    off. Try to turn it on: it stays off and points at the block. Restore
    the name, reopen the screen: it turns on.
+8. FR-014: rename the method again, pay a link (it records as cash),
+   restore the name, open the screen until it reads *Creada*, and pay
+   another link at once: it carries `SPEI - LINK.DEVOLADAPAGO`, with no
+   ten-minute wait.
 
 The Postman collection *WispHub · Formas de pago de Devolada (ESCRIBE)*
 re-measures the provider's side (R8–R11) if WispHub's answers are ever in
@@ -108,7 +120,8 @@ doubt; it writes only on the demo, behind its own guard.
    `CASH - RED.DEVOLADAPAGO`, copying the name and the description from
    the screen, and uses neither at its counter.
 4. The pilot opens *Integraciones → WispHub*: both lines read *Creada*.
-   *Probar conexión* shows the same. If the pilot is still observing, it
+   *Probar conexión* shows the same. From that moment the next payment
+   carries the method (FR-014): no need to wait. If the pilot is still observing, it
    turns *Ejecución* on now; if its execution was already on, nothing
    changed for it at the release, and from now on its payments carry the
    methods.

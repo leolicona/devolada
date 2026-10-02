@@ -32,9 +32,13 @@ export type ActionAttemptInput = {
 
 | Call site | `channel` | `folio` | `trackingKey` | `storeName` |
 | --- | --- | --- | --- | --- |
-| `settleConfirmed` (`direct-payments/validation.ts`), SPEI verdict and store record | `payment.channel` | the folio it writes on the row | the verdict's `trackingKey` if it adopts one, else `payment.trackingKey` | the store's name when `payment.storeId` is set |
-| `dispatchObserved` (`routes/payments/handler.ts`), *Ejecutar ahora* and the held accept | `row.channel` | `row.folio` | `row.trackingKey` | the store's name when `row.storeId` is set |
-| The sweep (`reconnection/queue.ts`) | `charge.channel` | `charge.folio` | `charge.trackingKey` | the batch's store names, read in one query (D10) |
+| `settleConfirmed` (`direct-payments/validation.ts`), SPEI verdict and store record | the row's `channel` | the row's `folio` | the row's `trackingKey` (a SPEI row) | the store's name (a store row) |
+| `dispatchObserved` (`routes/payments/handler.ts`), *Ejecutar ahora* and the held accept | `row.channel` | `row.folio` | `row.trackingKey` (a SPEI row) | the store's name (a store row) |
+| The sweep (`reconnection/queue.ts`) | `charge.channel` | `charge.folio` | `charge.trackingKey` (a SPEI row) | the batch's store names, read in one query (D10) |
+
+In `settleConfirmed`, "the row" is the one its verdict write returns, not
+the `payment` it was handed: the folio is born in that write, and the
+clave may have been adopted onto the row after `payment` was read.
 
 ## Rules
 

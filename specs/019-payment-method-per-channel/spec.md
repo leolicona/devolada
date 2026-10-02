@@ -6,11 +6,14 @@ methods, the same day)
 
 **Created**: 2026-10-01 · **Rewritten**: 2026-10-01 · **Revised**: 2026-10-02
 
-**Status**: Planned — no clarification open, nothing left to measure
-(R1–R13). Revised after the first plan (2026-10-02): the methods are a
-requirement for turning on automatic execution (FR-013), and the business
-copies a description with each name. [plan.md](plan.md) carries both;
-next is `/speckit-tasks`.
+**Status**: Planned and tasked — no clarification open, nothing left to
+measure (R1–R13). Revised after the first plan (2026-10-02): the methods
+are a requirement for turning on automatic execution (FR-013), the
+business copies a description with each name, and a method Devolada has
+seen is used by the next payment (FR-014). Revised again after
+`/speckit-analyze` (2026-10-02): execution needs a saved connection
+(FR-013). [plan.md](plan.md) and [tasks.md](tasks.md) carry all of it;
+next is `/speckit-implement`.
 
 **Input**: User description, in the creator's words (2026-10-01): "Para el
 piloto mi cliente quiere que registremos los pagos en wisphub a nombre de
@@ -191,6 +194,22 @@ cannot show the reference as a column, so its download does not carry it
   business's account, never runs through SPEI: Devolada cannot confirm it
   today, so it never records it. The description names the apps so the
   business's staff reads them as SPEI.
+- Q: Devolada keeps the list of a business's methods for up to ten
+  minutes, in each place it runs, so a method just created may be ignored
+  for that long, and those payments stay as cash (FR-006). Accept the
+  wait, make it exact, or drop the memory? → A: **Exact once Devolada has
+  seen it** (the creator, choosing the recommended option): as soon as the
+  integration's screen, "Probar conexión" or turning on execution shows a
+  method found, the next payment uses it, wherever Devolada runs it
+  (FR-014). A business that never opens the screen waits at most ten
+  minutes, as today. Dropping the memory was rejected: every payment would
+  wait on the business's system.
+- Q (from `/speckit-analyze`): can execution be turned on before the
+  business connects its system? → A: **No.** Without a saved connection
+  there is nothing to check, so execution stays off (FR-013). Otherwise a
+  business that turned execution on first and connected afterwards would
+  skip the requirement. Integrations already executing without a key are
+  left as they are.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -324,7 +343,8 @@ became a requirement for execution.
 screen before creating the methods: both show as missing, with the names
 and descriptions to copy, and execution does not turn on. Create one, run
 the test: it shows found, the other still missing; with the store channel
-off, execution now turns on.
+off, execution now turns on, and the next SPEI payment carries the
+method.
 
 **Acceptance Scenarios**:
 
@@ -356,6 +376,12 @@ off, execution now turns on.
 10. **Given** the owner is creating a method in their system, **When** they
     use the screen, **Then** they can copy the exact name and the
     description, each with one action.
+11. **Given** a business that has not saved its connection, **When** the
+    owner turns on automatic execution, **Then** it stays off and the
+    screen asks to connect first.
+12. **Given** the owner just created a method and the screen shows it
+    found, **When** the next payment of that channel is recorded,
+    **Then** it carries the method, wherever Devolada records it.
 
 ---
 
@@ -371,6 +397,15 @@ off, execution now turns on.
   payments fall back to cash until the business creates
   `CASH - RED.DEVOLADAPAGO`, and the screen shows the step.
 - **Turning execution off** is always possible, whatever the methods.
+- **Execution turned on before connecting** is refused: connect first
+  (FR-013). An integration already executing without a key when this
+  feature ships keeps its switch; once it saves a key, its payments fall
+  back until the methods exist, and the screen shows the step.
+- **A method created while payments are coming in.** Until Devolada sees
+  it — the screen, the test, turning on execution, or its own list read —
+  a payment may still be recorded with the cash method, at most ten
+  minutes after the method was created. Once seen, the next payment uses
+  it (FR-014).
 - **A business creates the methods before this feature ships.** Today's
   adapter does not know them: `SPEI - LINK.DEVOLADAPAGO` is ignored, but
   `CASH - RED.DEVOLADAPAGO` may be taken as the cash method for every
@@ -483,8 +518,15 @@ off, execution now turns on.
   always allowed, and Devolada MUST NOT turn off an execution that is on —
   not at the release, not when a method disappears, not when the store
   channel is switched on later; those payments fall back (FR-004).
-  Collecting — links, validation, observation mode, running a payment by
-  hand — MUST NOT depend on the methods.
+  Turning execution on also requires a saved connection: without one,
+  execution MUST stay off. Collecting — links, validation, observation
+  mode, running a payment by hand — MUST NOT depend on the methods.
+- **FR-014**: Once the integration's screen, "Probar conexión" for the
+  saved connection, or turning on execution has read the business's
+  methods, the next payment Devolada records for that business MUST use
+  what that read found, wherever Devolada runs it. Without such a read, a
+  method created in the business's system MUST be used within ten minutes
+  of its creation.
 
 ### Key Entities
 
@@ -500,8 +542,10 @@ No new entity. The feature reads what exists:
 
 ### Measurable Outcomes
 
-- **SC-001**: From the moment a business creates `SPEI - LINK.DEVOLADAPAGO`, 100% of the SPEI payments Devolada records carry it,
-  checked on the pilot's first 30 payments after it is created.
+- **SC-001**: From the moment the integration's screen shows
+  `SPEI - LINK.DEVOLADAPAGO` found (or, without opening it, ten minutes
+  after the business creates it), 100% of the SPEI payments Devolada
+  records carry it, checked on the pilot's first 30 payments after that.
 - **SC-002**: For any month after that, the number of paid invoices in the
   business's own download, filtered by `SPEI - LINK.DEVOLADAPAGO`, equals
   the number of SPEI payments Devolada's Pagos shows as recorded in the

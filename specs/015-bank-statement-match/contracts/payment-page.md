@@ -37,7 +37,27 @@ banco", or a confirmation by hand.
 
 ## The receipt's bank question (D9)
 
-When `/read` answers `sameBank: true`, the page asks before it submits:
+`POST /direct-payments/links/:token/read` — `proofReadingResponse.ask`
+gains one reason:
+
+```ts
+/* bank-statement-match D9: the reading shows the business's bank on both
+   sides — a misread or a real same-bank transfer (receipt-reader-tuning
+   D5). The payer says which bank they paid from before anything is
+   searched. */
+z.object({ reason: z.literal("same_bank") }),
+```
+
+Decided by `askBeforeCredit` (`consta/extraction/ask.ts`), which the
+receipt door also enforces, on a clear reading whose gate says
+`receiving.sameBank`:
+
+- with a key (clave or a non-generic reference): `{ reason: "same_bank" }`,
+  after `wrong_destination`;
+- without a key: today's `{ reason: "no_key" }`, with `"senderBank"` added
+  to `fields`, so the typing form asks the bank with the key.
+
+The page renders `same_bank` before it submits:
 
 - Title: "¿Desde qué banco pagaste?"
 - The bank chips of 017 (D18): the payer's learned banks first, then

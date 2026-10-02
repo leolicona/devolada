@@ -93,7 +93,7 @@ never stored, only its credits (FR-002)
 
 **Scale/Scope**: Phase A — `direct-payments/validation.ts` (the pre-check,
 `settleWithoutCep`), `routes/payments/{index,handler,schema}.ts` (the
-filter, the count, `bank-check`), `db/schema.ts` (two comments),
+filter and `bank-check`), `db/schema.ts` (two comments),
 `FeedScreen.tsx`, `status-badge.tsx`, `apps/pago`'s receipt step. Tests:
 ~16 API, ~8 panel, ~5 page, 2 badge, the e2e feed — cited
 `bank-statement-match US4`
@@ -114,7 +114,7 @@ decisions. The plan adds the ones below; code comments cite them as
 | D6 | `POST /payments/:id/bank-check { received }` under `payments: operate`. A conditional claim (`SAME_BANK` → `BANK_CHECKING`) makes one decision win; `received` settles through `settleWithoutCep` (`settlePanelPayment` / `settleApiPayment` with `cep: null`, D14's re-check kept), the payer's claimed amount as received; `reviewedBy`/`reviewedAt` record who; the fee as any confirmed payment; a failed read of the business's system restores the wait and answers 503 | research R6, creator 2026-10-02 |
 | D7 | The payer's contract and page change nothing: 017's words already render the wait, the release, the confirmation and the end; one test proves no text says how | research R7, creator 2026-10-02 |
 | D8 | Panel: chip "Por confirmar en tu banco" (`awaiting=bank`), a strip when N > 0, `StatusBadge` kinds `awaitingBank` and `notReceived`, **Sí, llegó** / **No llegó** behind `AlertDialog`s, the release and its lapse on the row, "Confirmado a mano por {nombre}" | research R8 |
-| D9 | When `/read` says `sameBank`, the page asks "¿Desde qué banco pagaste?" with 017's chips before submitting; the answer is `transfer.senderBank`. A reading alone never makes a payment same-bank | research R9 |
+| D9 | `askBeforeCredit` — reported by `/read`, enforced by the receipt door — asks the payer's bank on a clear same-bank reading: a new reason `same_bank` when the receipt has a key, `senderBank` added to `no_key`'s fields when it has none. The page asks "¿Desde qué banco pagaste?" with 017's chips; the answer is `transfer.senderBank`. A reading alone never makes a payment same-bank | research R9 |
 | D10 | The method in the business's system is SPEI: the row keeps `channel = 'spei'`; spec 019 carries the amendment | research R10, creator 2026-10-02 |
 | D11 | `/v1` links wait the same way, without a release, and the verdict webhook announces the decision | research R11 |
 | D12 | Readers return a generic `StatementRead`; the core keeps only credits, matches on the operation date and parses amounts with its own parsers | research R12 |
@@ -127,15 +127,17 @@ decisions. The plan adds the ones below; code comments cite them as
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-Checked against v1.9.2. One gate per principle, plus the Purpose and the
+Checked against v1.9.2, then re-checked against **v1.10.0** (2026-10-02),
+which ratified the Purpose amendment this plan proposed (TODO(015-PLAN-CHECK)
+closed). One gate per principle, plus the Purpose and the
 stack, as 018 did.
 
 | Principle | Gate | Verdict |
 | --- | --- | --- |
-| **Purpose** | "Devolada lets Mexican businesses … collect payments by SPEI and validates every transfer"; cash is the one named exception, confirmed by the store's word. A transfer within one bank never reaches SPEI and is confirmed by the business's own word or its statement — a way the Purpose does not name | ⛔ **Blocked**: amendment proposed in Complexity Tracking |
+| **Purpose** | "Devolada lets Mexican businesses … collect payments by SPEI and validates every transfer"; cash is the one named exception, confirmed by the store's word. A transfer within one bank never reaches SPEI and is confirmed by the business's own word or its statement — a way the Purpose does not name | ✅ PASS under v1.10.0: the Purpose now says a transfer from an account at the business's own bank is confirmed by the business, by hand or with its bank statement (was ⛔ under v1.9.2) |
 | I. Spec-Driven, Every Decision Cited | Sixteen decisions with where each was made; code cites `bank-statement-match D<n>`; spec 019's amendment is dated and quoted in both specs | PASS |
 | II. Money Law | Cents end to end; the received amount is the payer's claim in cents (Phase A) or the credit's, parsed by the core's parsers (Phase B); "today" for the lapse is the business's timezone; matches exact to the cent | PASS |
-| III. One Contract, Pure Routers | `bank-check` and the count join `routes/payments`; `awaiting` and `bankCheck` in `payments/schema.ts`, exported as today; Phase B is a new area with its own export; routers stay pure; new codes are new meanings, not old ones reused | PASS |
+| III. One Contract, Pure Routers | `bank-check` joins `routes/payments`; `awaiting` and `bankCheck` in `payments/schema.ts`, exported as today; Phase B is a new area with its own export; routers stay pure; new codes are new meanings, not old ones reused | PASS |
 | IV. Tests Run on the Real Runtime | Lifecycle in workerd on a real D1 with providers at pinned origins, including the assertion that none is called; panel and page on MSW with validated fixtures and axe; layout on the browser layer; Phase C fixtures are real files, anonymized | PASS |
 | V. Tenant Isolation and Authorization by Area | Every query and the claim filter by `business_id`; deciding is `payments: operate`, reading `payments: read`; no cross-business read; statement data never in a payer contract (FR-015) | PASS |
 | VI. Visual Foundations | Two `StatusBadge` kinds with icon + text on existing tones; `AlertDialog` with the one dimming treatment; compact 40px buttons in the desktop panel; the payer's bank question reuses 017's 48px chips and a 64px decisive action; es-MX copy; no new token | PASS |
@@ -144,12 +146,12 @@ stack, as 018 did.
 | IX. The Core Speaks Generic | "Same bank", "collection account", "release", "integration" are core words; the release and the action go through the integration's capabilities as today; no WispHub word in a contract or in the panel's copy; a bank's export format lives in one reader file | PASS |
 | Stack, migrations, one trigger | No dependency; Phase A no migration, Phase B one additive migration; no new trigger — Phase A needs no sweep and Phase B runs in the upload request | PASS |
 
-**Post-design re-check (after Phase 1).** Unchanged: PASS on I–IX and the
-stack; the Purpose stays blocked until the amendment below is ratified.
+**Post-design re-check (after Phase 1).** PASS on I–IX, the stack and,
+since v1.10.0, the Purpose.
 Re-read on purpose:
 - (III) `NOT_AWAITING_BANK` is a new code; `NOT_FOUND` and
   `INTEGRATION_UNAVAILABLE` are reused with their existing meanings.
-- (V) the count and the filter read one business's rows.
+- (V) the filter, and the strip that reuses it, read one business's rows.
 - (IX) `settleWithoutCep` calls the same capability-driven settlement as
   the verdict, so no adapter detail enters the new code.
 
@@ -165,7 +167,7 @@ specs/015-bank-statement-match/
 ├── data-model.md        # Phase 1: Phase A's codes and states; Phase B's tables
 ├── quickstart.md        # Phase 1: validation per phase, gates
 ├── contracts/
-│   ├── panel.md         # the filter, the count, bank-check, the feed screen, two badges
+│   ├── panel.md         # the filter, bank-check, the feed screen, two badges
 │   ├── payment-page.md  # no new field; the words per moment; the receipt's bank question
 │   └── statements.md    # Phases B–C: the reader interface, the routes, the screen
 ├── checklists/requirements.md
@@ -180,9 +182,12 @@ apps/api/
 │   ├── db/schema.ts                              # ~ comments: expired + NOT_RECEIVED (D5); reviewedBy widens (D6)
 │   │                                             #   [B] + statement_imports, statement_credits, payments.statement_credit_id
 │   ├── direct-payments/validation.ts             # ~ same-bank pre-check (D2, D3, D4); + settleWithoutCep (D6)
+│   ├── consta/extraction/ask.ts                  # ~ askBeforeCredit: same_bank; senderBank in no_key (D9)
+│   ├── consta/index.ts                           # ~ the Ask union gains same_bank (D9)
+│   ├── routes/direct-payments/schema.ts          # ~ proofReadingResponse.ask: same_bank (D9)
 │   ├── routes/payments/
-│   │   ├── index.ts                              # + GET /payments/bank-check/count, POST /payments/:id/bank-check
-│   │   ├── handler.ts                            # + bankCheck, count; ~ listPaymentFeed: awaiting=bank, bankCheck, release.lapsed
+│   │   ├── index.ts                              # + POST /payments/:id/bank-check
+│   │   ├── handler.ts                            # + bankCheck; ~ listPaymentFeed: awaiting=bank, bankCheck, release.lapsed
 │   │   └── schema.ts                             # + awaiting, bankCheck, bankCheckBody (D6, D8)
 │   ├── statements/                               # [B] import.ts, identity.ts, match.ts (D12–D14)
 │   │   └── readers/                              # [C] one file per measured format (D16)
@@ -199,7 +204,7 @@ apps/admin/
 └── test/bank-statement-match.test.tsx            # + US4 panel; [B] US1–US3
 
 apps/pago/
-├── src/features/pago/PaymentPage.tsx             # ~ the receipt's bank question when /read says sameBank (D9)
+├── src/features/pago/PaymentPage.tsx             # ~ the receipt's bank question for ask same_bank (D9)
 └── test/bank-statement-match.test.tsx            # + US4: words only, no "how" (D7, D9)
 
 packages/ui/src/components/status-badge.tsx       # + awaitingBank, notReceived (D8)
@@ -218,14 +223,14 @@ business brings. `[B]` and `[C]` mark what waits for its phase.
 
 | Departure | Why needed | Simpler alternative rejected because |
 | --- | --- | --- |
-| **Purpose amendment** (proposed; the creator ratifies it with `/speckit-constitution`, as 018 did). After "…the business confirms each hand-over of the cash.", add: "A transfer from an account at the business's own bank never reaches SPEI, so Banxico has no record of it: the business confirms it, by hand or with its bank statement." | The Purpose names two ways a payment is confirmed — Banxico's record and a store's word. Phase A adds a third: the business's own word, and Phase B its statement. Governance requires the plan to say so rather than route around it | Leaving same-bank payments out keeps them expiring in silence, which the creator rejected (Session 2026-10-02). Treating the business's word as "validation" stretches a word the Purpose uses for Banxico's record |
+| **Purpose amendment** (ratified by the creator on 2026-10-02 as constitution v1.10.0, as 018's was in v1.8.0). After "…the business confirms each hand-over of the cash.", add: "A transfer from an account at the business's own bank never reaches SPEI, so Banxico has no record of it: the business confirms it, by hand or with its bank statement." | The Purpose names two ways a payment is confirmed — Banxico's record and a store's word. Phase A adds a third: the business's own word, and Phase B its statement. Governance requires the plan to say so rather than route around it | Leaving same-bank payments out keeps them expiring in silence, which the creator rejected (Session 2026-10-02). Treating the business's word as "validation" stretches a word the Purpose uses for Banxico's record |
 
 Two notes, not departures:
 
 - **One `expired` with two reasons** (D5). A reader must look at
   `last_error` to tell "ran out of time" from "did not arrive". The schema
   comment says so, and every place that shows the difference — the panel's
-  badge, the count — reads it.
+  badge, the strip — reads it.
 - **`reviewedBy` serves two decisions** (D6): receipt-triage's review and
   this bank check. Both are "who decided this row by hand"; the panel tells
   them apart by `actionOutcome`'s review history and by `bankCheck`.

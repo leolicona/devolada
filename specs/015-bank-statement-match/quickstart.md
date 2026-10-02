@@ -69,7 +69,7 @@ What the API suite proves, in workerd with a real D1 (constitution IV):
   ride only when released);
 - `409 NOT_AWAITING_BANK` on a second decision, `404` across businesses,
   `503 INTEGRATION_UNAVAILABLE` leaving the row waiting;
-- `awaiting=bank` and the count, filtered by business.
+- `awaiting=bank` filtered by business.
 
 ## Phase B — the statement's core
 

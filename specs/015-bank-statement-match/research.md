@@ -270,9 +270,10 @@ gains:
   `feedPath` to a new `feedQuery` value `awaiting=bank`
   (`routes/payments/schema.ts:28-47`), which the handler turns into
   `status = 'validating' AND last_error IN ('SAME_BANK','BANK_CHECKING')`;
-- an attention strip modelled on the failed strip (`:836-872`): "N pagos
-  esperan que los confirmes en tu banco" with **Verlos**, which selects the
-  chip; shown only when N > 0;
+- an attention strip built exactly like the failed strip (`:836-872`):
+  its own query of the feed with `awaiting=bank`, N = the rows of its first
+  page — "N pagos esperan que los confirmes en tu banco" with **Verlos**,
+  which selects the chip; shown only when N > 0;
 - on such a row, in `ChargeRow`: a new `StatusBadge` kind `awaitingBank`
   ("Por confirmar", warning tone, icon + text); the customer, amount,
   reference, the day and bank the payer gave; whether the service was
@@ -300,30 +301,48 @@ every chip.* No other chip has one.
 
 ### R9. A receipt that shows the same bank on both sides (FR-017)
 
-Read on `main`: the page reads a receipt at the edge first (`/read`), and
-a read receipt is submitted with `proofId` **and** `transfer` — "`transfer`
+Read on `main`: the page reads a receipt at the edge first
+(`POST /direct-payments/links/:token/read`, `PaymentPage.tsx:1218`), and a
+read receipt is submitted with `proofId` **and** `transfer` — "`transfer`
 wins the routing; the proof is kept, not consulted"
-(`routes/direct-payments/schema.ts:239-246`, two-eyes D18). The reading
-carries both banks and a `sameBank` flag
-(`routes/reader/schema.ts:86`; `consta/extraction/gate.ts:42-72`), which
-"nothing reads … to change the flow".
+(`routes/direct-payments/schema.ts:239-246`, two-eyes D18). The reading's
+answer, `proofReadingResponse` (`schema.ts:348-420`), already carries
+`ask`, "the engine's ask, reported", with two reasons — `no_key` and
+`wrong_destination` (receipt-triage D15) — which the page asks before
+anything is paid (`PaymentPage.tsx:1250-1252`). The gate computes the
+same-bank pair (`consta/extraction/gate.ts:42-72`, `receiving.sameBank`),
+which "nothing reads … to change the flow"; the payer's answer does not
+carry it.
 
-**Decision**: the page reads that flag. When it is true, before
-submitting, the page asks the bank with 017's bank chips ("¿Desde qué
-banco pagaste?", the payer's learned banks first), and the answer replaces
-`transfer.senderBank`. The server needs nothing new: R2 then decides on the
-bank the payer gave. A receipt submitted without `transfer` (the image door)
-carries no sender bank and is never recognized, so a reading alone never
-makes a payment same-bank.
+**Decision**: the rule lives in `askBeforeCredit`
+(`consta/extraction/ask.ts:43-66`), the one function `/read` reports and the
+receipt door enforces (receipt-triage D15), so a client that skips the page
+buys nothing. On a clear reading whose gate says `receiving.sameBank`:
+
+- **with a key** (clave or a non-generic reference): a third reason,
+  `{ reason: "same_bank" }`, after `wrong_destination` — the page renders
+  the bank question, "¿Desde qué banco pagaste?" with 017's bank chips, the
+  payer's learned banks first, and submits with the bank chosen as
+  `transfer.senderBank`;
+- **without a key**: today's `no_key` ask, with `senderBank` added to its
+  fields, so the one typing form asks the bank with the key.
+
+Either way the payer's bank reaches the transfer door, and the server's
+recognition (R2) decides on it. A reading that is not clear, or not a
+same-bank pair, goes on as today; a reading alone never makes a payment
+same-bank.
 
 **Rationale**: the reading may be a misread — the destination's bank taken
 for the sender's (receipt-reader-tuning D5) — so the payer decides, and
-asking before the submit spends no search. The question is about the
-payer's own transfer, so it does not break FR-019.
+asking before the submit spends no search. The ask belongs to the server,
+like the two it already reports, so the page renders a reason rather than
+re-deriving a rule. The question is about the payer's own transfer, so it
+does not break FR-019.
 
-**Alternatives considered**: *Ask after the submit, as a new `ask`.* It
-needs a new ask value, a superseding row and a poll; the page already has
-the reading in hand before the submit.
+**Alternatives considered**: *The page reads a `sameBank` flag and decides
+itself.* It would put a rule on the client that the server already
+computes. *Ask after the submit, as a status `ask`.* It needs a superseding
+row and a poll; the page already holds the reading before the submit.
 
 ### R10. The method in the business's system (spec 019)
 

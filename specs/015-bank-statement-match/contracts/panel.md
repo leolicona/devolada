@@ -4,7 +4,7 @@ Area `payments` (`routes/payments/{index,handler,schema}.ts`), exported as
 `@devolada/api/payments-schema`. Envelope and codes as constitution III.
 Every query filters by the actor's business (constitution V).
 
-## `GET /payments` — one more filter
+## `GET /payments/feed` — one more filter
 
 `requireArea("payments", "read")`. `feedQuery` gains:
 
@@ -44,11 +44,6 @@ and, inside the existing release fields, `lapsed: boolean` — true once
 whose sender and collection banks are equal and that `reviewed_by` decided;
 `not_received` from `expired` + `NOT_RECEIVED`.
 
-## `GET /payments/bank-check/count`
-
-`requireArea("payments", "read")`. `{ success: true, data: { count } }` —
-the strip's N (D8). Counts `awaiting=bank` rows.
-
 ## `POST /payments/:id/bank-check`
 
 `requireSession` + `requireArea("payments", "operate")`, beside
@@ -73,9 +68,11 @@ both answers (D6).
 
 - **Chip** "Por confirmar en tu banco" in `statusFilters`; `feedPath` maps
   it to `awaiting=bank`.
-- **Strip**, above the feed, only when the count is above zero:
-  "{N} pago(s) esperan que los confirmes en tu banco" · **Verlos** selects
-  the chip. Modelled on the failed strip.
+- **Strip**, above the feed, only when N is above zero and the chip is not
+  selected: "{N} pago(s) esperan que los confirmes en tu banco" · **Verlos**
+  selects the chip. Exactly the failed strip's mechanism: its own query of
+  the feed with `awaiting=bank`, N = the rows of its first page, polled
+  like the feed.
 - **Row** with `bankCheck.state = "waiting"`:
   - `StatusBadge kind="awaitingBank"`.
   - "Desde {banco}, el mismo banco de tu cuenta de cobro. Revisa en tu

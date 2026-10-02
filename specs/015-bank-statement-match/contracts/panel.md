@@ -1,0 +1,106 @@
+# Contract: the panel's same-bank payments (Phase A)
+
+Area `payments` (`routes/payments/{index,handler,schema}.ts`), exported as
+`@devolada/api/payments-schema`. Envelope and codes as constitution III.
+Every query filters by the actor's business (constitution V).
+
+## `GET /payments` — one more filter
+
+`requireArea("payments", "read")`. `feedQuery` gains:
+
+```ts
+/* bank-statement-match D8: the "Por confirmar en tu banco" chip — same-bank
+   payments waiting for the business (D3), including one an operator's
+   decision is settling right now */
+awaiting: z.enum(["bank"]).optional(),
+```
+
+`awaiting=bank` answers rows with `status = 'validating'` and
+`last_error IN ('SAME_BANK', 'BANK_CHECKING')`, newest first, with the
+feed's usual paging, search and dates. It combines with `q`, `from`, `to`;
+`status`, `action` and `class` are ignored when it is present.
+
+`feedCharge` gains two derived fields (defaulted, so fixtures born before
+them still parse):
+
+```ts
+/* bank-statement-match D6, D8: null on every row that never waited for the
+   business. `by` is the operator's display name, never an email. */
+bankCheck: z
+  .object({
+    state: z.enum(["waiting", "received", "not_received"]),
+    by: z.string().nullable(),
+  })
+  .nullable()
+  .default(null),
+```
+
+and, inside the existing release fields, `lapsed: boolean` — true once
+`promiseDeadline(createdAt)` is before today in the business's timezone
+(D4).
+
+`state` is derived: `waiting` from `last_error` `SAME_BANK` or
+`BANK_CHECKING`; `received` on a confirmed, partial or unapplied row
+whose sender and collection banks are equal and that `reviewed_by` decided;
+`not_received` from `expired` + `NOT_RECEIVED`.
+
+## `GET /payments/bank-check/count`
+
+`requireArea("payments", "read")`. `{ success: true, data: { count } }` —
+the strip's N (D8). Counts `awaiting=bank` rows.
+
+## `POST /payments/:id/bank-check`
+
+`requireSession` + `requireArea("payments", "operate")`, beside
+`/payments/:id/review`. Body:
+
+```ts
+export const bankCheckBody = z.object({ received: z.boolean() });
+```
+
+| Outcome | Answer |
+| --- | --- |
+| `received: true`, settled | `200 { success: true, data: feedCharge }` — the row as the feed shows it: `confirmed`, `partial` or `unapplied`, with its folio and action state |
+| `received: false` | `200 { success: true, data: feedCharge }` — `expired`, `bankCheck.state = "not_received"` |
+| The row is not this business's, or does not exist | `404 NOT_FOUND` (the route's existing code) |
+| The row is not waiting for the business (already decided, by an operator or a statement, or never same-bank) | `409 NOT_AWAITING_BANK` |
+| The business's system could not be read while settling | `503 INTEGRATION_UNAVAILABLE`; the row is waiting again |
+
+The handler records `reviewed_by = actor.userId`, `reviewed_at = now` on
+both answers (D6).
+
+## The feed screen (`apps/admin/src/features/feed/FeedScreen.tsx`)
+
+- **Chip** "Por confirmar en tu banco" in `statusFilters`; `feedPath` maps
+  it to `awaiting=bank`.
+- **Strip**, above the feed, only when the count is above zero:
+  "{N} pago(s) esperan que los confirmes en tu banco" · **Verlos** selects
+  the chip. Modelled on the failed strip.
+- **Row** with `bankCheck.state = "waiting"`:
+  - `StatusBadge kind="awaitingBank"`.
+  - "Desde {banco}, el mismo banco de tu cuenta de cobro. Revisa en tu
+    banca si llegó." Then the customer, the amount, the reference and
+    the day the payer gave.
+  - When restored: "Reconectado mientras lo confirmas" — or, once
+    `lapsed`, "La reconexión provisional ya venció".
+  - With `payments: operate`: **Sí, llegó** and **No llegó**, each opening
+    an `AlertDialog`:
+    - **Sí, llegó** → "¿Confirmas que recibiste {monto} de {cliente}?
+      Registraremos el pago." Confirm: "Sí, lo recibí".
+    - **No llegó** → "¿Confirmas que este pago no llegó a tu cuenta? Ya no
+      podrás confirmarlo." Confirm: "No llegó".
+  - While a decision is in flight the buttons sit inside `<Pending>`
+    (`pending-lint`).
+  - A 409 refreshes the row; a 503 shows an `Alert`: "No pudimos
+    registrar el pago en tu sistema. Inténtalo de nuevo."
+- **Ended rows**: `received` → the usual confirmed badges plus "Confirmado
+  a mano por {nombre}"; `not_received` → `StatusBadge kind="notReceived"`.
+
+## `@devolada/ui` — `StatusBadge`
+
+Two kinds, existing tones and lucide icons, no new token:
+
+| Kind | Tone | Icon | Label |
+| --- | --- | --- | --- |
+| `awaitingBank` | warning | `Landmark` | Por confirmar |
+| `notReceived` | error | `CircleSlash` | No llegó |

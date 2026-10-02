@@ -603,7 +603,7 @@ again, type the store's phone, and sign in with the código that reaches the
 email. The store's account holds no password, and a business member is still
 refused by the store app.
 
-- [ ] T056 [US6] The gates before PR 2's code, the second one in `.specify/memory/constitution.md`:
+- [X] T056 [US6] The gates before PR 2's code, the second one in `.specify/memory/constitution.md`:
   - **the notice**: the creator confirms the operator has told the pilot's shopkeepers that their password stops working and how they will get in (spec Dependencies);
   - **amendment 2**: the creator runs, or asks for, `/speckit-constitution` with the plan's Complexity Tracking row 2.
 - [ ] T057 [US6] The PR 2 test helpers in `apps/api/test/store-helpers.ts` and `apps/api/test/helpers.ts` (research D14):

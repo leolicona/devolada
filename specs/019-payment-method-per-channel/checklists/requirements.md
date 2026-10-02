@@ -46,6 +46,12 @@
   showed that "CASH" matches today's rule for the cash method, so FR-012
   (the cash method is never one of Devolada's) and an edge case on rollout
   order were added, and FR-003's tolerance now names the dot.
+- Measured on the demo on 2026-10-02 (R8–R11, the Postman collection
+  "WispHub · Formas de pago de Devolada (ESCRIBE)"): M4 and M1 are
+  answered and left the table of open measurements. R11 showed the cash
+  rule risk on the demo itself, so FR-012 now names exactly what it sets
+  aside (Devolada's two names, through FR-003's match). M2 and M3 stay
+  open: they are panel checks by the creator.
 - The method names appear in the spec because they are product copy the
   business types into its own system, and the creator fixed them. FR-011
   places them in the adapter, so the core never carries them.

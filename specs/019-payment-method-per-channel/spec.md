@@ -6,8 +6,9 @@ methods, the same day)
 
 **Created**: 2026-10-01 · **Rewritten**: 2026-10-01 · **Revised**: 2026-10-02
 
-**Status**: Draft — no clarification open; four facts about the provider
-to measure before the plan (M1–M4).
+**Status**: Draft — no clarification open. M1 and M4 measured on
+2026-10-02 (R8–R11); two facts left to check in the provider's own panel
+before the plan (M2, M3).
 
 **Input**: User description, in the creator's words (2026-10-01): "Para el
 piloto mi cliente quiere que registremos los pagos en wisphub a nombre de
@@ -74,12 +75,15 @@ filters its own system by that method and downloads the list.
 - **Reference**: a short free text the business's system keeps on a
   recorded payment.
 
-## What was measured (2026-10-01)
+## What was measured (2026-10-01 and 2026-10-02)
 
-On the provider's demo tenant, with payments of $1 recorded as "only
-register" (no router touched). The details belong to the adapter
-(constitution IX); they are recorded here because they decided the
-feature, so nobody needs to run them again.
+On the provider's demo tenant, with payments recorded as "only register"
+(no router touched): $1 test invoices on 2026-10-01, and on 2026-10-02 the
+demo's own pending invoices, paid by their total ($3), as Devolada pays
+them. The details belong to the adapter (constitution IX); they are
+recorded here because they decided the feature, so nobody needs to run
+them again. The 2026-10-02 run is the Postman collection "WispHub · Formas
+de pago de Devolada (ESCRIBE)".
 
 | # | Question | Answer |
 | --- | --- | --- |
@@ -90,19 +94,23 @@ feature, so nobody needs to run them again.
 | R5 | Does the business's system filter paid invoices by payment method? | Yes, through the provider's documented list filter. It returned exactly that payment; the cash method returned the other 36. It combines with the filter by user. |
 | R6 | Can Devolada create payment methods? | No. The list is read-only: the business creates them. |
 | R7 | Does the system keep a reference on a payment? | Yes. Free text up to 200 characters, kept on the invoice and returned when it is read. It is not a filter of the list. |
+| R8 (M4) | Does the system keep a method's name exactly as typed, and does a method have a description? | The name, yes: `SPEI - LINK.DEVOLADAPAGO` and `CASH - RED.DEVOLADAPAGO`, created in the panel, came back character for character. A description, not through the API: the list gives each method only an id and a name, its documentation lists no field, and there is no route for one method (404). |
+| R9 (M1) | What does the system answer when a payment names a method that does not exist? | HTTP 400 naming the field: `forma_pago`, "Clave primaria … inválida - objeto no existe". The invoice stays pending: nothing is recorded, so the adapter can fall back at once. A method deleted in the panel (M1b) was not measured; since the adapter finds methods by name in the current list, a deleted method stops being used as soon as the list is read again. |
+| R10 | Do Devolada's two methods and the reference survive a real payment? | Yes. Demo invoices #1 and #2, paid by their total, kept `SPEI - LINK.DEVOLADAPAGO` and `CASH - RED.DEVOLADAPAGO` and the reference character for character, the middle dot included (`DV-PRUEBA1 · MBAN01002610020000001`). The list filter by each method found its invoice; the filter by the cash method found neither. |
+| R11 | Does today's rule for the cash method take one of Devolada's methods? | **Yes, on the demo itself.** The system lists `CASH - RED.DEVOLADAPAGO` before "Cash" and "efectivo", so today's adapter, which takes the first name that says "efect" or "cash", records every payment with it. FR-012 is not hypothetical. |
 
 ## What must be measured before the plan
 
 These facts decide *how* the promise is kept, and each belongs to the
-adapter (constitution IX). The plan measures them on the demo tenant before
-any code, never with a test write on the pilot's live billing.
+adapter (constitution IX). M1 and M4 were answered on 2026-10-02 (R9,
+R8). The two left are checked by the creator in the provider's own panel,
+on the demo invoices #1 and #2 of R10, never with a test write on the
+pilot's live billing.
 
 | # | Question | What the answer decides |
 | --- | --- | --- |
-| M1 | What does the business's system answer when a payment names a method that does not exist, or one that was deleted? | How the adapter falls back (FR-004) when a method disappears between the moment it was read and the moment the payment is recorded, without leaving the action waiting. |
-| M2 | Does the system's own screen filter paid invoices by payment method, and does its download carry the method and the reference? | The outcome the business asked for (US1, SC-002). R5 measured the provider's list filter, not the screen the owner uses. |
-| M3 | Does the system's screen show the reference on a paid invoice? | Whether the owner reads the folio, the clave de rastreo and the store in its own system, or only in a download (US3). |
-| M4 | When the business creates a method, does the system keep its name exactly as typed (capitals, accents, the dash, the dot and their spaces), and does a method have a description of its own? | How tolerant the match by name must be (FR-003), and what the setup instructions ask the business to type (FR-008). |
+| M2 | Does the system's own screen filter paid invoices by payment method, and does its download carry the method and the reference? | The outcome the business asked for (US1, SC-002). R5 and R10 measured the provider's list filter, not the screen the owner uses. |
+| M3 | Does the system's screen show the reference on a paid invoice, middle dot included? | Whether the owner reads the folio, the clave de rastreo and the store in its own system, or only in a download (US3). |
 
 ## Clarifications
 
@@ -136,11 +144,11 @@ any code, never with a test write on the pilot's live billing.
 - Q: The network's name says "CASH", and today the adapter takes as the
   cash method the first method whose name says "efect" or "cash". Could it
   take `CASH - RED.DEVOLADAPAGO` instead of the business's own cash
-  method? → A: **Yes, depending on the order the business's system lists
-  its methods** (read in the adapter, 2026-10-02). A business whose cash
-  method is called "Efectivo" would get `CASH - RED.DEVOLADAPAGO` first.
-  So the cash method must never be one of Devolada's methods (FR-012), and
-  no business creates `CASH - RED.DEVOLADAPAGO` before this feature ships.
+  method? → A: **Yes.** Read in the adapter, then measured the same day on
+  the demo, where the system lists `CASH - RED.DEVOLADAPAGO` even before
+  "Cash" (R11). So the cash method must never be one of Devolada's methods
+  (FR-012), and no business creates `CASH - RED.DEVOLADAPAGO` before this
+  feature ships.
 - Q: One method per store, or one for the network? → A: **One for the
   whole network**, from the creator's example. The per-store detail is not
   lost: the reference carries the store's name (US3), and Puntos de pago
@@ -346,11 +354,13 @@ one, run the test: it shows found, the other still missing.
   business's system has it, whichever store recorded it.
 - **FR-003**: Each method MUST be found by its name in the business's
   system, read from that system, never by an identity remembered from
-  another account. The match MUST forgive capitals, accents and the spaces
-  around the dash and the dot, within what M4 measures. When two methods
+  another account. The system keeps a name as typed (R8); the match MUST
+  still forgive capitals, accents and the spaces around the dash and the
+  dot, because the business types the name by hand. When two methods
   match, the same one MUST be used every time.
 - **FR-004**: When the business's system has no method with the channel's
-  name, or the method disappears before the payment is recorded (M1),
+  name, or the method disappears before the payment is recorded (the
+  system then refuses the payment and records nothing, R9),
   Devolada MUST record the payment with the cash method, exactly as today.
   The action MUST NOT wait. The two channels are independent.
 - **FR-005**: FR-001 to FR-004 hold for every way a payment gets recorded:
@@ -389,11 +399,13 @@ one, run the test: it shows found, the other still missing.
   and an adapter whose system has no payment methods ignores what it
   does not use.
 - **FR-012**: The cash method — the fallback, and the method every payment
-  carries while no Devolada method exists — MUST never be one of
-  Devolada's methods, whatever their names say and in whatever order the
-  business's system lists them. A business that has only Devolada's
-  methods and no cash method of its own MUST keep the behaviour it has
-  today for that case.
+  carries while no Devolada method exists — MUST never be a method that
+  matches one of Devolada's names (FR-003), whatever those names say and
+  in whatever order the business's system lists its methods (R11). Only
+  Devolada's two names are set aside: a business's own method that merely
+  mentions Devolada is not. A business that has only Devolada's methods
+  and no cash method of its own MUST keep the behaviour it has today for
+  that case.
 
 ### Key Entities
 
@@ -436,12 +448,15 @@ No new entity. The feature reads what exists:
   2026-10-02. One method per store is out of scope; the reference and
   Puntos de pago carry the per-store detail.
 - **"Descripción"**: the creator said Devolada determines the name and the
-  description of each method. If the business's system gives a method a
-  description of its own (M4), the setup instructions say what to type
-  there; the match uses the name only.
+  description of each method. The API shows no description (R8). If the
+  provider's panel offers one when the business creates a method, the
+  setup instructions say what to type there; the match uses the name only.
+- **The cash method stays found as today, minus Devolada's names** (FR-012).
+  It is still the first name that says "efect" or "cash" in the order the
+  business's system lists them, so a business with several such methods
+  keeps the one it has today.
 - **Every SPEI confirmation is the SPEI channel**, whether the payer used
   the link with its reference, without it, or confirmed later: one method.
-- **The cash method stays the fallback**, found as today.
 - **The reference is written once**, at recording. A store renamed later
   does not change payments already recorded (FR-006).
 - **No mark in Pagos.** A payment that fell back is not marked one by one:

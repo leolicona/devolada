@@ -12,8 +12,8 @@ description: "Task list for Passwordless Access"
 [contracts/panel-access.md](./contracts/panel-access.md),
 [contracts/store-access.md](./contracts/store-access.md),
 [contracts/codigo-email.md](./contracts/codigo-email.md),
-[quickstart.md](./quickstart.md). Constitution v1.9.2, with the two
-amendments the plan proposes (T003, T056).
+[quickstart.md](./quickstart.md). Constitution v1.10.0: amendment 1 is
+applied (T003); amendment 2 comes with PR 2 (T056).
 
 **Tests are required, not optional.**
 - Constitution IV fixes which layer may answer which question.
@@ -36,7 +36,7 @@ amendments the plan proposes (T003, T056).
 **Four things come before any story**:
 1. the measurements (T001). M1, M2 and M6 can change tasks;
 2. the drift check (T002);
-3. the constitution amendment (T003);
+3. the constitution amendment (T003, applied in v1.10.0);
 4. the foundation (Phase 2): the código's terms, the email, the test
    helpers, the dev routes, the shared atoms.
 
@@ -83,11 +83,12 @@ and put the amendment in motion. No behaviour changes in this phase.
 - [ ] T002 Check the consumers this feature changes against the tree, and note any drift at the top of `specs/020-passwordless-access/tasks.md` before editing. Compare with research D16's inventory (taken 2026-10-02):
   - every caller of `/auth/sign-in/email`, `/auth/sign-up/email`, `/auth/business/signup`, `/auth/sign-in/username`, `/auth/email-otp/verify-email`, `/auth/email-otp/request-password-reset`, `/auth/email-otp/reset-password`, `signUpEmail` and `signInEmail`, in `apps/` and `tests/`;
   - every reader of `lastCodeFor`, `PASSWORD` and `/dev/last-code`;
-  - every consumer of `AcceptInvitationNewRequest`, `AcceptStoreInvitationRequest` and `StoreMeResponse` (the schemas, `apps/admin/test/msw.ts`, `apps/red/test/msw.ts`, `tests/e2e/stubs.ts`).
-- [ ] T003 [P] Constitution amendment 1 in `.specify/memory/constitution.md`, the plan's Complexity Tracking row 1. The creator runs, or asks for, `/speckit-constitution` with the proposed Auth-row text. It must be applied before PR 1 merges (T055).
-- [ ] T004 [P] **Only if the creator asks for it before PR 1 ships**: the lite path for research D15, under `.specify/bugs/dev-code-readable/`: `/speckit-bug-assess`, `/speckit-bug-fix`, `/speckit-bug-test`.
-  - **The fix**: `GET /dev/last-code` in `apps/api/src/routes/dev.ts` answers only for `.invalid` addresses and the seed's `DEMO` addresses.
-  - **The regression test** cites `bug: dev-code-readable`.
+  - every consumer of `AcceptInvitationNewRequest`, `AcceptStoreInvitationRequest` and `StoreMeResponse` (the schemas, `apps/admin/test/msw.ts`, `apps/red/test/msw.ts`, `tests/e2e/stubs.ts`);
+  - **known drift**: PR #273 (`bug: dev-code-readable`) restricts `/dev/last-code` and `/dev/last-invitation` to test addresses and adds `apps/api/test/dev-code-readable.test.ts`. Merge `main` into this branch before T008 and T031.
+- [X] T003 [P] Constitution amendment 1 in `.specify/memory/constitution.md`, the plan's Complexity Tracking row 1. Applied on 2026-10-02 as v1.10.0 (`/speckit-constitution`, commit 18b36ae), ahead of PR 1's merge gate (T055).
+- [X] T004 [P] The lite path for research D15, under `.specify/bugs/dev-code-readable/`. The creator asked for it on 2026-10-02, and it ships ahead of PR 1 as PR #273:
+  - **The fix**: `GET /dev/last-code` and `GET /dev/last-invitation` in `apps/api/src/routes/dev.ts` answer only for a test address (`.invalid`, or the seed's demo address) and refuse the rest, the empty query included, with 403 `TEST_ADDRESS_ONLY`. The código lookup matches the address whole. The assessment found the invitation route: its id alone creates the invitee's account.
+  - **The regression test** is `apps/api/test/dev-code-readable.test.ts`, citing `bug: dev-code-readable`. T008 and T031 carry the rule and the test forward.
 
 ---
 
@@ -101,6 +102,7 @@ yet, except the código email's wording.
 - [ ] T005 The código's terms in `apps/api/src/auth/better.ts` (research D2, D3):
   - **`emailOTP({ expiresIn: 600, allowedAttempts: 3, storeOTP: "hashed", … })`**. Each value carries a comment citing `passwordless-access D2`: the defaults nobody chose (300 s, plain text, read in 1.6.29's dist on 2026-10-02), and constitution V for the hash.
   - **In `hooks.before`**, beside the `username` refusal: on `/email-otp/send-verification-otp`, delete the `verification` rows whose identifier is `` `${type}-otp-${email.toLowerCase()}` `` before the plugin writes the new one. The comment says why: the plugin keeps old rows, and consumes the newest, so an old código comes back to life after the new one is used (D2).
+  - **In the same `hooks.before`** (analysis A3): when a body to `/sign-in/email-otp` or `/update-user` carries `name`, it must be 2–80 characters once trimmed, or the request answers 400 `INVALID_NAME`. The screens check it first; this is the server's half of data-model.md's rule.
   - **`rateLimit.customRules["/sign-in/email-otp"] = { window: 60, max: 5 }`** (D3). Rewrite the limiter's comment: the plugin sets 3 per 60 s on its four paths, and `customRules` override it.
 - [ ] T006 [P] The código email in `apps/api/src/email/sender.ts`, per `contracts/codigo-email.md` (D13):
   - The `sign-in` template:
@@ -116,13 +118,13 @@ yet, except the código email's wording.
   - **`mintCode(email, type = "sign-in")`**: deletes the address's live rows of that kind, then returns `auth().api.createVerificationOTP({ body: { email, type } })`.
   - **`seedAuthUser` births the user without a password**: `(await auth().$context).internalAdapter.createUser({ name, email, emailVerified: true })`, with no `account` row. `seedBusiness` and `seedMember` keep their shape.
   - **`PASSWORD` and `seedPlainUser` stay until T057.** The store suite still proves the password door it keeps until PR 2.
-  - **Expect failures.** The suites that sign in with a password fail until their story tasks rewrite them: T022 (`isp-signup` and one `cash-at-stores-access` case), T029, T030, T031, T040 and T041.
+  - **Expect failures.** The suites that sign in with a password fail until their story tasks rewrite them: T022 (`isp-signup` and one `cash-at-stores-access` case), T029, T030, T031, T040 and T041. The store side's cases that read a código, or sign the operator in with a password, are T077's, still in this phase.
 - [ ] T008 [P] Dev routes in `apps/api/src/routes/dev.ts` (research D14, D16), per `contracts/panel-access.md` § "Dev only":
   - **`POST /dev/code {email, type}`**:
-    - it answers only for an address ending in `.invalid` or equal to one of `DEMO`'s addresses; otherwise 400 `NOT_A_TEST_ADDRESS`;
+    - it answers only for a test address, through `testAddress()` from `bug: dev-code-readable` (PR #273): an address ending in `.invalid`, or equal to one of `DEMO`'s addresses. Anything else gets 403 `TEST_ADDRESS_ONLY`, the refusal `/dev/last-invitation` already gives;
     - it deletes the live rows, mints with `createVerificationOTP`, and answers `{ code }`;
-    - a comment cites D14 and D15 (why not any address: the deployed dev Worker runs with `ENVIRONMENT=dev`).
-  - **Remove `GET /dev/last-code`.** `/dev/last-invitation` stays.
+    - a comment cites D14, D15 and `bug: dev-code-readable` (why not any address: the deployed dev Worker runs with `ENVIRONMENT=dev`).
+  - **Remove `GET /dev/last-code`.** `/dev/last-invitation` stays, under the same rule.
   - **The seed without a password**:
     - `seedUser` births through `createVerificationOTP` and `signInEmailOTP({ body: { email, otp, name } })`;
     - an adopted orphan user is marked verified as today, and holds no password;
@@ -142,6 +144,7 @@ yet, except the código email's wording.
   - a labelled input with `inputMode="numeric"`, `autoComplete="one-time-code"`, `maxLength={6}`;
   - digits only (a paste of "482 913" becomes "482913");
   - standard 48 px from the input's `size` variants;
+  - the digits in the mono face the product keeps for folios and keys (`font-mono`), with `tracking-widest`, so the six digits read one by one (the design canvas);
   - tokens only.
 
   The test covers the filtering, the label and axe.
@@ -161,8 +164,8 @@ yet, except the código email's wording.
   - **It renders**:
     - the list: name or "Llave de acceso", "Activada el {fecha}", "sincronizada con tu llavero", and a "Quitar" with an accessible name per key;
     - the empty line;
-    - "Activar en este dispositivo" only when `canActivate`;
-    - the step-up's line "Confirma que eres tú: te enviamos un código a {email}." with `CodeInput` and "Confirmar";
+    - "Activar en {deviceWord}" ("Activar en este dispositivo" in the panel) only when `canActivate`, and its failure line "No se pudo activar. Intenta de nuevo.";
+    - the step-up's line "Confirma que eres tú: te enviamos un código a {email}." with `CodeInput`, "Confirmar", and "Cancelar", which closes the step-up;
     - "Cerrar sesión en los demás dispositivos" and its done line "Listo. Solo este dispositivo sigue con tu sesión abierta.".
   - **It never mentions a password.**
   - The test covers the list, the empty state, the step-up, both actions, and axe.
@@ -174,9 +177,16 @@ yet, except the código email's wording.
   - `POST /auth/revoke-other-sessions` → `{ status: true }`.
 
   The password handlers stay until T053.
+- [ ] T077 Keep the store side green through PR 1 (analysis I1), in `apps/api/test/cash-at-stores-access.test.ts` and `tests/passkey/red.spec.ts`. PR 1 closes three things the store-side tests lean on, and the passkey layer gates the deploy to dev:
+  - **T005 hashes the códigos**, so `lastCodeFor` reads nothing. The three store cases that read one (lines 237, 256 and 315 on 2026-10-02) take it from `sentCode`. `lastCodeFor` itself leaves `helpers.ts` with T029, which rewrites its last reader, instead of in T057;
+  - **T021 closes `/auth/sign-up/email`.** The `username` refusals sent there (lines 61–73) move to `/sign-in/email-otp` and `/update-user`, which stay open. T016 asserts the 404;
+  - **T034 closes `/auth/sign-in/email`, and T008 seeds the demo without a password and retires `/dev/last-code`.** In `red.spec.ts`, the operator gets in with `POST /dev/code` and `sign-in/email-otp` (lines 37–38), and the shopkeeper's verification código comes from `POST /dev/code {type: "email-verification"}` (line 58).
+
+  The store app does not change in PR 1. The two test files keep their citations and add `passwordless-access US2`. Depends on T005, T007 and T008.
 
 **Checkpoint**: the foundation is ready. The código email reads the new way;
-nothing else a person sees has changed.
+nothing else a person sees has changed, and the store side's tests are green
+again (T077).
 
 ---
 
@@ -220,6 +230,7 @@ out, then sign in with the key alone.
     - `INVALID_OTP` shows "El código no es válido o ya venció. Reenvíalo e intenta otra vez.";
     - "Reenviar código" turns into "Código reenviado";
     - "Usar otro correo" returns to step 1 with the address kept;
+  - **too many tries** (FR-027): a 429 on either step shows "Demasiados intentos. Espera un momento e intenta de nuevo.";
   - **what never appears**: no password field anywhere, no "Ya existe una cuenta", and a description that names no business type (FR-030);
   - **success** navigates to `/welcome?next=…`, keeping a validated `next`.
 - [ ] T019 [P] [US1] Component tests in `apps/admin/test/welcome.test.tsx`, citing `passwordless-access US1`, with MSW and axe. Mock `@/lib/auth-client` (`canVerifyPerson`, `authClient.passkey.addPasskey`). Cover:
@@ -252,6 +263,7 @@ out, then sign in with the key alone.
     - name and email, with the identity round's field problems;
     - "Continuar", wrapped in `<Pending label="Enviando el código.">`;
   - **step 2**: `CodeInput` (from `@devolada/ui`), "Crear cuenta", "Reenviar código" and "Usar otro correo";
+  - **a 429** on either step shows "Demasiados intentos. Espera un momento e intenta de nuevo." (FR-027);
   - **the name** stays in component state until `signInWithCode(email, otp, name)`;
   - **success**: `queryClient.clear()`, then navigate to `/welcome` with the validated `next`.
 
@@ -268,7 +280,7 @@ out, then sign in with the key alone.
   Comments cite D6, D7 and the order D1 makes load-bearing: a key made before the name shows the account picker a random id.
 - [ ] T025 [US1] Routes in `apps/admin/src/router.tsx` (research D6):
   - `/welcome` with `nextSearch`;
-  - `/verify-email` becomes a `<Navigate to="/login" search={{ next, email }} />` that keeps `verifySearch`;
+  - `/verify-email` becomes a `<Navigate to="/login" search={{ next }} />`: the validated `next` travels, the address does not (D6: never in a URL);
   - remove `VerifyEmailPage` from `apps/admin/src/features/auth/pages.tsx`.
 - [ ] T026 [US1] The nameless guard (research D6), in `apps/admin/src/features/shell/Shell.tsx` and `apps/admin/src/features/onboarding/NewBusinessScreen.tsx`. A session whose user's name is empty is sent to `/welcome?next=<path>`:
   - **imperatively and once**, as the shell's login bounce is (better-auth D12's lesson: `<Navigate>` re-navigates on every render);
@@ -300,11 +312,12 @@ erased every panel password.
   - **deleted**: a panel user's `credential` row;
   - **kept**: a store user's `credential` row (PR 1);
   - **deleted with their sessions and accounts**: unverified users with no store and no membership;
-  - **kept**: an unverified store user, and an unverified user holding a membership;
+  - **kept**: an unverified store user, an unverified user holding a membership, and an unverified user a row of ours names (a `top_ups.submitted_by_user_id`). The same run still erases a panel user's `credential` row (analysis U1);
   - **the report**: it counts both kinds; `console.log` is called only when something was deleted, and a second run deletes nothing.
 - [ ] T029 [P] [US2] Rewrite `apps/api/test/sessions.test.ts` to sign in by código (`mintCode` + `sign-in/email-otp`) wherever it signed in with a password, and add the citation `passwordless-access US2`:
   - **keep**: the unverified cookie revoked, the sliding cookie (BUG-015), the tampered cookie, suspension, sign-out;
-  - **remove**: wrong password 401, unknown email 401, and "a reset revokes live sessions". The last one is replaced by T047's `revoke-other-sessions` case.
+  - **remove**: wrong password 401, unknown email 401, and "a reset revokes live sessions". The last one is replaced by T047's `revoke-other-sessions` case;
+  - **then remove `lastCodeFor`** from `apps/api/test/helpers.ts`: this file was its last reader (T022 deletes `isp-signup`, T077 moves the store cases to `sentCode`).
 - [ ] T030 [P] [US2] Rewrite `apps/api/test/rate-limit.test.ts`, citing `passwordless-access US2`, with the limiter armed (`armed()`):
   - the fourth `send-verification-otp` within 60 s answers 429 with `X-Retry-After`, and its row key ends `|/email-otp/send-verification-otp`;
   - the sixth `sign-in/email-otp` within 60 s answers 429 (D3);
@@ -315,10 +328,11 @@ erased every panel password.
   - **the seed**: `/dev/seed` creates the demo users verified, with no `account` row, and its answer carries no password;
   - **the demo signs in** with `POST /dev/code` and `sign-in/email-otp`;
   - **`/dev/code`**:
-    - it refuses `ana@negocio.mx` with `NOT_A_TEST_ADDRESS`;
+    - it refuses `ana@negocio.mx`, and a blank address, with 403 `TEST_ADDRESS_ONLY`;
     - it mints for `x@journey.invalid` and for `demo@devolada.app`, and that código works once;
   - **retired**: `GET /dev/last-code` answers 404;
-  - **outside `ENVIRONMENT=dev`**, `/dev/code` answers 404.
+  - **outside `ENVIRONMENT=dev`**, `/dev/code` answers 404;
+  - **`apps/api/test/dev-code-readable.test.ts`** (PR #273): its `/dev/last-code` cases move to `/dev/code`, and its `/dev/last-invitation` case stays. It keeps `bug: dev-code-readable` and adds `passwordless-access US2`.
 
   The orphan-keeps-its-password case becomes: an adopted orphan is verified and holds no password.
 - [ ] T032 [P] [US2] Component tests in `apps/admin/test/sign-in.test.tsx`, citing `passwordless-access US2`, with MSW and axe, against `contracts/panel-access.md` § `/login`:
@@ -328,7 +342,8 @@ erased every panel password.
     - a failed key shows "No pudimos usar tu huella o rostro. Entra con un código.";
     - "Crear cuenta" keeps `next`;
   - **step 2**: as signup's, with "Entrar". A código goes to `/welcome?next=…`, a key to `next`;
-  - **redirects**: `/recover` and `/verify-email` land on `/login` with `next` and `email`.
+  - **too many tries** (FR-027): a 429 shows "Demasiados intentos. Espera un momento e intenta de nuevo.";
+  - **redirects**: `/recover` and `/verify-email` land on `/login` with `next`, and no address in the URL (D6).
 
   In `apps/admin/test/shell.test.tsx`, remove the cases moved here and to T018–T019: the password login, the signup, `/verify-email`, the unverified login, `/recover`. Keep the guard with `next`, the dropped absolute `next`, and the suspended screen's way out. In `apps/admin/test/access.test.tsx`, the login copy check follows the new copy.
 - [ ] T033 [US2] Rewrite `tests/passkey/passkey.spec.ts`, citing `passwordless-access US2`:
@@ -336,15 +351,16 @@ erased every panel password.
   - get the código from `POST /dev/code` and type it;
   - activate on `/welcome` with the virtual authenticator;
   - Cuenta → Seguridad lists the key;
-  - sign out from the Sesión card, then sign in with "Entrar con huella o rostro" alone.
+  - sign out from the Sesión card, then sign in with "Entrar con huella o rostro" alone;
+  - **a removed key stops at once** (FR-023, analysis G2): "Quitar" it in Seguridad and sign out. "Entrar con huella o rostro" then fails with "No pudimos usar tu huella o rostro. Entra con un código.", and the código still opens the account.
 
 ### Implementation for User Story 2
 
 - [ ] T034 [P] [US2] `disabledPaths` gains `/sign-in/email` in `apps/api/src/auth/better.ts` (research D4, PR 1). `emailAndPassword` stays enabled, and the comment says why: the store app's `/sign-in/username` and recovery until PR 2.
 - [ ] T035 [P] [US2] `eraseLegacyCredentials(env, now = new Date())` in a new `apps/api/src/auth/credentials-sweep.ts` (research D5):
-  - **the deletions**, in one D1 batch:
-    - `credential` rows of users that no `stores.user_id` names (PR 1's filter, with a comment saying T064 removes it);
-    - then unverified users with no store and no `member` row, with their `session` and `account` rows first;
+  - **two deletions, each on its own** (analysis U1), so a user the sweep cannot delete never stops the erase of passwords:
+    1. `credential` rows of users that no `stores.user_id` names (PR 1's filter, with a comment saying T064 removes it);
+    2. unverified users that **no row names**: no store, no `member` row, and none of the user columns research D5 lists. Their `session`, `account` and `passkey` rows go first, in one D1 batch with the users;
   - **the report**: `{ credentials, users }`.
 
   In `apps/api/src/index.ts`, `scheduled` gains its own `ctx.waitUntil` lane that logs `credential erase:` only when either count is above zero. Comments cite D5: a sweep and not a migration, and the guarantee it keeps.
@@ -352,11 +368,12 @@ erased every panel password.
   - **step 1**:
     - the "Ya no usamos contraseñas…" line;
     - "Entrar con huella o rostro" first, `passkeysSupported()` only (`authClient.signIn.passkey()`, then `next`);
-    - email and "Enviar código";
+    - the separator "o con un código", then email and "Enviar código";
   - **step 2**: `CodeInput`, "Entrar", the resend and "Usar otro correo". Success goes to `/welcome?next=…`;
+  - **a 429** on either step shows "Demasiados intentos. Espera un momento e intenta de nuevo." (FR-027);
   - **removals**:
     - `RecoverPage`, and the `EMAIL_NOT_VERIFIED` branch;
-    - in `apps/admin/src/router.tsx`, `/recover` becomes a redirect to `/login` keeping `next` and `email`;
+    - in `apps/admin/src/router.tsx`, `/recover` becomes a redirect to `/login` keeping `next` (D6: the address never travels in a URL);
     - from `apps/admin/src/features/auth/session.ts`: `signup`, `sendVerificationCode`, `verifyEmailCode`, `requestPasswordReset`, `resetPasswordWithCode`.
   - **`login` stays until T046**: the invitation page calls it until then.
 
@@ -437,6 +454,7 @@ device's confirmation, inside. No código, no password.
   - **a key of another account** shows the "otro correo" state with its switch;
   - **no account**: "Tu nombre" leads to `accept-new` with a body of `{ name }` only, then `/welcome?next=/`;
   - **without passkey support**: the código, or the name, only (FR-015);
+  - **too many tries** (FR-027): a 429 on "Enviarme un código" or "Entrar" shows "Demasiados intentos. Espera un momento e intenta de nuevo.";
   - **expired and gone** are unchanged.
 - [ ] T043 [P] [US4] Rewrite `apps/admin/test/invitee-lands-own-business.test.tsx`, keeping `bug: invitee-lands-own-business` and adding `passwordless-access US4`:
   - "recovery from the invitation page comes back to it" becomes "the código on the invitation page keeps the invitee there: it accepts and lands in the invited business";
@@ -466,7 +484,9 @@ device's confirmation, inside. No código, no password.
 - [ ] T046 [US4] `apps/admin/src/features/invitations/AcceptInvitationScreen.tsx` (research D9), per `contracts/panel-access.md` § `/invitaciones/:invitationId`:
   - **"Entrar con huella o rostro"** calls `authClient.signIn.passkey()`, then invalidates `["user"]`. The page's same-address and other-address logic takes it from there;
   - **"Enviarme un código"** is `sendCode(inv.email)`, then `CodeInput`, then `signInWithCode(inv.email, otp)`, then `acceptInvitation` and `setActiveBusiness`, then `/welcome?next=/`;
+  - **the separator** "o con un código" sits between the key and "Enviarme un código", where the key shows;
   - **no account**: the name, then `acceptInvitationAsNewUser(invitationId, { name })`, then `/welcome?next=/`;
+  - **a 429** shows "Demasiados intentos. Espera un momento e intenta de nuevo." (FR-027);
   - **removed**: the password fields, the recovery link and the `login` import.
 
   In `apps/admin/src/features/auth/session.ts`, remove `login`. `acceptInvitationAsNewUser`'s body follows the new schema type.
@@ -494,9 +514,9 @@ Remove a key: the código still works.
   - **removing a key**: `delete-passkey` removes the row, `list-user-passkeys` no longer lists it, and the account still signs in by código (FR-023).
 - [ ] T048 [P] [US5] Rewrite the passkey-card cases of `apps/admin/test/session-round.test.tsx` and the identity card's check in `apps/admin/test/account-hub.test.tsx`, citing `passwordless-access US5`:
   - **the card**: `KeysCard`'s list, "Quitar", and the empty state;
-  - **the step-up**: "Activar en este dispositivo" meets `SESSION_NOT_FRESH` and runs the step-up. "Confirma que eres tú: te enviamos un código a {email}.", then `CodeInput`, then `signInWithCode`, then the ceremony runs again;
+  - **the step-up**: "Activar en este dispositivo" meets `SESSION_NOT_FRESH` and runs the step-up. "Confirma que eres tú: te enviamos un código a {email}.", then `CodeInput`, then `signInWithCode`, then the ceremony runs again. "Cancelar" closes it and brings back "Activar en este dispositivo"; a 429 shows the wait line (FR-027);
   - **closing other sessions**: "Cerrar sesión en los demás dispositivos" posts `revoke-other-sessions` and shows its done line;
-  - **copy**: no "Tu contraseña sigue funcionando", and the identity card reads "Para cambiar tu nombre, escríbenos. Pronto podrás hacerlo desde aquí." (FR-030).
+  - **copy**: no "Tu contraseña sigue funcionando"; the identity card reads "Para cambiar tu nombre, escríbenos. Pronto podrás hacerlo desde aquí." (FR-030); and Cuenta's rail row "Entrar con huella o rostro" reads "Tus llaves y sesiones".
 
 ### Implementation for User Story 5
 
@@ -505,11 +525,13 @@ Remove a key: the código still works.
   - **activating**:
     - `canVerifyPerson()` decides `canActivate`;
     - the ceremony is `authClient.passkey.addPasskey()`;
-    - on `SESSION_NOT_FRESH`, it shows the step-up: `sendCode(user.email)`, then `signInWithCode`, then the ceremony again;
+    - on `SESSION_NOT_FRESH`, it shows the step-up: `sendCode(user.email)`, then `signInWithCode`, then the ceremony again. A 429 shows "Demasiados intentos. Espera un momento e intenta de nuevo." (FR-027);
   - **closing other sessions**: `revokeOtherSessions()`.
 
   The card's copy follows `contracts/panel-access.md` § Seguridad. Comments cite D8 (why a key asks for a recent proof) and D11.
-- [ ] T050 [P] [US5] The identity card's copy in `apps/admin/src/features/account/AccountHub.tsx`: "Para cambiar tu nombre, escríbenos. Pronto podrás hacerlo desde aquí." (FR-030).
+- [ ] T050 [P] [US5] Copy in `apps/admin/src/features/account/AccountHub.tsx`:
+  - the identity card: "Para cambiar tu nombre, escríbenos. Pronto podrás hacerlo desde aquí." (FR-030);
+  - the rail row "Entrar con huella o rostro": its detail "Tus passkeys" becomes "Tus llaves y sesiones", the product's words for what the card holds (the design canvas).
 
 **Checkpoint**: PR 1's five stories are complete. T016–T050 pass.
 
@@ -558,7 +580,7 @@ refused by the store app.
   - **amendment 2**: the creator runs, or asks for, `/speckit-constitution` with the plan's Complexity Tracking row 2.
 - [ ] T057 [US6] The PR 2 test helpers in `apps/api/test/store-helpers.ts` and `apps/api/test/helpers.ts` (research D14):
   - in `apps/api/test/store-helpers.ts`, `seedPlainUser` births the user without a password, as T007 did for `seedAuthUser`;
-  - remove `PASSWORD` and `lastCodeFor` from `apps/api/test/helpers.ts`.
+  - remove `PASSWORD` from `apps/api/test/helpers.ts` (`lastCodeFor` left with T029).
 
   The suites still using them fail until T059 and T060 rewrite them.
 
@@ -575,6 +597,8 @@ refused by the store app.
     - a wrong one is `INVALID_OTP`;
     - the invitation stays `sent`;
   - **the race guard**: an address that gains a membership between the check and the sign-in answers `EMAIL_TAKEN`, with no session left and no link written;
+  - **leaving before the código** (FR-031, analysis G3): after `POST /store/invitations/:token/code` alone, the store stays `invited` and the invitation `sent`; a second attempt with a new código accepts;
+  - **a legacy shopkeeper** (analysis G1), who accepted before the release with a password and never typed the código: `POST /store/sign-in/code` with the phone, then `POST /store/sign-in`, lets them in verified, and the sweep leaves them no password (T064);
   - **the phone door**:
     - `POST /store/sign-in/code` sends to the store's email (`sentCode` on that address);
     - a stranger's phone gets the same answer, and no código is logged;
@@ -598,14 +622,16 @@ refused by the store app.
     - "Ya no usamos contraseñas…";
     - the key button where supported;
     - the phone normalised to ten digits;
-    - step 2's line, the same for any phone;
+    - a failed key shows "No se pudo usar tu huella o rostro. Entra con un código." (analysis A4);
+    - step 2's line, the same for any phone, and "Reenviar código" confirming with "Código reenviado";
     - then the activation and `/`;
   - **`/invitacion/:token`**: the three steps, the `EMAIL_TAKEN` copy returning to step 1, and the invalid invitation's screen;
   - **`/recuperar`** lands on `/entrar`;
   - **the wrong-account and suspended screens** are unchanged;
-  - **Caja's card**: the list, "Quitar", the step-up with `/auth/me`'s email, and "Cerrar sesión en los demás dispositivos";
+  - **too many tries** (FR-027): a 429 on any código request or try shows "Demasiados intentos. Espera un momento e intenta de nuevo.";
+  - **Caja's card**: the list, "Quitar", the step-up with `/auth/me`'s email and its "Cancelar", and "Cerrar sesión en los demás dispositivos";
   - axe on each.
-- [ ] T062 [US6] Rewrite `tests/passkey/red.spec.ts`, citing `passwordless-access US6`:
+- [ ] T062 [US6] Rewrite `tests/passkey/red.spec.ts` from T077's PR 1 version, citing `passwordless-access US6`:
   1. the operator, the demo address, gets in by código from `POST /dev/code` and creates a store;
   2. the invitation opens in a fresh context with a virtual authenticator;
   3. the email `tienda-<stamp>@journey.invalid` and its código from `/dev/code` lead to the activation, then the counter;
@@ -655,16 +681,19 @@ refused by the store app.
   1. **the email**;
   2. **the código**: `EMAIL_TAKEN` returns to step 1 with its line; `INVALID_INVITATION` shows the invalid screen;
   3. **`PasskeyOffer`**, where `canVerifyPerson()`: `addPasskey({ name: "Tienda" })` inside the click, with the device word from `useWide()`; then `/`.
+
+  In step 2, "Reenviar código" confirms with "Código reenviado", as the panel's (the design canvas). A 429 on either step shows "Demasiados intentos. Espera un momento e intenta de nuevo." (FR-027).
 - [ ] T071 [US6] `apps/red/src/features/auth/LoginScreen.tsx` (research D10), per `contracts/store-access.md` § `/entrar`:
-  - **step 1**: the line, the key button, the phone through `nationalPhone`, and "Enviar código";
-  - **step 2**: the same-for-every-phone line, `CodeInput`, the resend, and "Usar otro teléfono";
+  - **step 1**: the line, the key button and its failure line "No se pudo usar tu huella o rostro. Entra con un código." (analysis A4), the separator "o con un código", the phone through `nationalPhone`, and "Enviar código";
+  - **step 2**: the same-for-every-phone line, `CodeInput`, the resend (it confirms with "Código reenviado"), and "Usar otro teléfono";
+  - **a 429** on either step shows "Demasiados intentos. Espera un momento e intenta de nuevo." (FR-027), in place of today's "Demasiados intentos. Espera un momento.";
   - **step 3**: the activation, then `/`.
 
   Remove `VerifyStep` and every password field.
 - [ ] T072 [US6] In `apps/red/src/router.tsx`, `/recuperar` redirects to `/entrar`. Delete `apps/red/src/features/auth/RecoverScreen.tsx`.
 - [ ] T073 [US6] `apps/red/src/features/auth/PasskeyCard.tsx` becomes a container for `KeysCard` (research D8, D11, D12; FR-036):
   - the list (`list-user-passkeys`) and "Quitar" (`delete-passkey`);
-  - activation with the step-up on `SESSION_NOT_FRESH`, using `/auth/me`'s email;
+  - activation with the step-up on `SESSION_NOT_FRESH`, using `/auth/me`'s email (a 429 shows the wait line, FR-027);
   - "Cerrar sesión en los demás dispositivos";
   - the device word from `useWide()`.
 
@@ -734,7 +763,8 @@ and their tests pass.
 
 - **Phase 1**: T003 and T004 run beside T001–T002.
 - **Phase 2**: T006, T008, T009, T010, T011, T012 and T013 touch different
-  files. T014 waits for T011–T013. T005 and T007 can run beside them.
+  files. T014 waits for T011–T013. T005 and T007 can run beside them. T077
+  follows T005, T007 and T008.
 - **Each story's tests marked [P]** run together.
 - **Different files across stories**: US5's T047–T050 can run while US4 is
   built.

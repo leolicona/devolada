@@ -134,7 +134,7 @@ New keys, no new shape:
 
 | Field | Rule | Where |
 | --- | --- | --- |
-| name | trimmed, 2–80 characters | registration, `/welcome`, `accept-new` (today's signup rule) |
+| name | trimmed, 2–80 characters | registration, `/welcome`, `accept-new` (today's signup rule); on the server, `hooks.before` refuses any other `name` on `/sign-in/email-otp` and `/update-user` with `INVALID_NAME` (analysis A3) |
 | email | an address shape, lowercased | every door (the plugin lowercases) |
 | código | exactly six digits | `CodeInput` (D12); the plugin checks the rest |
 | phone | 10 national digits after `nationalPhone` | store sign-in (D10); the same rule as the store's own phone (cash-at-stores L5) |

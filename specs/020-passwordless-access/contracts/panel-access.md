@@ -143,11 +143,14 @@ Answers 404 outside `ENVIRONMENT=dev`, like everything under `/dev`.
 
 - **200** `{ "success": true, "data": { "code": "482913" } }`. It mints a
   fresh código with `createVerificationOTP`, replacing the live one.
-- **400** `NOT_A_TEST_ADDRESS` unless the address ends in `.invalid`
+- **403** `TEST_ADDRESS_ONLY` unless the address ends in `.invalid`
   (RFC 6761: no real mailbox can live there) or is one of the seed's demo
-  addresses (`DEMO` in `routes/dev.ts`, whose password is public today).
+  addresses (`DEMO` in `routes/dev.ts`, whose password is public today). An
+  empty address is refused too. The rule and the refusal are
+  `bug: dev-code-readable`'s (PR #273).
 
-`GET /dev/last-code` is removed (D14, D15).
+`GET /dev/last-code` is removed (D14, D15). `GET /dev/last-invitation`
+stays, under the same rule.
 
 ---
 
@@ -159,7 +162,12 @@ Copy is es-MX. Sizes follow constitution VI:
 - body 16 px, no horizontal scroll from 360 px.
 
 Every waiting label sits inside `<Pending>`. All three atoms (`CodeInput`,
-`PasskeyOffer`, `KeysCard`) come from `@devolada/ui` (D12).
+`PasskeyOffer`, `KeysCard`) come from `@devolada/ui` (D12). The design
+canvas «Acceso sin contraseña» draws every screen below, in both themes,
+from 360 px and at 1280 px.
+
+On every screen, a 429 on a código request or try says "Demasiados
+intentos. Espera un momento e intenta de nuevo." (FR-027).
 
 ### `/login`
 
@@ -169,6 +177,8 @@ Every waiting label sits inside `<Pending>`. All three atoms (`CodeInput`,
   rostro, o con un código." (FR-029)
 - "Entrar con huella o rostro", the primary button, shown only where
   `passkeysSupported()` (D7).
+- Where the key shows, the separator "o con un código" follows it, and
+  "Enviar código" is a secondary button; without the key, it is the primary.
 - "Correo" and "Enviar código". The button stays disabled until the address
   has a valid shape.
 - Link: "Crear cuenta" (keeps `next`).
@@ -235,7 +245,7 @@ The states the page has today stay. The changes:
 
 | State | Shows |
 | --- | --- |
-| No session, the address has an account | "Te invitaron a {negocio}", "Como {rol}.", "Correo: {email}" as text; "Entrar con huella o rostro" (where supported); "Enviarme un código" → `CodeInput` + "Entrar"; no password; no "Olvidé mi contraseña" |
+| No session, the address has an account | "Te invitaron a {negocio}", "Como {rol}.", "Correo: {email}" as text; "Entrar con huella o rostro" (where supported), then "o con un código"; "Enviarme un código" → `CodeInput` + "Entrar"; no password; no "Olvidé mi contraseña" |
 | No session, no account | "Tu nombre" + "Crear cuenta y entrar" → `accept-new` → `/welcome?next=/` |
 | Signed in with the invited address | accepts on sight (unchanged) |
 | Signed in with another address, including after a key of another account | "Entraste como {email}, y esta invitación fue enviada a otro correo." + "Entrar con el correo invitado" (unchanged, FR-018) |
@@ -251,15 +261,21 @@ The states the page has today stay. The changes:
   dispositivo tiene acceso con huella o rostro todavía." (better-auth D18).
 - **"Activar en este dispositivo"**, where the device can verify the person.
   On `SESSION_NOT_FRESH` it asks first: "Confirma que eres tú: te enviamos un
-  código a {email}.", with `CodeInput` and "Confirmar". Then it runs the
-  ceremony (D8).
+  código a {email}.", with `CodeInput`, "Confirmar" and "Cancelar", which
+  closes the step-up. Then it runs the ceremony (D8). On success: "Listo.
+  Este dispositivo ya puede entrar con huella o rostro.", and the new key
+  joins the list. On a cancel or failure: "No se pudo activar. Intenta de
+  nuevo.", with no password to fall back on (FR-030).
 - **"Cerrar sesión en los demás dispositivos"**, a secondary button. After
   it: "Listo. Solo este dispositivo sigue con tu sesión abierta." (D11).
 
 Cuenta's identity card now says: "Para cambiar tu nombre, escríbenos. Pronto
-podrás hacerlo desde aquí." (FR-030)
+podrás hacerlo desde aquí." (FR-030). Its rail row "Entrar con huella o
+rostro" reads "Tus llaves y sesiones" instead of "Tus passkeys": the
+product's words for what the card holds.
 
 ### Redirects
 
-- `/verify-email` → `/login`, keeping `next` and `email`.
-- `/recover` → `/login`, keeping `next` and `email`.
+- `/verify-email` → `/login`, keeping `next`. An address in an old link is
+  dropped: it never travels in a URL (D6).
+- `/recover` → `/login`, keeping `next`, the same way.

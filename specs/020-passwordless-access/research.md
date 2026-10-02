@@ -196,8 +196,8 @@ FR-029 erases every password, and the spec's edge case removes legacy
 accounts whose email was never proven. Both are deletions of rows:
 
 - `account` rows with `provider_id = 'credential'`;
-- `user` rows with `email_verified = 0` that no store names and no
-  membership holds, with their sessions and accounts.
+- `user` rows with `email_verified = 0` that **no row names**, with their
+  sessions, accounts and keys.
 
 A migration cannot do it. Migrations are additive, because the per-PR
 preview applies them to the dev database while the old Worker still serves
@@ -211,8 +211,25 @@ something (constitution: sweeps speak only when they did something).
 - **Until PR 2**, it skips the users a store names, so the store's password
   keeps working.
 - **From PR 2**, it erases them all.
-- **After the first run** it finds nothing, at the cost of two indexed reads
+- **After the first run** it finds nothing, at the cost of two small reads
   a minute.
+- **Two deletions, each on its own** (analysis U1, 2026-10-02). The
+  passwords go in one statement, and the legacy users in another after it.
+  Inside one batch, a single row that still names a user would fail the whole
+  batch every minute, and FR-029 would never finish.
+- **"No row names" is a list, read on 2026-10-02.** None of the user columns
+  in `schema.ts` holds the user: `payments.store_user_id`,
+  `platform_settings.author_user_id`, `top_ups.submitted_by_user_id`,
+  `credit_entries.granted_to_user_id`, `credit_entries.author_user_id`,
+  `bench_receipts.uploaded_by`, `bench_readings.marked_by`,
+  `stores.user_id`, `stores.created_by_user_id`,
+  `store_invitations.created_by_user_id`,
+  `store_handovers.declared_by_user_id`,
+  `store_handovers.resolved_by_user_id` and `store_ledger.author_user_id`.
+  None of them cascades. No `member` row holds the user either: that one
+  cascades, but a membership means the account is in use. The `session`,
+  `account` and `passkey` rows do not cascade, so they go first, in the
+  users' batch. A column added later that names a user joins the list.
 - **It is also a guarantee.** A password brought back by a restored export,
   or written by a door nobody remembered, is gone within a minute. That is
   SC-003's "zero", enforced rather than hoped for.
@@ -255,9 +272,10 @@ typed) are kept: they get in by phone (D10).
   `/welcome?next=<path>`. That covers a person who closed the tab before
   naming themselves.
 - **`/verify-email` and `/recover`** become redirects to `/login`, keeping
-  `next` and `email` (better-auth D12's validated `next`). Nothing links to
-  them any more. A redirect is three lines and spares a bookmark the
-  not-found page.
+  `next` (better-auth D12's validated `next`) and dropping the address an
+  old link may carry: an address never travels in a URL (analysis I5).
+  Nothing links to them any more. A redirect is three lines and spares a
+  bookmark the not-found page.
 - **The invitation page** keeps its states (D9).
 - **Cuenta → Seguridad** renders the shared keys card (D12) with the step-up
   (D8) and "Cerrar sesión en los demás dispositivos" (D11).
@@ -475,8 +493,10 @@ The keys card and the activation step are rendered by both apps, and so is
 the código field. Constitution VI makes `packages/ui` their one definition:
 
 - **`CodeInput`**: six digits, `inputMode="numeric"`,
-  `autoComplete="one-time-code"`, 48 px, digits only. It replaces the
-  hand-made fields on today's code screens.
+  `autoComplete="one-time-code"`, 48 px, digits only, in the mono face the
+  product keeps for folios and keys (`font-mono`, `tracking-widest`), so the
+  digits read one by one. It replaces the hand-made fields on today's code
+  screens. The design canvas draws it on every código step.
 - **`PasskeyOffer`**: the activation step's body:
   - the title;
   - FR-008's four lines;
@@ -487,7 +507,8 @@ the código field. Constitution VI makes `packages/ui` their one definition:
   is a prop.
 - **`KeysCard`**: the key list (name or "Llave de acceso", date, "sincronizada
   con tu llavero"), "Quitar", "Activar en este dispositivo", the step-up's
-  código field, and "Cerrar sesión en los demás dispositivos".
+  código field with "Confirmar" and "Cancelar", and "Cerrar sesión en los
+  demás dispositivos".
 
 All three are presentational. The apps keep the Better Auth client (one per
 app, `lib/auth-client.ts`) and their fetches, and pass state and callbacks
@@ -578,7 +599,9 @@ no digits to read, so each layer gets a código its own way:
   - **`GET /dev/last-code` retires.**
   - **`POST /dev/code {email, type}`** mints a código with
     `createVerificationOTP` and returns it, but only for two kinds of
-    address:
+    address (`testAddress()`, which `bug: dev-code-readable` put in
+    `routes/dev.ts` first). It refuses the rest, the empty address included,
+    with 403 `TEST_ADDRESS_ONLY`:
     - one under the reserved `.invalid` top-level domain (RFC 6761: it
       never delivers mail, so no real person can own one). The journeys
       already use `@journey.invalid`;
@@ -615,6 +638,14 @@ This feature closes it two ways: códigos are hashed (D2), and `/dev/code`
 only mints for `.invalid` addresses and the seed's demo addresses (D14). If
 it should close before this feature ships, the narrow fix is the lite path:
 restrict `/dev/last-code` to the same addresses today.
+
+**Closed early, 2026-10-02.** The creator asked for the narrow fix, and it
+ships ahead of PR 1 as PR #273 (`.specify/bugs/dev-code-readable/`). Two
+things it found are this feature's to keep:
+- `/dev/last-invitation` was a second door: an invitation id alone creates
+  the invitee's account (D9), so it takes the same rule;
+- the address is matched whole, never as a substring: a query that ends in
+  `.invalid` can sit inside a real address (`ana.invalid@gmail.com`).
 
 ---
 
@@ -665,12 +696,15 @@ and gives the código's two sources above.
 **The test suites that change**, from the inventory taken 2026-10-02:
 - **API**: the helpers (`seedAuthUser`, `seedPlainUser`, `lastCodeFor`,
   `PASSWORD`) and `isp-signup`, `sessions`, `rate-limit`, `identity-round`,
-  `invitee-lands-own-business`, `dev-seed`, `cash-at-stores-access`
-  (PR 2) and `cash-at-stores-operator` (PR 2).
+  `invitee-lands-own-business`, `dev-seed`, `dev-code-readable` (PR #273's
+  regression test), `cash-at-stores-access` (its código reads and `username`
+  refusals in PR 1, analysis I1; the rest in PR 2) and
+  `cash-at-stores-operator` (PR 2).
 - **Admin**: `msw.ts`, `shell`, `access`, `memberships` (the invitation
   page), `invitee-lands-own-business` and `session-round`.
 - **Red**: `msw.ts` and `access` (PR 2).
-- **Playwright**: the three passkey journeys, the design-review captures,
+- **Playwright**: the three passkey journeys (`red` twice: its operator and
+  its código read in PR 1, the rest in PR 2), the design-review captures,
   and (PR 2) the two e2e suites that wait for red's old copy.
 
 The older specs' quickstarts keep their demo password: they record the

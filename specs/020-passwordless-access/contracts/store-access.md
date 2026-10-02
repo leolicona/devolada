@@ -133,7 +133,12 @@ The phone layout is designed at 375 px, the computer layout from 1024 px
 - the decisive action at 64 px.
 
 All three atoms (`CodeInput`, `PasskeyOffer`, `KeysCard`) come from
-`@devolada/ui` (D12). Copy is es-MX.
+`@devolada/ui` (D12). Copy is es-MX. The design canvas «Acceso sin
+contraseña» draws these screens too.
+
+On every screen, a 429 on a código request or try says "Demasiados
+intentos. Espera un momento e intenta de nuevo." (FR-027), in place of
+today's "Demasiados intentos. Espera un momento.".
 
 ### `/invitacion/:token`
 
@@ -146,7 +151,7 @@ All three atoms (`CodeInput`, `PasskeyOffer`, `KeysCard`) come from
 **Step 2, "Escribe el código":**
 - "Te enviamos un código a {email}. Vence en 10 minutos."
 - `CodeInput` and "Entrar".
-- "Reenviar código".
+- "Reenviar código", which confirms with "Código reenviado", as the panel's.
 - "Usar otro correo".
 - `EMAIL_TAKEN`: "Ese correo ya tiene una cuenta en Devolada. Usa otro para
   tu tienda." It goes back to step 1.
@@ -160,7 +165,9 @@ All three atoms (`CodeInput`, `PasskeyOffer`, `KeysCard`) come from
 
 **Step 1, "Entrar":**
 - "Ya no usamos contraseñas: entra con tu huella o rostro, o con un código."
-- "Entrar con huella o rostro" (where supported), the primary button.
+- "Entrar con huella o rostro" (where supported), the primary button, then
+  the separator "o con un código". Without the key, "Enviar código" is the
+  primary.
 - "Tu teléfono" and "Enviar código".
 - Key failure: "No se pudo usar tu huella o rostro. Entra con un código."
 
@@ -169,7 +176,7 @@ All three atoms (`CodeInput`, `PasskeyOffer`, `KeysCard`) come from
   tienda. Vence en 10 minutos." This says the same for every phone: naming
   the address would tell a stranger whose phone it is.
 - `CodeInput` and "Entrar".
-- "Reenviar código".
+- "Reenviar código", which confirms with "Código reenviado".
 - "Usar otro teléfono".
 
 **Step 3**: as the invitation's step 3. Then `/`.
@@ -178,10 +185,13 @@ All three atoms (`CodeInput`, `PasskeyOffer`, `KeysCard`) come from
 
 `KeysCard`, as the panel's (panel-access, Seguridad), with these
 differences:
-- the device word ("este teléfono", "esta computadora");
-- the step-up line "Confirma que eres tú: te enviamos un código a {email}.";
+- the device word ("este teléfono", "esta computadora"), in "Activar en
+  {device word}" and its done line;
+- the step-up line "Confirma que eres tú: te enviamos un código a {email}.",
+  with "Confirmar" and "Cancelar";
 - the list (new here, FR-036), "Quitar", and "Cerrar sesión en los demás
-  dispositivos".
+  dispositivos";
+- 48 px controls at full width, where the panel's are 40 px.
 
 The copy drops "Tu contraseña sigue funcionando" (FR-035).
 

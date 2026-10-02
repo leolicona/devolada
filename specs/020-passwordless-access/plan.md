@@ -67,14 +67,20 @@ each traced to its decisions in [research.md](./research.md):
    - the API suite takes the código the sender logged, or mints one;
    - the passkey layer's `/dev/last-code` becomes `/dev/code`, which mints
      only for `.invalid` addresses and the seed's demo addresses.
-   That also closes a hole on the deployed dev API, where any account's
-   código can be read today (D15).
+   The hole on the deployed dev API, where any account's código could be
+   read (D15), closed ahead of this feature with the same rule
+   (`bug: dev-code-readable`, PR #273); `/dev/code` reuses it.
 
 **No schema changes.** The data model changes which rows may exist, not their
 shape ([data-model.md](./data-model.md)).
 
 **Two amendments** to the stack table's Auth row, one per PR (Complexity
-Tracking).
+Tracking). The first is applied (v1.10.0).
+
+**Design**: the canvas «Acceso sin contraseña»
+(https://claude.ai/artifact/LtVqw6bLzcD1VuMkFjkv7c, private to the creator)
+draws every screen of both UI contracts, interactive, in both themes, from
+360 px and at 1280 px, with the design system's own tokens and atoms.
 
 ## Technical Context
 
@@ -126,7 +132,7 @@ R2 and Workers AI are untouched.
 - **SC-002**, a key sign-in in under 10 s: two requests, one ceremony.
 - **SC-011**, a shopkeeper back by código in under two minutes: two
   requests.
-- No hot path is added. The sweep costs two indexed DELETEs a minute that
+- No hot path is added. The sweep costs two small DELETEs a minute that
   find nothing after the first run.
 
 **Constraints**:
@@ -157,26 +163,28 @@ R2 and Workers AI are untouched.
 ## Constitution Check
 
 *GATE: must pass before Phase 0 research. Re-checked after Phase 1 design.
-Checked against v1.9.2 (2026-10-01).*
+Checked against v1.9.2 (2026-10-01); re-checked against v1.10.0
+(2026-10-02), which applies amendment 1.*
 
-**Result: every gate passes but one.** The stack table's Auth row stops
+**Result: every gate passes for PR 1.** The stack table's Auth row stopped
 describing the product, first for the panel (PR 1) and then for the store app
 (PR 2). Governance asks the plan to propose the amendment rather than route
 around it: Complexity Tracking proposes it, one text per PR, for
-`/speckit-constitution`.
+`/speckit-constitution`. Amendment 1 is applied (v1.10.0); amendment 2 waits
+for PR 2 (T056).
 
 | Principle | Gate | Status |
 | --- | --- | --- |
 | I. Spec-driven, decisions cited | Spec → plan → tasks. Every non-obvious rule cites `passwordless-access D<n>`. The decisions this replaces are specified again in the spec's "What this replaces", never edited in the archive: better-auth D2, D7, D14, D16, D17; cash-at-stores FR-009–FR-011, D3, D5, D26 | ✅ |
 | II. Money law | No amount is touched | ✅ n/a |
-| III. One contract, pure routers | **Changed**: `routes/businesses` (`accept-new {name}`). **New** (PR 2): four `routes/store` routes, each wired in a pure `index.ts` with `zValidator`, logic in `handler.ts`, schemas in `schema.ts` exported as `businesses-schema` and `store-schema`. `routes/auth.ts` only shrinks (`business/signup` leaves); it stays better-auth D6's thin layer before the fall-through. Better Auth's endpoints stay the one envelope exemption (`baPost`). Browser-facing: no `message`, no `retryable` | ✅ |
+| III. One contract, pure routers | **Changed**: `routes/businesses` (`accept-new {name}`). **New** (PR 2): four `routes/store` routes, each wired in a pure `index.ts` with `zValidator`, logic in `handler.ts`, schemas in `schema.ts` exported as `businesses-schema` and `store-schema`. `routes/auth.ts` loses `business/signup` (PR 1), and its `/auth/me` store branch gains `email` (PR 2, D8); it stays better-auth D6's thin layer before the fall-through. Better Auth's endpoints stay the one envelope exemption (`baPost`). Browser-facing: no `message`, no `retryable` | ✅ |
 | IV. Tests on the real runtime | API in workerd with a real D1. A código comes from the sender's log or from the plugin's own server-only door, never from a mocked database (D14). Resend at its origin. Component with MSW and axe. Contrast, targets and scroll in Playwright. The passkey ceremony against a real API | ✅ |
-| V. Tenant isolation, authorization by area | No query loses its `business_id` filter. The store actor is still resolved per request (`requireStore`). The phone door never says whether a phone is a store's (cash-at-stores D3). **"A credential the product only ever compares is stored as a SHA-256 hash"**: the código is now (D2); today it is stored in plain text, a gap this plan closes rather than tolerates. Dev-only routes answer 404 outside dev, and `/dev/code` also refuses every real address (D14, D15). CORS unchanged | ✅ |
+| V. Tenant isolation, authorization by area | No query loses its `business_id` filter. The store actor is still resolved per request (`requireStore`). The phone door never says whether a phone is a store's (cash-at-stores D3). **"A credential the product only ever compares is stored as a SHA-256 hash"**: the código is now (D2); today it is stored in plain text, a gap this plan closes rather than tolerates. Dev-only routes answer 404 outside dev, and `/dev/code` and `/dev/last-invitation` refuse every real address (D14, D15, `bug: dev-code-readable`). CORS unchanged | ✅ |
 | VI. Visual foundations | Tokens only. 48 px controls on access pages, 64 px for the activation. Three new atoms in `@devolada/ui`, one definition each (D12). Waiting labels inside `<Pending>`. es-MX, *código* and never "enlace". **"Auth emails carry codes, never links"**: kept. The creator's story asked for a magic link, the conflict was put to them, and they chose the código (spec Clarifications, Q1; FR-024) | ✅ |
 | VII. Every test cites its story | `passwordless-access US1`–`US6` | ✅ |
 | VIII. Absent configuration degrades | No new binding. No `RESEND_API_KEY` → the código is logged (unchanged). No `PASSKEY_RP_ID` → `localhost` (unchanged). A sweep that finds nothing says nothing | ✅ |
 | IX. Core generic, adapters translate | Access is core. No provider and no adapter is touched | ✅ n/a |
-| **Stack table, Auth row** | "Better Auth 1.6: email + password with OTP verification, passkeys …, `username` plugin for the shopkeeper's phone sign-in". After PR 1 the panel has no password; after PR 2 nobody has one, and the phone signs nothing in | ⚠️ **amendments 1 and 2** (Complexity Tracking) |
+| **Stack table, Auth row** | v1.9.2 said "Better Auth 1.6: email + password with OTP verification, passkeys …, `username` plugin for the shopkeeper's phone sign-in". v1.10.0 (amendment 1) says the panel holds no password, and the store keeps its phone and password until User Story 6. After PR 2 nobody has a password, and the phone signs nothing in | ✅ **PR 1** (amendment 1, v1.10.0) · ⚠️ **PR 2**: amendment 2 (T056) |
 | Migrations additive | None. The erasure is a sweep because a deleting migration would break the dev Worker during a PR's preview (D5) | ✅ |
 | One Worker trigger | `eraseLegacyCredentials` is one more `waitUntil` lane of the every-minute cron, and logs only when it deleted something (D5) | ✅ |
 | Quality gates | Unchanged order. `pending-lint` and `contrast-lint` read the same folders. `packages/ui` runs its own tests | ✅ |
@@ -184,8 +192,8 @@ around it: Complexity Tracking proposes it, one text per PR, for
 **Re-check after Phase 1 design**: unchanged. The data model needs no
 migration. The contracts add routes only inside existing areas, with their
 schemas exported. The quickstart's measurements (M1–M6) each have a stated
-fallback that changes no gate. The Auth row is the one gate still blocked,
-and it is covered by the two amendments below.
+fallback that changes no gate. The Auth row was the one gate blocked:
+amendment 1 cleared it for PR 1 (v1.10.0), and amendment 2 covers PR 2.
 
 ## Project Structure
 
@@ -222,7 +230,7 @@ apps/api/
 ├── src/routes/businesses/schema.ts       # acceptInvitationNewRequest loses password
 ├── src/routes/store/{index,handler,schema}.ts   # PR 2: invitations/:token/code, accept {email, otp},
 │                                                #   sign-in/code, sign-in (D10); rateLimitRoute on each (D3)
-├── src/routes/dev.ts                     # POST /dev/code (.invalid + DEMO only); /dev/last-code removed;
+├── src/routes/dev.ts                     # POST /dev/code (.invalid + DEMO only, PR #273's testAddress); /dev/last-code removed;
 │                                         #   the seed without a password (D14, D16)
 └── test/
     ├── helpers.ts, store-helpers.ts      # sentCode, mintCode; seedAuthUser/seedPlainUser without a password; PASSWORD and lastCodeFor leave (D14)
@@ -230,10 +238,13 @@ apps/api/
     ├── passwordless-sign-in.test.ts      # US2, US3
     ├── passwordless-invitation.test.ts   # US4
     ├── passwordless-keys-sessions.test.ts# US5
+    ├── setup.ts                          # the console.log spy sentCode reads, reset beforeEach (D14)
+    ├── passwordless-email.test.ts        # US1: the código email (D13)
     ├── passwordless-sweep.test.ts        # FR-029 (D5)
     ├── passwordless-store.test.ts        # US6 (PR 2)
     └── rewritten: sessions, rate-limit, identity-round, invitee-lands-own-business, dev-seed,
-                   cash-at-stores-access (PR 2), cash-at-stores-operator (PR 2)
+                   dev-code-readable (PR #273's), cash-at-stores-access (T077 in PR 1, then PR 2),
+                   cash-at-stores-operator (PR 2)
 
 apps/admin/
 ├── src/lib/auth-client.ts                # canVerifyPerson(): isUserVerifyingPlatformAuthenticatorAvailable, once per load (D7)
@@ -244,8 +255,9 @@ apps/admin/
 ├── src/features/account/AccountHub.tsx   # the identity card's copy (FR-030)
 ├── src/features/shell/Shell.tsx          # a nameless session → /welcome?next= (D6)
 ├── src/router.tsx                        # /welcome; /verify-email and /recover redirect to /login (D6)
-└── test/                                 # msw.ts; shell, access, memberships, invitee-lands-own-business, session-round rewritten;
-                                          #   welcome.test.tsx new — each citing passwordless-access US<n>
+└── test/                                 # msw.ts; shell, access, memberships, invitee-lands-own-business, session-round
+                                          #   and account-hub rewritten; registration, sign-in, welcome and no-passkey
+                                          #   (.test.tsx) new — each citing passwordless-access US<n>
 
 apps/red/                                 # PR 2
 ├── src/lib/auth-client.ts                # canVerifyPerson() (D7)
@@ -265,7 +277,7 @@ packages/ui/
 ├── src/playground/Showcase.tsx           # the three atoms, both themes
 └── test/                                 # one test per atom, with axe
 
-tests/passkey/{identity-journey,passkey,red}.spec.ts      # rewritten (D14); /dev/code instead of /dev/last-code
+tests/passkey/{identity-journey,passkey,red}.spec.ts      # rewritten (D14); /dev/code instead of /dev/last-code; red twice (T077, T062)
 tests/e2e/{stubs.ts,contrast.spec.ts,responsive.spec.ts}  # the new screens; red's new copy
 tests/design/{review-identity,review-identidad-2}.spec.ts # the design captures follow the screens
 .specify/memory/constitution.md           # amendments 1 and 2, via /speckit-constitution
@@ -288,5 +300,5 @@ renumbered.
 
 | Departure | Why needed | Simpler alternative rejected because |
 | --- | --- | --- |
-| **1. Auth row, with PR 1** | The panel holds no password: a código or a key opens it (spec US1–US5) | **Proposed text**: *"Better Auth 1.6: email códigos (OTP, stored as a hash) and passkeys (`@better-auth/passkey`); the panel holds no password. Organization plugin as the tenant twin; `username` plugin for the shopkeeper's phone sign-in, with a password until passwordless-access User Story 6; sessions in our D1."* **Rejected**: amending once, for the end state, before PR 1. For the length of PR 1 the constitution would describe a store app that does not exist, which is the silent gap Governance forbids |
+| **1. Auth row, with PR 1** (applied: v1.10.0, 2026-10-02) | The panel holds no password: a código or a key opens it (spec US1–US5) | **Proposed text**: *"Better Auth 1.6: email códigos (OTP, stored as a hash) and passkeys (`@better-auth/passkey`); the panel holds no password. Organization plugin as the tenant twin; `username` plugin for the shopkeeper's phone sign-in, with a password until passwordless-access User Story 6; sessions in our D1."* **Rejected**: amending once, for the end state, before PR 1. For the length of PR 1 the constitution would describe a store app that does not exist, which is the silent gap Governance forbids |
 | **2. Auth row, with PR 2** | No one holds a password, and the phone signs nothing in (spec US6) | **Proposed text**: *"Better Auth 1.6: email códigos (OTP, stored as a hash) and passkeys (`@better-auth/passkey`); no account holds a password. Organization plugin as the tenant twin; `username` plugin keeps the store's phone, which names the account a store's código is sent to; sessions in our D1."* **Rejected**: removing the `username` plugin (research D4: the generated schema and the store's phone column depend on it) |

@@ -453,8 +453,8 @@ it no longer signs in, and the código still does.
 **Acceptance Scenarios**:
 
 1. **Given** Cuenta → Seguridad, **Then** it lists every key of the account
-   with "Quitar" on each, and offers to activate one on this device
-   (better-auth D18, unchanged).
+   with "Quitar" on each, and offers to activate one on this device when
+   the device can verify the person (better-auth D18; FR-016).
 2. **Given** a removed key, **When** someone signs in with it, **Then** it is
    refused, and the código still works.
 3. **Given** several open sessions, **When** the person chooses "Cerrar
@@ -613,7 +613,7 @@ member's account is still refused by the store app.
   MUST also offer "Ahora no", which goes on with the código alone. A person
   who skipped it is offered it again at their next sign-in by código, and
   it is always in Cuenta → Seguridad (FR-021), or in the store app's Caja
-  (FR-035).
+  (FR-035), on a device that can verify the person (FR-016).
 - **FR-007**: Confirming in the device's window MUST save the key to the
   account and continue: to the business wizard, to the invitation's
   business, or to the page the person was going to (better-auth D12).

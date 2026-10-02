@@ -1,4 +1,50 @@
 <!--
+Sync Impact Report (v1.10.0, 2026-10-02)
+- Version change: 1.9.2 → 1.10.0 — MINOR. The Purpose paragraph is
+  materially expanded: it names a third way a payment is confirmed. No
+  principle is added, removed, redefined or renumbered. Precedent: v1.8.0,
+  also MINOR, which added cash at a store to the same paragraph.
+- Source: specs/015-bank-statement-match. The plan's Constitution Check
+  (2026-10-02) blocked on the Purpose, and its Complexity Tracking proposed
+  this sentence. The creator ran this command on 2026-10-02, after the
+  plan. As with v1.8.0, the amendment leads the implementation on purpose:
+  the code catches up under specs/015-bank-statement-match/tasks.md.
+- What this decides:
+  · A transfer from an account at the business's own bank (CLABE, card or
+    phone) never reaches SPEI, so Banxico holds no record of it. The
+    business confirms it, by hand or with its bank statement. Devolada
+    recognizes it, waits and carries out the business's action; it does
+    not validate it against Banxico.
+  · The money still never touches Devolada.
+- What it does not change: every transfer that reaches SPEI is still
+  validated; the store's word for cash; Principles I–IX; the stack table;
+  the three cross-business statistics.
+- Modified sections:
+  · Purpose — one sentence added after "…the business confirms each
+    hand-over of the cash.": "A transfer from an account at the business's
+    own bank never reaches SPEI, so Banxico has no record of it: the
+    business confirms it, by hand or with its bank statement."
+  · Purpose — "The money never touches Devolada either way." → "… in any
+    case." A count word that follows from the new sentence: "either" no
+    longer fits three cases.
+- Added sections: none. Removed sections: none. Renamed principles: none.
+- Templates: plan-template.md ✅ (Constitution Check is filled at plan time
+  from this file); spec-template.md ✅; tasks-template.md ✅;
+  checklist-template.md ✅. No placeholder change needed.
+- Follow-up TODOs:
+  TODO(015-PLAN-CHECK): specs/015-bank-statement-match/plan.md's
+  Constitution Check marks the Purpose ⛔ and its post-design re-check says
+  "blocked until the amendment … is ratified". Both must cite v1.10.0 and
+  turn ✅; Complexity Tracking's row becomes "ratified". That is a spec
+  artifact edit, outside this command.
+  TODO(CLAUDE-MD-SAME-BANK): CLAUDE.md's opening names SPEI and cash only.
+  It gains the same-bank payment when 015's Phase A ships, with the code it
+  describes.
+  Carried unchanged: TODO(TD-005), TODO(BREATH-AMPLITUDE), and who may be
+  admitted as a business.
+-->
+
+<!--
 Sync Impact Report (v1.9.2, 2026-10-01)
 - Version change: 1.9.1 → 1.9.2 — PATCH. No principle, section or table
   changes. The report's follow-up list is corrected: one TODO it carried
@@ -529,11 +575,13 @@ Sync Impact Report (v1.1.0)
 Devolada lets Mexican businesses of any kind collect payments by SPEI and
 validates every transfer. A business may also collect in cash at a store of
 the network Devolada runs: there the store's word confirms the payment, and
-the business confirms each hand-over of the cash. The money never touches
-Devolada either way. What a business's own system does with a payment
-goes through an adapter for that system: today there is one, WispHub, for
-ISPs (Principle IX). It is built by one developer working with AI agents;
-that developer decides. Ask for decisions, not approvals.
+the business confirms each hand-over of the cash. A transfer from an account
+at the business's own bank never reaches SPEI, so Banxico has no record of
+it: the business confirms it, by hand or with its bank statement. The money
+never touches Devolada in any case. What a business's own system does with a
+payment goes through an adapter for that system: today there is one,
+WispHub, for ISPs (Principle IX). It is built by one developer working with
+AI agents; that developer decides. Ask for decisions, not approvals.
 
 ## Core Principles
 
@@ -869,4 +917,4 @@ Additional constraints:
 - The developer decides. When a principle blocks a feature, the feature's
   plan says so and proposes the amendment; it does not route around it.
 
-**Version**: 1.9.2 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-10-01
+**Version**: 1.10.0 | **Ratified**: 2026-09-09 | **Last Amended**: 2026-10-02

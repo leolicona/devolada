@@ -45,6 +45,7 @@ Expected:
 | "Probar conexión": the test stopped at an earlier probe | `devoladaMethods: null` |
 | A list cached under an old stamp, then a setup read with the saved key | The next payment reads the list again and uses the new method (D16) |
 | A test of a candidate key | No stamp; the cache is untouched |
+| Saving a new key (same installation) after a list was cached | The stamp moves; the next payment reads the new account's list |
 
 | Scenario (turning execution on, D14) | Answer |
 | --- | --- |

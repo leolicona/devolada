@@ -440,6 +440,13 @@ so the next payment anywhere reads the list again. The adapter takes the
 stamp from the integration row its caller already holds, so the recording
 path makes no extra query.
 
+A patch that saves a new key or a new installation stamps it too, with no
+provider call. The cache key carries the address but not the key, so
+another account on the same installation would otherwise be answered from
+the old account's list for up to ten minutes — ids that mean nothing
+there, or worse, another method (found by the second `/speckit-analyze`,
+2026-10-02; today's cached cash id has the same gap, and this closes it).
+
 **Rationale**: the creator's decision of 2026-10-02 (spec FR-014, SC-001).
 `cache.delete` reaches one data center only (`wisphub/cache.ts`), so
 writing the fresh list where the screen was read would leave the others

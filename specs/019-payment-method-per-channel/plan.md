@@ -56,7 +56,10 @@ for the admin
 
 **Performance Goals**: no extra provider call per recording in the common
 case — the list read replaces today's cash-method read and shares its
-cache (D3); one extra call only when the provider refuses a method (D6)
+cache (D3). Extra reads only when they buy correctness: one more call when
+the provider refuses a method (D6), and one list read per data center
+after the stamp moves — a screen visit, a test, the gate, or a new key or
+installation (D16)
 
 **Constraints**: the reference ≤ 200 characters (R7); the method list is
 read-only through the API (R6, FR-010); a method created in the panel is
@@ -96,6 +99,10 @@ above. Complexity Tracking stays empty.
 **Revision 2026-10-02** (the creator's decisions after the first plan:
 the execution gate and the descriptions, D14 and D15): re-checked; every
 gate still passes.
+
+**Second `/speckit-analyze`** (2026-10-02): a new key or installation
+stamps too (D16), and the methods card says "connect first" without a
+key. Re-checked: every gate still passes.
 
 **Revision after `/speckit-analyze`** (2026-10-02): execution needs a
 saved key (D14); the setup reads stamp the integration and the cache key

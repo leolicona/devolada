@@ -8,7 +8,7 @@ integration row.
 
 | Table | Column | Type | Written by | Read by |
 | --- | --- | --- | --- | --- |
-| `integrations` | `payment_methods_seen_at` | integer, timestamp ms, nullable | the setup read, the test of the saved connection, and the gate (D14), each time the provider answers a fresh list for the stored key and installation | the adapter, from the integration row its caller already holds, as the version of the method-list cache key (D16) |
+| `integrations` | `payment_methods_seen_at` | integer, timestamp ms, nullable | the setup read, the test of the saved connection, and the gate (D14), each time the provider answers a fresh list for the stored key and installation; and a save of a new key or installation, with no provider call | the adapter, from the integration row its caller already holds, as the version of the method-list cache key (D16) |
 
 Nullable and additive: existing rows read `null`, which is a version of
 its own, so nothing changes for them until a setup read stamps it. It

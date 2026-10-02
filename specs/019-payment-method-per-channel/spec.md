@@ -425,8 +425,9 @@ method.
   (FR-006).
 - **The business connects another account of its system** (a new key or a
   new address). Nothing to redo in Devolada: the methods are found by name
-  in the new account. If they do not exist there, payments fall back until
-  the business creates them.
+  in the new account, and the next payment reads the new account's list,
+  never the old one's (FR-014). If they do not exist there, payments fall
+  back until the business creates them.
 - **A store collects for two businesses.** Each business has its own
   `CASH - RED.DEVOLADAPAGO` in its own system. A method is never
   shared between businesses.
@@ -524,13 +525,17 @@ method.
 - **FR-014**: Once the integration's screen, "Probar conexión" for the
   saved connection, or turning on execution has read the business's
   methods, the next payment Devolada records for that business MUST use
-  what that read found, wherever Devolada runs it. Without such a read, a
-  method created in the business's system MUST be used within ten minutes
-  of its creation.
+  what that read found, wherever Devolada runs it. Saving a new connection
+  (another key or another address) counts the same: the next payment MUST
+  read the new account's methods, never the old one's. Without such a
+  read, a method created in the business's system MUST be used within ten
+  minutes of its creation.
 
 ### Key Entities
 
-No new entity. The feature reads what exists:
+No new entity. The feature reads what exists, and remembers one moment
+on the integration: when Devolada last saw the business's methods
+(FR-014).
 
 - **Recorded payment** (exists, spec 018 and before): it already carries
   its channel, its folio and, for SPEI, its clave de rastreo when known.

@@ -90,3 +90,8 @@
   Devolada has seen a method (FR-014, SC-001 reworded): the integration
   row gains one additive column whose stamp versions the method cache in
   every data center (D16). L1–L5 aligned wording across the artifacts.
+- Second `/speckit-analyze` (2026-10-02): saving another key on the same
+  installation would have served the old account's cached methods for up
+  to ten minutes; a new key or installation now moves the stamp (FR-014,
+  D16). Without a key, the methods card says "connect first" instead of a
+  retry. No CRITICAL or HIGH remained.

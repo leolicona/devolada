@@ -43,7 +43,9 @@ export const devoladaMethods = z.discriminatedUnion("checked", [
   a refused key is explained (provider-address-per-isp FR-010).
 - Reads the list fresh. When the provider answered, it stamps the
   integration's `payment_methods_seen_at` (D16), so the next payment
-  anywhere uses what it found.
+  anywhere uses what it found. The stamp is the one write of this read:
+  a cache version, so repeating the read repeats the stamp and changes
+  nothing else.
 
 ## `POST /integrations/wisphub/test` (extended)
 
@@ -96,6 +98,10 @@ Any other patch — execution off, execution left as it is, `true` on a row
 already on — is answered as today, with no provider call. The request
 schema does not change.
 
+Whatever else it carries, a patch that saves a new key or a new
+installation also stamps `payment_methods_seen_at`, with no provider call
+for it (D16): the next payment reads the new account's methods.
+
 ## The screen (es-MX copy, indicative)
 
 The order is the creator's: *Conexión* (the key card), then *Formas de
@@ -119,6 +125,9 @@ A block *Formas de pago de Devolada* on the WispHub screen:
 - `checked: false`: *"No pudimos revisar tus formas de pago en WispHub.
   Vuelve a intentar."* Never shown as missing (FR-009).
 - The network's line only when `session.storeChannel.on`.
+- No key saved (`wisphub.configured` false): the card makes no read and
+  says *"Conecta WispHub para revisar tus formas de pago."*; a `409
+  WISPHUB_NOT_CONFIGURED` from the read says the same, with no retry.
 - *Ejecución*: the switch cannot be turned on, and says why, in three
   cases: no key saved → *"Primero conecta WispHub."*; a required method
   missing → *"Para encender la ejecución, primero crea tus formas de pago

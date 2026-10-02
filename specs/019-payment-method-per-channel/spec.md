@@ -99,16 +99,15 @@ de pago de Devolada (ESCRIBE)".
 | R10 | Do Devolada's two methods and the reference survive a real payment? | Yes. Demo invoices #1 and #2, paid by their total, kept `SPEI - LINK.DEVOLADAPAGO` and `CASH - RED.DEVOLADAPAGO` and the reference character for character, the middle dot included (`DV-PRUEBA1 · MBAN01002610020000001`). The list filter by each method found its invoice; the filter by the cash method found neither. |
 | R11 | Does today's rule for the cash method take one of Devolada's methods? | **Yes, on the demo itself.** The system lists `CASH - RED.DEVOLADAPAGO` before "Cash" and "efectivo", so today's adapter, which takes the first name that says "efect" or "cash", records every payment with it. FR-012 is not hypothetical. |
 | R12 (M3) | Does the system's own screen show the method and the reference on a paid invoice? | Yes. The invoice in the provider's panel, and its PDF, list under *Transacciones* "Forma de Pago: SPEI - LINK.DEVOLADAPAGO - Referencia: DV-PRUEBA1 · MBAN01002610020000001" (invoice #1) and the same for `CASH - RED.DEVOLADAPAGO` and the store's name (invoice #2), middle dot included. Checked by the creator, 2026-10-02. |
-| R13 (M2) | Does the system's own screen filter paid invoices by payment method, and does its download carry the method and the reference? | The filter, yes: the panel's invoice list, filtered by "Fecha de Pago" over October, "Pagada" and the method `SPEI - LINK.DEVOLADAPAGO`, showed invoice #1 alone (total $3.00); #2 (network) and #3 (cash) did not appear. The list shows a *Forma de Pago* column and offers copy, Excel and PDF downloads, plus a PDF report with a summary by payment method. The download carries the method: the list's CSV, downloaded with that filter, has one row — invoice #1, *Fecha Pago* `02/10/2026 09:50`, *Total Cobrado* `3.00`, *Forma de Pago* `SPEI - LINK.DEVOLADAPAGO` — under the columns #Factura, Cajero, Usuario, Cliente, Fecha Pago, Estado, Zona, Total Cobrado, Forma de Pago, Total. Its *Cajero* is empty for this payment, recorded through the API. The reference is not among the list's default columns, so it is not in the download; whether the column chooser ("Tabla") offers it was not checked. The reference is read on the invoice itself (R12). Checked by the creator, 2026-10-02. |
+| R13 (M2) | Does the system's own screen filter paid invoices by payment method, and does its download carry the method and the reference? | The filter, yes: the panel's invoice list, filtered by "Fecha de Pago" over October, "Pagada" and the method `SPEI - LINK.DEVOLADAPAGO`, showed invoice #1 alone (total $3.00); #2 (network) and #3 (cash) did not appear. The list shows a *Forma de Pago* column and offers copy, Excel and PDF downloads, plus a PDF report with a summary by payment method. The download carries the method: the list's CSV, downloaded with that filter, has one row — invoice #1, *Fecha Pago* `02/10/2026 09:50`, *Total Cobrado* `3.00`, *Forma de Pago* `SPEI - LINK.DEVOLADAPAGO` — under the columns #Factura, Cajero, Usuario, Cliente, Fecha Pago, Estado, Zona, Total Cobrado, Forma de Pago, Total. Its *Cajero* is empty for this payment, recorded through the API. The download follows the visible columns: with *Sub*, *Des* and *Saldo* turned on, a second CSV carried them. The column chooser ("Tabla", which opens *Ajustes → Columnas Visibles*) does not offer the reference, so neither the list nor its download can carry it. The reference is read on the invoice itself and its PDF (R12). Checked by the creator, 2026-10-02. |
 
 ## What must be measured before the plan
 
 Nothing. M1 to M4 were answered on 2026-10-02: M1 by R9, M2 by R13, M3 by
-R12, M4 by R8. One fact stays open and does not block the plan: whether
-the panel's list can show the reference as a column, and so carry it in
-its download (R13). The business filters, counts and downloads by the
-method either way (SC-002, SC-003), and reads the reference on each
-invoice.
+R12, M4 by R8. The last open fact closed the same day: the panel's list
+cannot show the reference as a column, so its download does not carry it
+(R13). The business filters, counts and downloads by the method
+(SC-002, SC-003), and reads the reference on each invoice (US3).
 
 ## Clarifications
 

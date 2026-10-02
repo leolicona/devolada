@@ -62,6 +62,19 @@ const HEALTHY = {
   unverified: ["create_invoice", "register_payment", "auto_activate", "payment_promise"],
   missingPermission: null,
   sampleCustomerCount: 1,
+  /* payment-method-per-channel D8: the probe read "Efectivo" only, so
+     the SPEI line is missing; the store channel is off, so no network
+     line */
+  devoladaMethods: {
+    checked: true,
+    link: {
+      name: "SPEI - LINK.DEVOLADAPAGO",
+      description:
+        "Pagos SPEI validados por link de Devolada (bancos, Spin, Mercado Pago, CoDi, DiMo). Los registra Devolada; no usar en mostrador.",
+      status: "missing",
+    },
+    network: null,
+  },
 };
 
 const oneCustomer = {

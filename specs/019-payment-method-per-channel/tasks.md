@@ -58,6 +58,16 @@ left under the old kind holds a single id; with a row whose stamp is still
 null the key would be the same, and the list reader would get a number on
 the first payment after the deploy.
 
+**Found while implementing US4 (2026-10-02)**:
+- `apps/admin/test/a11y.test.tsx` renders the WispHub screen too, so it
+  needed the new read's handler (T026 named only `integrations.test.tsx`).
+- A refused copy says "No se copió" on the field, the links screen's
+  words; the live region says what to do instead.
+- The T017 tests decide one open point: when a key save's own connection
+  test reads the methods, the list is kept here under the patch's new
+  stamp, as the setup read does (D16, "the place that read it keeps it").
+- T017 and T018 are written; they go green with T021–T023.
+
 **Release rule (D12), before any code**: the pilot must not create
 `CASH - RED.DEVOLADAPAGO` before the release that carries FR-012. Today's
 adapter would record every payment with it (R11).
@@ -206,27 +216,27 @@ reopen, and it turns on (quickstart §2, steps 3, 6–7).
 
 ### Implementation for User Story 4
 
-- [ ] T019 [US4] In `apps/api/src/routes/integrations/schema.ts`, add `devoladaMethodStatus`, `devoladaMethodLine` (`name`, `description`, `status`) and `devoladaMethods` exactly as `contracts/integrations-payment-methods.md` gives them; add `devoladaMethods: devoladaMethods.nullable()` to `wisphubTestResponse`; export the types (`DevoladaMethods`, `DevoladaMethodLine`). The package export `./integrations-schema` already exists.
-- [ ] T020 [US4] In `apps/api/src/wisphub/payment-methods.ts`, add `setupBlockOf(methods, storeChannelOn): DevoladaMethods` (`found` for one match, `duplicate` for more, `missing` for none; `network` only with the store channel on) and `readDevoladaMethods(wisphub, storeChannelOn)`, which lists fresh and answers `{ checked: false }` on any `WispHubError` (FR-009). The block's type is imported type-only from the integration's schema. Depends on T019.
+- [X] T019 [US4] In `apps/api/src/routes/integrations/schema.ts`, add `devoladaMethodStatus`, `devoladaMethodLine` (`name`, `description`, `status`) and `devoladaMethods` exactly as `contracts/integrations-payment-methods.md` gives them; add `devoladaMethods: devoladaMethods.nullable()` to `wisphubTestResponse`; export the types (`DevoladaMethods`, `DevoladaMethodLine`). The package export `./integrations-schema` already exists.
+- [X] T020 [US4] In `apps/api/src/wisphub/payment-methods.ts`, add `setupBlockOf(methods, storeChannelOn): DevoladaMethods` (`found` for one match, `duplicate` for more, `missing` for none; `network` only with the store channel on) and `readDevoladaMethods(wisphub, storeChannelOn)`, which lists fresh and answers `{ checked: false }` on any `WispHubError` (FR-009). The block's type is imported type-only from the integration's schema. Depends on T019.
 - [ ] T021 [US4] In `apps/api/src/routes/integrations/handler.ts`:
   - `getWisphubPaymentMethods(c)`: `businessGuard`, the stored key and installation (`409 WISPHUB_NOT_CONFIGURED` without a key), the business's `store_channel_on`; reads the list fresh; when the provider answered, stamps `payment_methods_seen_at` with `upsertIntegration` and keeps the list with `rememberPaymentMethods` under the new stamp (D8, D16); answers the block;
   - `testKey`: the `payment_methods` probe reads `listPaymentMethods` instead of `probePaymentMethods` (then delete `probePaymentMethods` from `client.ts`), and `answer()` carries `devoladaMethods` by the contract's table: the block when the probe answered, `{ checked: false }` when it ran and failed, `null` when the test stopped before it (D8, FR-009). Only a test of the saved key and installation stamps (D16). The probe's outcome rules do not change.
   - Depends on T019, T020.
 - [ ] T022 [US4] In `patchWisphub` (same file), the gate (D14): only when the patch carries `actionsEnabled: true` and the stored row has it false (or there is no row yet): with no key after this patch, refuse with `409 WISPHUB_NOT_CONFIGURED` before any provider call; otherwise read the block with the key and installation the row will have after this patch; refuse the whole patch with `409 PAYMENT_METHODS_MISSING` when a required line is `missing`, or `503 PAYMENT_METHODS_UNCHECKED` when `checked` is false; save nothing. A passing check saves the patch and `payment_methods_seen_at` in the same write (D16). Separately, whatever else it carries, a patch that saves a new key or installation also sets `payment_methods_seen_at` to now, with no provider call for it (D16: the cache key carries the address, not the key). Required: `link` always, `network` when the store channel is on; `duplicate` counts as present. Comment D14 and FR-013's "never turned off". Depends on T021.
 - [ ] T023 [US4] In `apps/api/src/routes/integrations/index.ts`, `GET /wisphub/payment-methods` with `requireSession`, `requireArea("integrations", "manage")`, wired to `getWisphubPaymentMethods`. Pure router. Depends on T021.
-- [ ] T024 [P] [US4] In `packages/ui/src/components/status-badge.tsx`, add `methodFound` (success, check, "Creada"), `methodMissing` (info, "Falta crearla") and `methodDuplicate` (warning, "Repetida"), each with a lucide icon, with a comment citing payment-method-per-channel D8 and why missing is not a failure (FR-008).
-- [ ] T025 [US4] In `apps/admin/src/features/integrations/WispHubScreen.tsx`:
+- [X] T024 [P] [US4] In `packages/ui/src/components/status-badge.tsx`, add `methodFound` (success, check, "Creada"), `methodMissing` (info, "Falta crearla") and `methodDuplicate` (warning, "Repetida"), each with a lucide icon, with a comment citing payment-method-per-channel D8 and why missing is not a failure (FR-008).
+- [X] T025 [US4] In `apps/admin/src/features/integrations/WispHubScreen.tsx`:
   - a `PaymentMethodsCard` between `KeyCard` and `MappingCard`: without a key (`wisphub.configured` false) no query and *"Conecta WispHub para revisar tus formas de pago."*; otherwise a query on `GET /integrations/wisphub/payment-methods` (its own loading inside `<Pending>`, its own error state with retry; a `409 WISPHUB_NOT_CONFIGURED` reads as the no-key text, with no retry), one line per method — the name in the mono face and the description, each field itself a `<button>` that copies its value in place (label with a copy icon, then the value; after copying, a check and "Copiado"; `navigator.clipboard.writeText`, as `ApiScreen.tsx` does), the `StatusBadge` — and the copy of `contracts/integrations-payment-methods.md` ("The screen");
   - the network's line only when `session.storeChannel.on`;
   - `SwitchesCard`: the switch cannot be turned on while the integration has no key (`wisphub.configured` false: "Primero conecta WispHub."), while a required line is `missing`, or while the block is unchecked, and says why, pointing at the block; it can always be turned off; the three refusal codes (`WISPHUB_NOT_CONFIGURED`, `PAYMENT_METHODS_MISSING`, `PAYMENT_METHODS_UNCHECKED`) get their es-MX copy;
   - when "Probar conexión" or a save answers `devoladaMethods`, a block replaces the card's cached block; `null` leaves it as it is.
   - Depends on T019, T024.
-- [ ] T026 [US4] Admin tests:
+- [X] T026 [US4] Admin tests:
   - `apps/admin/test/msw.ts`: a `devoladaMethods` handler factory for the new GET, its fixtures validated by `devoladaMethods.parse`;
   - `apps/admin/test/payment-method-per-channel.test.tsx` (cites `payment-method-per-channel US4`): both lines with names and descriptions, each field copying its value in place and showing "Copiado"; the network's line hidden with the store channel off; the missing method's two copies — observing ("Créala para poder encender la ejecución.") and executing ("Mientras no exista, esos pagos se registran como efectivo, igual que hoy."); the unchecked state; the switch blocked with no key, with a method missing and unchecked, and free to turn off; each refusal's copy; a test answer with `devoladaMethods: null` leaving the card as it was; no key saved → no read and the connect-first text; axe on every rendered state;
   - `apps/admin/test/integrations.test.tsx`: a handler for the new read (found), and `devoladaMethods: null` on its test-result fixture.
   - Depends on T025.
-- [ ] T027 [P] [US4] In `tests/e2e/stubs.ts`, stub `**/integrations/wisphub/payment-methods` with a found block validated by the schema, so `tests/e2e/contrast.spec.ts` and `tests/e2e/responsive.spec.ts` measure the block in both themes and at 360/768/1280. Depends on T019.
+- [X] T027 [P] [US4] In `tests/e2e/stubs.ts`, stub `**/integrations/wisphub/payment-methods` with a found block validated by the schema, so `tests/e2e/contrast.spec.ts` and `tests/e2e/responsive.spec.ts` measure the block in both themes and at 360/768/1280. Depends on T019.
 
 **Checkpoint**: T017, T018 and T026 green; the browser layer renders the block.
 
@@ -241,13 +251,13 @@ two channels are independent (FR-004).
 **Independent Test**: on the demo with the store channel on, a store's
 record lands on the invoice with the network's method (quickstart §2).
 
-- [ ] T028 [US2] In `apps/api/test/payment-method-per-channel.test.ts`, add `describe("payment-method-per-channel US2 …")`, asserting the captured body (`seedActiveStore`, `seedStoreChannel`, `mockAction`):
+- [X] T028 [US2] In `apps/api/test/payment-method-per-channel.test.ts`, add `describe("payment-method-per-channel US2 …")`, asserting the captured body (`seedActiveStore`, `seedStoreChannel`, `mockAction`):
   - a store's record, list `[efectivo 7, SPEI 12, CASH - RED 13]` → `forma_pago: 13` (the deferred first attempt, run by the sweep when no `defer`);
   - the sweep on a queued store row → `13`;
   - the network's method missing, the SPEI one present → the store payment records with `7`, never `12`;
   - the SPEI one missing, the network's present → a SPEI payment records with `7`, never `13`;
   - two stores, one method: both record with `13`.
-- [ ] T029 [US2] If a T028 case fails, the fix goes where the case points (`settleConfirmed`'s `channel` for the store's deferred attempt, or the chooser); no other code is expected for this story. Depends on T028.
+- [X] T029 [US2] If a T028 case fails, the fix goes where the case points (`settleConfirmed`'s `channel` for the store's deferred attempt, or the chooser); no other code is expected for this story. Depends on T028.
 
 **Checkpoint**: T028 green.
 
@@ -261,15 +271,15 @@ record lands on the invoice with the network's method (quickstart §2).
 **Independent Test**: on the demo, the invoice's transaction reads
 "Referencia: DV-… · <clave>" (quickstart §2, step 5).
 
-- [ ] T030 [US3] In `apps/api/test/payment-method-per-channel.test.ts`, add `describe("payment-method-per-channel US3 …")`, asserting the captured `referencia`:
+- [X] T030 [US3] In `apps/api/test/payment-method-per-channel.test.ts`, add `describe("payment-method-per-channel US3 …")`, asserting the captured `referencia`:
   - a SPEI payment with its clave → `DV-XXXXXX · <clave>`; one found by reference whose clave was adopted at the verdict → that clave; one with no clave → `DV-XXXXXX`;
   - a store payment → `DV-XXXXXX · <store name>`; the store renamed afterwards → a later retry of a payment not yet landed carries the new name, a landed one is never recorded again;
   - the fallback (the refused method of T014) still carries the reference;
   - a 300-character store name written straight to the row → 200 characters, the folio intact, the name ending in `…`;
   - the body never holds the customer's name or phone.
-- [ ] T031 [US3] In `apps/api/src/wisphub/payment-methods.ts`, `referenceFor(reference)`: `folio · clave`, `folio`, or `folio · store name`, with ` · ` as separator; only the store's name is shortened, ending in `…`, to fit 200 characters (R7); `undefined` when there is no folio. Comment D7 and the measured facts (R10, R12: the middle dot survives the API, the panel and the PDF; the store's part is at most 80 characters today, so the cut is a guard).
-- [ ] T032 [US3] In `apps/api/src/wisphub/client.ts`, `registerPayment` takes an optional `reference?: string` and sends `referencia` only when it is given, so every body without one stays byte-for-byte today's.
-- [ ] T033 [US3] In `attemptReconnection` (`apps/api/src/wisphub/reconnection.ts`), pass `referenceFor(record.reference)` on the first call and on the fallback. Depends on T031, T032.
+- [X] T031 [US3] In `apps/api/src/wisphub/payment-methods.ts`, `referenceFor(reference)`: `folio · clave`, `folio`, or `folio · store name`, with ` · ` as separator; only the store's name is shortened, ending in `…`, to fit 200 characters (R7); `undefined` when there is no folio. Comment D7 and the measured facts (R10, R12: the middle dot survives the API, the panel and the PDF; the store's part is at most 80 characters today, so the cut is a guard).
+- [X] T032 [US3] In `apps/api/src/wisphub/client.ts`, `registerPayment` takes an optional `reference?: string` and sends `referencia` only when it is given, so every body without one stays byte-for-byte today's.
+- [X] T033 [US3] In `attemptReconnection` (`apps/api/src/wisphub/reconnection.ts`), pass `referenceFor(record.reference)` on the first call and on the fallback. Depends on T031, T032.
 
 **Checkpoint**: T030 green; the whole suite green.
 

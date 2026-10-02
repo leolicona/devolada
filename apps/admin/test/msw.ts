@@ -1,5 +1,6 @@
 import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
+import { devoladaMethods, type DevoladaMethods } from "@devolada/api/integrations-schema";
 
 export const businessActor = {
   type: "business",
@@ -79,6 +80,9 @@ export const handlers = {
     http.patch("/integrations/wisphub", async ({ request }) => r(await request.json())),
   testWisphubIntegration: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/integrations/wisphub/test", async ({ request }) => r(await request.json())),
+  /* payment-method-per-channel D8: the setup block, read on its own */
+  devoladaMethods: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/integrations/wisphub/payment-methods", () => r()),
   /* automated-collections-api US1: the API card (FR-001, FR-003, FR-004) */
   apiIntegration: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/integrations/api", () => r()),
   issueCredential: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
@@ -240,3 +244,26 @@ export const server = setupServer(
   http.get("/platform/provider-quota", () => ok(null)),
   http.get("/businesses/invitations/mine", () => ok({ invitations: [] })),
 );
+
+/* payment-method-per-channel D8: a setup block, validated against the
+   contract. The names and descriptions are the adapter's (D1, D15). */
+export const METHOD_LINES = {
+  link: {
+    name: "SPEI - LINK.DEVOLADAPAGO",
+    description:
+      "Pagos SPEI validados por link de Devolada (bancos, Spin, Mercado Pago, CoDi, DiMo). Los registra Devolada; no usar en mostrador.",
+  },
+  network: {
+    name: "CASH - RED.DEVOLADAPAGO",
+    description: "Pagos en efectivo en tiendas de la red Devolada. Los registra Devolada; no usar en mostrador.",
+  },
+} as const;
+
+type LineStatus = "found" | "missing" | "duplicate";
+export function methodsBlock(link: LineStatus = "found", network: LineStatus | null = null): DevoladaMethods {
+  return devoladaMethods.parse({
+    checked: true,
+    link: { ...METHOD_LINES.link, status: link },
+    network: network === null ? null : { ...METHOD_LINES.network, status: network },
+  });
+}

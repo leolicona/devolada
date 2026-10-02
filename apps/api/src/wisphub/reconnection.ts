@@ -1,6 +1,6 @@
 import { WispHubError, type WispHub } from "./client";
 import { forgetPaymentMethods, paymentMethods } from "./cache";
-import { cashMethodOf, devoladaMethodFor, type MethodChannel } from "./payment-methods";
+import { cashMethodOf, devoladaMethodFor, referenceFor, type MethodChannel } from "./payment-methods";
 import type { ActionAttemptInput } from "../integrations/capabilities";
 import { businessWallClock } from "../time/business-day";
 
@@ -111,9 +111,12 @@ export async function attemptReconnection(
 
       /* The payment settles the whole account, whichever invoice carries
          it (D15) — so what travels is the debt, not one invoice's total. */
+      /* payment-method-per-channel D7: on every recording, the fallback's
+         included (FR-007) */
+      const reference = referenceFor(record.reference);
       const register = async (methodId: number) => {
         try {
-          await wisphub.registerPayment(invoiceId!, methodId, debtCents, dateTime, reconnect);
+          await wisphub.registerPayment(invoiceId!, methodId, debtCents, dateTime, reconnect, reference);
         } catch (e) {
           /* 422 is WispHub refusing to pay a paid invoice — which means
              the money already landed (an overlapping attempt, or a payment

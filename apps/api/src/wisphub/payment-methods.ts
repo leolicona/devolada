@@ -1,4 +1,6 @@
-import { WispHubError, type PaymentMethod } from "./client";
+import { WispHubError, type PaymentMethod, type WispHub } from "./client";
+import type { DevoladaMethodLine, DevoladaMethods } from "../routes/integrations/schema";
+import type { ActionAttemptInput } from "../integrations/capabilities";
 
 /* Devolada's payment methods in a business's WispHub
    (payment-method-per-channel D1, D4, D5, D15).
@@ -91,4 +93,71 @@ export function cashMethodOf(methods: PaymentMethod[]): PaymentMethod {
   if (!methods.length) throw new WispHubError("WISPHUB_UNAVAILABLE", "no payment methods");
   const others = methods.filter((m) => !isDevoladas(m));
   return others.find((m) => /efect|cash/i.test(m.nombre)) ?? others[0] ?? methods[0];
+}
+
+/* D8, US4: one line of the setup block — the name and description to
+   copy, and whether the business already created it. Two with the name
+   count as present: the payments use the oldest (FR-003). */
+function lineOf(methods: PaymentMethod[], channel: MethodChannel): DevoladaMethodLine {
+  const count = devoladaMatches(methods, channel);
+  return {
+    ...DEVOLADA_METHODS[channel],
+    status: count === 0 ? "missing" : count === 1 ? "found" : "duplicate",
+  };
+}
+
+/* D8: the block the screen, the connection test and the execution gate
+   (D14) read. The network's line only with the store channel on (FR-008):
+   a business without it has nothing to create there. */
+export function setupBlockOf(methods: PaymentMethod[], storeChannelOn: boolean): DevoladaMethods {
+  return {
+    checked: true,
+    link: lineOf(methods, "spei"),
+    network: storeChannelOn ? lineOf(methods, "store") : null,
+  };
+}
+
+/* D8: always fresh, never from the cache — a business that just created
+   a method and comes back to check must see it. A provider that cannot
+   answer (an outage, a refused key, an unreadable body) is
+   `{ checked: false }`, never "missing" (FR-009). `methods` is the list
+   itself when it was read, for the caller that keeps it (D16). */
+export async function readDevoladaMethods(
+  wisphub: WispHub,
+  storeChannelOn: boolean,
+): Promise<{ block: DevoladaMethods; methods: PaymentMethod[] | null }> {
+  try {
+    const methods = await wisphub.listPaymentMethods();
+    return { block: setupBlockOf(methods, storeChannelOn), methods };
+  } catch (e) {
+    if (!(e instanceof WispHubError)) throw e;
+    return { block: { checked: false }, methods: null };
+  }
+}
+
+/* D7: WispHub's `referencia` holds at most 200 characters (R7), counted
+   as characters, not bytes */
+const REFERENCE_MAX = 200;
+/* D7: measured 2026-10-02 (R10, R12) — the middle dot survives the API,
+   the invoice view and its PDF; a `-` would blur into the provider's own
+   "Forma de Pago: … - Referencia: …" line */
+const SEPARATOR = " · ";
+
+/* D7, FR-007: what ties a recording back to Devolada — `folio · clave`
+   for SPEI, `folio · tienda` for a store, the folio alone when the clave
+   is not known. Nothing about the payer. Only the store's name is ever
+   shortened, ending in `…`: the folio finds the payment in Pagos and the
+   clave finds the bank line, so neither is cut. Today a store's name is
+   at most 80 characters and the folio 9, so the cut is a guard for a
+   limit another feature owns. No folio (not expected on a confirmed
+   row), no reference: the field is left out. */
+export function referenceFor(reference: ActionAttemptInput["recordReference"]): string | undefined {
+  const { folio, trackingKey, storeName } = reference;
+  if (!folio) return undefined;
+  if (trackingKey) return `${folio}${SEPARATOR}${trackingKey}`;
+  if (!storeName) return folio;
+  const room = REFERENCE_MAX - [...folio].length - SEPARATOR.length;
+  const chars = [...storeName];
+  const name = chars.length > room ? `${chars.slice(0, room - 1).join("")}…` : storeName;
+  return `${folio}${SEPARATOR}${name}`;
 }

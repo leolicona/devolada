@@ -11,6 +11,7 @@ import {
   proofReadingResponse,
 } from "../../apps/api/src/routes/direct-payments/schema";
 import { paymentRequestsResponse } from "../../apps/api/src/routes/payment-requests/schema";
+import { devoladaMethods } from "../../apps/api/src/routes/integrations/schema";
 import { myInvitationsResponse } from "../../apps/api/src/routes/businesses/schema";
 import { settingsResponse } from "../../apps/api/src/routes/settings/schema";
 import { feedResponse, proofResponse, unmatchedTransfersResponse } from "../../apps/api/src/routes/payments/schema";
@@ -214,6 +215,24 @@ export const integrationsHub = {
 };
 
 /* automated-collections-api US1: the API card's detail */
+/* payment-method-per-channel D8: the WispHub screen's setup block, both
+   lines created, so the browser measures the card — badges, copy fields,
+   mono names — in both themes and at every width */
+export const wisphubPaymentMethods = devoladaMethods.parse({
+  checked: true,
+  link: {
+    name: "SPEI - LINK.DEVOLADAPAGO",
+    description:
+      "Pagos SPEI validados por link de Devolada (bancos, Spin, Mercado Pago, CoDi, DiMo). Los registra Devolada; no usar en mostrador.",
+    status: "found",
+  },
+  network: {
+    name: "CASH - RED.DEVOLADAPAGO",
+    description: "Pagos en efectivo en tiendas de la red Devolada. Los registra Devolada; no usar en mostrador.",
+    status: "missing",
+  },
+});
+
 export const apiIntegration = {
   credentials: [
     {
@@ -435,6 +454,7 @@ export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/direct-payments/customers/debt*", customerDebt);
   await apiRoute(page, "**/integrations", integrationsHub);
   await apiRoute(page, "**/integrations/api", apiIntegration);
+  await apiRoute(page, "**/integrations/wisphub/payment-methods", wisphubPaymentMethods);
   await apiRoute(page, "**/direct-payments/customers*", customersBlock);
   /* links-on-demand-search D13: nothing to be told, which is what every
      business sees once the one-time cleanup has been dismissed */

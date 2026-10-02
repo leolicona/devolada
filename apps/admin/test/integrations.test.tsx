@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { integrationsResponse, wisphubTestResponse } from "@devolada/api/integrations-schema";
-import { handlers, businessActor, ok, server } from "./msw";
+import { handlers, businessActor, methodsBlock, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
 
@@ -42,6 +42,13 @@ const wisphub = (over: Record<string, unknown> = {}, rest: Record<string, unknow
     api: { activeCredentials: 0 },
     ...rest,
   });
+
+/* payment-method-per-channel D8: the WispHub screen reads the setup
+   block on its own; here it says found, so the switch cases run as they
+   always did */
+beforeEach(() => {
+  server.use(handlers.devoladaMethods(() => ok(methodsBlock("found"))));
+});
 
 /* A business that never chose: every row that predates the feature. */
 const assumed = (over: Record<string, unknown> = {}) =>
@@ -265,6 +272,7 @@ const testResult = (over: Record<string, unknown> = {}) =>
     unverified: ["create_invoice", "register_payment", "auto_activate", "payment_promise"],
     missingPermission: null,
     sampleCustomerCount: null,
+    devoladaMethods: null,
     ...over,
   });
 

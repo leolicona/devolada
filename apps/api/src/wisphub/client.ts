@@ -778,6 +778,10 @@ export class WispHub {
     amountCents: number,
     dateTime: string,
     reconnect = true,
+    /* payment-method-per-channel D7: the text that ties the record back
+       to Devolada, already in this provider's limits (`referenceFor`).
+       Sent only when given, so a body without one stays today's. */
+    reference?: string,
   ): Promise<void> {
     await this.request<{ messages?: string[] }>(`/facturas/${invoiceId}/registrar-pago/`, {
       method: "POST",
@@ -786,6 +790,7 @@ export class WispHub {
         accion: reconnect ? 1 : 0,
         fecha_pago: dateTime,
         total_cobrado: amountCents / 100,
+        ...(reference !== undefined ? { referencia: reference } : {}),
       }),
     });
   }

@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, CheckCircle2, KeyRound, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Check, CheckCircle2, Copy, Info, KeyRound, RefreshCw, TriangleAlert, Unplug } from "lucide-react";
 import {
   Button,
   Card,
@@ -14,6 +14,8 @@ import {
   StatusBadge,
 } from "@devolada/ui";
 import type {
+  DevoladaMethodLine,
+  DevoladaMethods,
   IntegrationsResponse,
   WisphubIntegration,
   WisphubPatchRequest,
@@ -50,13 +52,31 @@ import { cn } from "@/lib/utils";
 
 const pesos = (cents: number) => (cents / 100).toFixed(2);
 
+/* payment-method-per-channel D8: the setup block's own query, apart from
+   the screen's main read so the screen never waits on WispHub. Its own
+   key, not under ["integrations"], so saving the screen's row never
+   drops it. */
+const METHODS_KEY = ["wisphub-payment-methods"] as const;
+
+/* D8: a test or a save that read the methods answers the block; it
+   replaces what the card shows. `null` — the test stopped before that
+   probe — leaves the card as it is. */
+function useKeepMethods() {
+  const queryClient = useQueryClient();
+  return (block: DevoladaMethods | null | undefined) => {
+    if (block) queryClient.setQueryData(METHODS_KEY, block);
+  };
+}
+
 function useSaveIntegration() {
   const queryClient = useQueryClient();
+  const keepMethods = useKeepMethods();
   return useMutation<IntegrationsResponse, ApiError, WisphubPatchRequest>({
     mutationFn: (body) =>
       api<IntegrationsResponse>("/integrations/wisphub", { method: "PATCH", body: JSON.stringify(body) }),
     onSuccess: (data) => {
       queryClient.setQueryData(["integrations"], data);
+      keepMethods(data.wisphubTest?.devoladaMethods);
       /* the chip and integrationConfigured ride the session */
       void queryClient.invalidateQueries({ queryKey: ["session"] });
       void queryClient.invalidateQueries({ queryKey: ["feed"] });
@@ -64,9 +84,9 @@ function useSaveIntegration() {
   });
 }
 
-function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+function SectionCard({ id, title, children }: { id?: string; title: string; children: React.ReactNode }) {
   return (
-    <Card className="p-6">
+    <Card id={id} className="scroll-mt-4 p-6">
       <h2 className="text-base font-semibold">{title}</h2>
       <div className="mt-4 space-y-4">{children}</div>
     </Card>
@@ -157,7 +177,9 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
     save.mutate(full);
   };
 
+  const keepMethods = useKeepMethods();
   const test = useMutation<WispHubTestResponse, ApiError, string | undefined>({
+    onSuccess: (data) => keepMethods(data.devoladaMethods),
     mutationFn: (apiKey) =>
       api<WispHubTestResponse>("/integrations/wisphub/test", {
         method: "POST",
@@ -174,7 +196,7 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
   const savedTest = save.data?.wisphubTest;
 
   return (
-    <SectionCard title="Conexión con WispHub">
+    <SectionCard id="conexion" title="Conexión con WispHub">
       {/* FR-004: the installation in use carries the same weight as the
           key's tail — same block, same type, same emphasis. "Which
           WispHub am I on" is answered even for a business that never
@@ -430,6 +452,248 @@ function TestOutcome({ result, saved }: { result: WispHubTestResponse; saved: bo
   );
 }
 
+/* payment-method-per-channel US4 (D8, D15): the step between the
+   connection and execution. The business creates Devolada's two payment
+   methods in its WispHub, once, with the exact names, so it can filter
+   and download what came in through Devolada. The names and the
+   descriptions come from the API (the adapter's constants, D1) — this
+   screen carries no literal of its own. */
+const CHANNEL_TITLES = {
+  link: "Pagos por link (SPEI)",
+  network: "Efectivo en la red de tiendas",
+} as const;
+
+const METHOD_STATUS = {
+  found: "methodFound",
+  missing: "methodMissing",
+  duplicate: "methodDuplicate",
+} as const;
+
+/* D8: one field is one copy control (the creator, 2026-10-02): the whole
+   field is the button — the label with its copy icon, then the value —
+   and a tap copies the value in place. No separate copy button. */
+function CopyField({
+  label,
+  article,
+  value,
+  mono,
+  copied,
+  onCopy,
+}: {
+  label: string;
+  article: "el" | "la";
+  value: string;
+  mono?: boolean;
+  /* The last copy of this field: done, refused by the browser, or none */
+  copied: "ok" | "refused" | null;
+  onCopy: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onCopy}
+      className={cn(
+        "flex min-h-12 w-full flex-col items-stretch gap-1 rounded-sm border bg-well px-3 py-2.5 text-left text-ink hover:border-line-input",
+        copied === "ok" ? "border-success-line" : "border-line",
+      )}
+    >
+      <span className="flex items-center gap-1.5 text-xs font-medium text-ink-soft">
+        <span className="sr-only">Copiar {article}</span>
+        <span>{label}</span>
+        {copied === "ok" ? (
+          <span className="inline-flex items-center gap-1 text-success">
+            <Check className="size-3.5" aria-hidden />
+            <span>Copiado</span>
+          </span>
+        ) : copied === "refused" ? (
+          /* the links screen's words for the same refusal */
+          <span className="text-error">No se copió</span>
+        ) : (
+          <Copy className="size-3.5" aria-hidden />
+        )}
+      </span>
+      {mono ? (
+        <code className="break-all font-mono text-sm">{value}</code>
+      ) : (
+        <span className="text-sm">{value}</span>
+      )}
+    </button>
+  );
+}
+
+function MethodLine({
+  channel,
+  line,
+  executing,
+  copied,
+  onCopy,
+}: {
+  channel: keyof typeof CHANNEL_TITLES;
+  line: DevoladaMethodLine;
+  executing: boolean;
+  copied: { field: "name" | "description"; ok: boolean } | null;
+  onCopy: (field: "name" | "description", value: string) => void;
+}) {
+  const stateOf = (field: "name" | "description") =>
+    copied?.field === field ? (copied.ok ? ("ok" as const) : ("refused" as const)) : null;
+  /* FR-008: a missing method is a setup step, never an error. FR-003: two
+     with the name work — the oldest is used. */
+  const note =
+    line.status === "missing"
+      ? executing
+        ? "Mientras no exista, esos pagos se registran como efectivo, igual que hoy."
+        : "Créala para poder encender la ejecución."
+      : line.status === "duplicate"
+        ? "Hay dos con este nombre; usamos la más antigua."
+        : null;
+  return (
+    <li className="space-y-3 rounded-md border border-line p-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <h3 className="text-sm font-semibold">{CHANNEL_TITLES[channel]}</h3>
+        <StatusBadge status={METHOD_STATUS[line.status]} />
+      </div>
+      {note && <p className="text-sm text-ink-soft">{note}</p>}
+      <div className="space-y-2">
+        <CopyField label="Nombre" article="el" value={line.name} mono copied={stateOf("name")} onCopy={() => onCopy("name", line.name)} />
+        <CopyField
+          label="Descripción"
+          article="la"
+          value={line.description}
+          copied={stateOf("description")}
+          onCopy={() => onCopy("description", line.description)}
+        />
+      </div>
+    </li>
+  );
+}
+
+const UNCHECKED_COPY = "No pudimos revisar tus formas de pago en WispHub. Vuelve a intentar.";
+
+/* The methods block, read on its own (D8). Without a key there is nothing
+   to read: the card says to connect first, and makes no call. */
+function useDevoladaMethods(wisphub: WisphubIntegration) {
+  return useQuery<DevoladaMethods, ApiError>({
+    queryKey: METHODS_KEY,
+    queryFn: () => api<DevoladaMethods>("/integrations/wisphub/payment-methods"),
+    enabled: wisphub.configured,
+    retry: false,
+  });
+}
+
+function PaymentMethodsCard({ wisphub }: { wisphub: WisphubIntegration }) {
+  const methods = useDevoladaMethods(wisphub);
+  const [copied, setCopied] = useState<{ key: string; ok: boolean; announce: string } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const copy = async (key: string, value: string, announce: string) => {
+    let ok = true;
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      ok = false;
+    }
+    clearTimeout(timer.current);
+    /* A refusal is said once on the field ("No se copió") and, for a
+       screen reader, with what to do instead */
+    setCopied({ key, ok, announce: ok ? announce : "No se pudo copiar. Selecciona el texto y cópialo a mano." });
+    timer.current = setTimeout(() => setCopied(null), 2400);
+  };
+
+  /* A 409 here is the same "no key yet" the card already knows (D8) */
+  const notConnected = !wisphub.configured || methods.error?.code === "WISPHUB_NOT_CONFIGURED";
+  const block = methods.data;
+  const unchecked = !notConnected && (methods.isError || block?.checked === false);
+
+  return (
+    <SectionCard id="formas-de-pago" title="Formas de pago de Devolada">
+      <span role="status" className="sr-only">
+        {copied?.announce ?? ""}
+      </span>
+      <p className="text-sm text-ink-soft">
+        Devolada registra cada pago en WispHub con su propia forma de pago. Así filtras y descargas en
+        WispHub lo que entró por Devolada.
+      </p>
+      <p className="flex items-start gap-2 text-sm font-medium">
+        <Info className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
+        {/* FR-008, FR-010 */}
+        <span>Créalas en WispHub con estos nombres exactos y no las uses para cobros en mostrador.</span>
+      </p>
+      {notConnected ? (
+        <div className="flex items-start gap-2 rounded-md border border-line bg-well p-4 text-sm text-ink-soft">
+          <Unplug className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <p>
+            Conecta WispHub para revisar tus formas de pago.{" "}
+            <a href="#conexion" className="whitespace-nowrap font-medium text-link hover:underline">
+              Ir a la conexión
+            </a>
+          </p>
+        </div>
+      ) : unchecked ? (
+        /* FR-009: an unreachable WispHub is never shown as "missing" */
+        <div className="flex items-start gap-2 rounded-md border border-warning-line bg-warning-soft p-4 text-sm text-warning">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <div className="space-y-3">
+            <p>{UNCHECKED_COPY}</p>
+            <Pending active={methods.isFetching} label="Revisando tus formas de pago en WispHub.">
+              <Button size="compact" variant="secondary" disabled={methods.isFetching} onClick={() => methods.refetch()}>
+                <RefreshCw className="size-4" aria-hidden />
+                {methods.isFetching ? "Revisando…" : "Volver a intentar"}
+              </Button>
+            </Pending>
+          </div>
+        </div>
+      ) : (
+        <Pending
+          active={methods.isPending}
+          label="Revisando tus formas de pago en WispHub"
+          shape={
+            <div className="space-y-3">
+              <Skeleton className="h-48 w-full" />
+              <Skeleton className="h-48 w-full" />
+            </div>
+          }
+        >
+          {block?.checked && (
+            <div className="space-y-4">
+              <ul className="space-y-3">
+                {(["link", "network"] as const).map((channel) => {
+                  /* The network's line only with the store channel on
+                     (FR-008): the API answers null otherwise */
+                  const line = block[channel];
+                  if (!line) return null;
+                  return (
+                    <MethodLine
+                      key={channel}
+                      channel={channel}
+                      line={line}
+                      executing={wisphub.actionsEnabled}
+                      copied={
+                        copied?.key.startsWith(`${channel}-`)
+                          ? { field: copied.key.endsWith("-name") ? "name" : "description", ok: copied.ok }
+                          : null
+                      }
+                      onCopy={(field, value) =>
+                        void copy(`${channel}-${field}`, value, field === "name" ? `Nombre copiado: ${value}` : "Descripción copiada")
+                      }
+                    />
+                  );
+                })}
+              </ul>
+              <Pending active={methods.isFetching} label="Revisando tus formas de pago en WispHub.">
+                <Button size="compact" variant="secondary" disabled={methods.isFetching} onClick={() => methods.refetch()}>
+                  <RefreshCw className="size-4" aria-hidden />
+                  {methods.isFetching ? "Revisando…" : "Revisar otra vez"}
+                </Button>
+              </Pending>
+            </div>
+          )}
+        </Pending>
+      )}
+    </SectionCard>
+  );
+}
+
 const ACTION_LABELS = {
   register_and_reconnect: "Registrar y reconectar",
   register_only: "Solo registrar",
@@ -575,10 +839,34 @@ function MappingCard({ wisphub }: { wisphub: WisphubIntegration }) {
   );
 }
 
+/* payment-method-per-channel D14: why the switch cannot be turned on now,
+   or null. The API has the last word — the block on screen can be minutes
+   old — so its refusals have copy too (REFUSAL_COPY). */
+function blockedReason(wisphub: WisphubIntegration, methods: ReturnType<typeof useDevoladaMethods>) {
+  if (!wisphub.configured || methods.error?.code === "WISPHUB_NOT_CONFIGURED") return "connect" as const;
+  if (methods.isError || methods.data?.checked === false) return "unchecked" as const;
+  const block = methods.data;
+  if (block?.checked && (block.link.status === "missing" || block.network?.status === "missing")) return "missing" as const;
+  return null;
+}
+
+const REFUSAL_COPY: Record<string, string> = {
+  WISPHUB_NOT_CONFIGURED: "Primero conecta WispHub.",
+  PAYMENT_METHODS_MISSING: "Aún falta crear una forma de pago de Devolada en WispHub.",
+  PAYMENT_METHODS_UNCHECKED: UNCHECKED_COPY,
+};
+
 /* D4 + D8: the two switches. They save on toggle — a gate should not
    wait behind a Save button. */
 function SwitchesCard({ wisphub }: { wisphub: WisphubIntegration }) {
   const save = useSaveIntegration();
+  const queryClient = useQueryClient();
+  const methods = useDevoladaMethods(wisphub);
+  /* FR-013: turning on needs the connection and the channels' methods;
+     turning off is always allowed — Devolada never turns it off itself */
+  const blocked = wisphub.actionsEnabled ? null : blockedReason(wisphub, methods);
+  const refused =
+    save.error && save.variables?.actionsEnabled === true ? (REFUSAL_COPY[save.error.code] ?? null) : null;
   return (
     <SectionCard title="Ejecución">
       <div className="flex items-start justify-between gap-4 rounded-md border border-border px-4 py-3">
@@ -589,6 +877,29 @@ function SwitchesCard({ wisphub }: { wisphub: WisphubIntegration }) {
             registra pagos ni reconecta — mientras sigue validando y clasificando. Tú ejecutas a
             mano, y cada fila de Pagos te dice qué habría hecho.
           </p>
+          {blocked && (
+            <p id="actions-enabled-why" className="mt-2 flex items-start gap-2 text-sm font-medium">
+              <Info className="mt-0.5 size-4 shrink-0 text-ink-soft" aria-hidden />
+              {blocked === "connect" ? (
+                <span>Primero conecta WispHub.</span>
+              ) : blocked === "missing" ? (
+                <span>
+                  Para encender la ejecución, primero crea tus formas de pago de Devolada.{" "}
+                  <a href="#formas-de-pago" className="whitespace-nowrap text-link hover:underline">
+                    Ver formas de pago
+                  </a>
+                </span>
+              ) : (
+                <span>{UNCHECKED_COPY}</span>
+              )}
+            </p>
+          )}
+          {refused && (
+            <p role="status" className="mt-2 flex items-start gap-2 text-sm font-medium text-error">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+              {refused}
+            </p>
+          )}
         </div>
         {/* feedback-vocabulary-rollout D1/D4. Both switches share one save
             mutation, so `save.isPending` alone would breathe on both when the
@@ -601,8 +912,21 @@ function SwitchesCard({ wisphub }: { wisphub: WisphubIntegration }) {
           <Switch
             id="actions-enabled"
             checked={wisphub.actionsEnabled}
-            disabled={save.isPending}
-            onCheckedChange={(v) => save.mutate({ actionsEnabled: v })}
+            disabled={save.isPending || blocked !== null}
+            aria-describedby={blocked ? "actions-enabled-why" : undefined}
+            onCheckedChange={(v) =>
+              save.mutate(
+                { actionsEnabled: v },
+                {
+                  /* D14: a refusal means the card may be stale — read again */
+                  onError: (e) => {
+                    if (e.code === "PAYMENT_METHODS_MISSING" || e.code === "PAYMENT_METHODS_UNCHECKED") {
+                      void queryClient.invalidateQueries({ queryKey: METHODS_KEY });
+                    }
+                  },
+                },
+              )
+            }
           />
         </Pending>
       </div>
@@ -667,6 +991,9 @@ export function WispHubScreen() {
         {integrations.data && (
           <div className="mt-4 space-y-4 pb-8">
             <KeyCard wisphub={integrations.data.wisphub} />
+            {/* the creator's order: the connection, the payment methods,
+                then execution (payment-method-per-channel D8) */}
+            <PaymentMethodsCard wisphub={integrations.data.wisphub} />
             <MappingCard key={JSON.stringify(integrations.data.wisphub.mapping)} wisphub={integrations.data.wisphub} />
             <SwitchesCard wisphub={integrations.data.wisphub} />
           </div>

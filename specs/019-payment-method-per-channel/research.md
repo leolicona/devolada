@@ -350,8 +350,9 @@ methods exist).
 **Decision**: next to each name, `wisphub/payment-methods.ts` declares its
 description, product copy in es-MX:
 
-- SPEI: «Pagos SPEI validados por link de Devolada. Los registra
-  Devolada; no usar en mostrador.»
+- SPEI: «Pagos SPEI validados por link de Devolada (bancos, Spin,
+  Mercado Pago, CoDi, DiMo). Los registra Devolada; no usar en
+  mostrador.»
 - Network: «Pagos en efectivo en tiendas de la red Devolada. Los registra
   Devolada; no usar en mostrador.»
 
@@ -366,6 +367,15 @@ no description (R8), so it cannot be checked; it is there for the
 business's own staff, and «no usar en mostrador» repeats FR-008's
 instruction where the counter staff will read it.
 
+The SPEI description names the apps (the creator's choice, 2026-10-02):
+every one of them is a SPEI participant or travels over SPEI, and
+Devolada confirms only what Banxico recorded, so the list says nothing
+the method does not already mean. Its cost is accepted: when another app
+matters, the constant changes in one place; a business that already
+typed the old text loses nothing, since the description is never read.
+
 **Alternatives considered**: the description as a literal in the admin
 (rejected: two places to change it, and the names already come from the
-adapter, D1); checking the description (impossible through the API, R8).
+adapter, D1); checking the description (impossible through the API, R8);
+«desde cualquier banco o app» instead of naming the apps (the creator
+preferred the names, for the staff who read them).

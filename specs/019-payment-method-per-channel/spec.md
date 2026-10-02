@@ -174,12 +174,23 @@ cannot show the reference as a column, so its download does not carry it
   execution on first would record its first payments as cash, and FR-006
   keeps them there.
 - Q: What does the business copy? → A: **The name and a description**,
-  both ready to copy. SPEI: «Pagos SPEI validados por link de Devolada.
-  Los registra Devolada; no usar en mostrador.» Network: «Pagos en
-  efectivo en tiendas de la red Devolada. Los registra Devolada; no usar
-  en mostrador.» (the creator: "sería prudente mencionar algo como Pagos
-  SPEI validados por link devolada"). Devolada checks the name only: the
+  both ready to copy. SPEI: «Pagos SPEI validados por link de Devolada
+  (bancos, Spin, Mercado Pago, CoDi, DiMo). Los registra Devolada; no usar
+  en mostrador.» Network: «Pagos en efectivo en tiendas de la red
+  Devolada. Los registra Devolada; no usar en mostrador.» (the creator:
+  "sería prudente mencionar algo como Pagos SPEI validados por link
+  devolada", then naming the apps). Devolada checks the name only: the
   system's API returns no description (R8).
+- Q: Does "SPEI" cover Spin, the apps and transfers within one bank, or
+  do those need methods of their own? → A: **One SPEI method; no new
+  methods, no new name.** Devolada confirms a SPEI payment only with
+  Banxico's record of it (the CEP), so everything it records in this
+  channel is SPEI: Spin by OXXO, Mercado Pago, Nu and the other apps are
+  SPEI participants (they are in Devolada's bank list), and CoDi and DiMo
+  travel over SPEI. A transfer within one bank, or a cash deposit to the
+  business's account, never runs through SPEI: Devolada cannot confirm it
+  today, so it never records it. The description names the apps so the
+  business's staff reads them as SPEI.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -529,6 +540,12 @@ No new entity. The feature reads what exists:
   keeps the one it has today.
 - **Every SPEI confirmation is the SPEI channel**, whether the payer used
   the link with its reference, without it, or confirmed later: one method.
+- **The SPEI method carries only payments Banxico confirmed.** A transfer
+  within one bank or a cash deposit has no Banxico record; Devolada does
+  not confirm them today (receipt-reader-tuning D5 leaves them out of
+  scope), so they are never recorded. If Devolada ever confirms such a
+  payment another way, it gets a method of its own, decided in its own
+  spec, and is never recorded as SPEI.
 - **The reference is written once**, at recording. A store renamed later
   does not change payments already recorded (FR-006).
 - **No mark in Pagos.** A payment that fell back is not marked one by one:

@@ -60,6 +60,9 @@ const card = async () => {
   return within(document.getElementById("formas-de-pago")!);
 };
 const executionSwitch = () => screen.findByLabelText("Ejecutar acciones automáticamente");
+/* The connection card, where a test's own result is shown */
+const connection = () => within(document.getElementById("conexion")!);
+const TESTED_METHODS = "Formas de pago de Devolada en la conexión que probaste:";
 
 function stubClipboard(writeText: (text: string) => Promise<void>) {
   Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
@@ -74,6 +77,7 @@ describe("payment-method-per-channel US4: Formas de pago de Devolada", () => {
     expect(block.getByText(METHOD_LINES.link.name)).toBeInTheDocument();
     expect(block.getByText(METHOD_LINES.link.description)).toBeInTheDocument();
     expect(block.getByText(METHOD_LINES.network.name)).toBeInTheDocument();
+    expect(block.getByText(METHOD_LINES.network.description)).toBeInTheDocument();
     expect(block.getAllByText("Creada")).toHaveLength(2);
     expect(block.getByText("Créalas en WispHub con estos nombres exactos y no las uses para cobros en mostrador.")).toBeInTheDocument();
     await expectNoViolations(document.body);
@@ -100,8 +104,11 @@ describe("payment-method-per-channel US4: Formas de pago de Devolada", () => {
     open();
     const block = await card();
     await userEvent.click(await block.findByRole("button", { name: /copiar el nombre/i }));
-    expect(await block.findByText("No se copió")).toBeInTheDocument();
+    const refused = await block.findByText("No se copió");
     expect(block.queryByText("Copiado")).not.toBeInTheDocument();
+    /* constitution VI: the failure's ink rides with an icon, never alone */
+    expect(refused.parentElement?.querySelector("svg")).not.toBeNull();
+    await expectNoViolations(document.body);
   });
 
   it("FR-008: the network's line is not shown with the store channel off", async () => {
@@ -109,6 +116,7 @@ describe("payment-method-per-channel US4: Formas de pago de Devolada", () => {
     const block = await card();
     await block.findByText(METHOD_LINES.link.name);
     expect(block.queryByText(METHOD_LINES.network.name)).not.toBeInTheDocument();
+    await expectNoViolations(document.body);
   });
 
   it("FR-008: a missing method is a setup step — observing, it says to create it to turn execution on", async () => {
@@ -123,6 +131,7 @@ describe("payment-method-per-channel US4: Formas de pago de Devolada", () => {
     open({ integration: wisphub({ actionsEnabled: true }), methods: () => ok(methodsBlock("found", "missing")) });
     const block = await card();
     expect(await block.findByText("Mientras no exista, esos pagos se registran como efectivo, igual que hoy.")).toBeInTheDocument();
+    await expectNoViolations(document.body);
   });
 
   it("FR-003: two with one name read Repetida, and the oldest is used", async () => {
@@ -130,6 +139,7 @@ describe("payment-method-per-channel US4: Formas de pago de Devolada", () => {
     const block = await card();
     expect(await block.findByText("Repetida")).toBeInTheDocument();
     expect(block.getByText("Hay dos con este nombre; usamos la más antigua.")).toBeInTheDocument();
+    await expectNoViolations(document.body);
   });
 
   it("FR-009: WispHub not reached is never 'missing' — it says so, offers to try again, and the switch says why it waits", async () => {
@@ -144,6 +154,10 @@ describe("payment-method-per-channel US4: Formas de pago de Devolada", () => {
     expect(await block.findByText("No pudimos revisar tus formas de pago en WispHub. Vuelve a intentar.")).toBeInTheDocument();
     expect(block.queryByText("Falta crearla")).not.toBeInTheDocument();
     expect(await executionSwitch()).toBeDisabled();
+    /* the switch says why itself, not only the card */
+    expect(document.getElementById("actions-enabled-why")).toHaveTextContent(
+      "No pudimos revisar tus formas de pago en WispHub. Vuelve a intentar.",
+    );
     await expectNoViolations(document.body);
 
     await userEvent.click(block.getByRole("button", { name: "Volver a intentar" }));
@@ -174,6 +188,7 @@ describe("payment-method-per-channel US4: Formas de pago de Devolada", () => {
     expect(await executionSwitch()).toBeDisabled();
     expect(screen.getByText(/Para encender la ejecución, primero crea tus formas de pago de Devolada\./)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Ver formas de pago" })).toHaveAttribute("href", "#formas-de-pago");
+    await expectNoViolations(document.body);
   });
 
   it("FR-013: execution can always be turned off, whatever the methods", async () => {
@@ -187,6 +202,7 @@ describe("payment-method-per-channel US4: Formas de pago de Devolada", () => {
     );
     const toggle = await executionSwitch();
     expect(toggle).toBeEnabled();
+    await expectNoViolations(document.body);
     await userEvent.click(toggle);
     expect(patches).toEqual([{ actionsEnabled: false }]);
   });
@@ -204,7 +220,7 @@ describe("payment-method-per-channel US4: Formas de pago de Devolada", () => {
     await expectNoViolations(document.body);
   });
 
-  it("U1: a test of a typed key that is not saved never changes the card — it speaks for the saved connection", async () => {
+  it("U1, FR-009: a typed key's test reports its methods in the test's own result and never changes the card", async () => {
     const bodies: unknown[] = [];
     open({ methods: () => ok(methodsBlock("missing")) });
     server.use(
@@ -222,6 +238,39 @@ describe("payment-method-per-channel US4: Formas de pago de Devolada", () => {
     expect(bodies).toEqual([{ apiKey: "otra-llave-12345" }]);
     expect(block.getByText("Falta crearla")).toBeInTheDocument();
     expect(block.queryByText("Creada")).not.toBeInTheDocument();
+    /* FR-009: the test still says, for the account it tried, whether each method exists */
+    const result = connection();
+    expect(result.getByText(TESTED_METHODS)).toBeInTheDocument();
+    expect(result.getByText(METHOD_LINES.link.name)).toBeInTheDocument();
+    expect(result.getByText("Creada")).toBeInTheDocument();
+    await expectNoViolations(document.body);
+  });
+
+  it("FR-009: a typed key's test that could not read the methods says so, never missing; null says nothing", async () => {
+    let answer: unknown = testResult(UNCHECKED);
+    open({ methods: () => ok(methodsBlock("found")) });
+    server.use(handlers.testWisphubIntegration(() => ok(answer)));
+    const block = await card();
+    await block.findByText("Creada");
+
+    await userEvent.type(screen.getByLabelText("Nueva llave"), "otra-llave-12345");
+    await userEvent.click(screen.getByRole("button", { name: "Probar conexión" }));
+    await screen.findByText(/Conexión correcta con wisphub\.net\./);
+    expect(
+      connection().getByText("No pudimos revisar tus formas de pago en WispHub. Vuelve a intentar."),
+    ).toBeInTheDocument();
+    expect(connection().queryByText("Falta crearla")).not.toBeInTheDocument();
+    expect(block.getByText("Creada")).toBeInTheDocument();
+    await expectNoViolations(document.body);
+
+    answer = testResult(null);
+    await userEvent.click(screen.getByRole("button", { name: "Probar conexión" }));
+    await waitFor(() =>
+      expect(
+        connection().queryByText("No pudimos revisar tus formas de pago en WispHub. Vuelve a intentar."),
+      ).not.toBeInTheDocument(),
+    );
+    expect(connection().queryByText(TESTED_METHODS)).not.toBeInTheDocument();
   });
 
   it("D8: Probar conexión answering a block replaces the card's; an answer of null leaves it as it was", async () => {
@@ -239,5 +288,8 @@ describe("payment-method-per-channel US4: Formas de pago de Devolada", () => {
     await userEvent.click(screen.getByRole("button", { name: "Probar conexión" }));
     expect(await block.findByText("Creada")).toBeInTheDocument();
     expect(block.queryByText("Falta crearla")).not.toBeInTheDocument();
+    /* the saved connection's block lands on the card, not twice in the result */
+    expect(connection().queryByText(TESTED_METHODS)).not.toBeInTheDocument();
+    await expectNoViolations(document.body);
   });
 });

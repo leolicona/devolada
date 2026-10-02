@@ -131,8 +131,13 @@ A block *Formas de pago de Devolada* on the WispHub screen:
   Vuelve a intentar."* Never shown as missing (FR-009).
 - The network's line only when `session.storeChannel.on`.
 - No key saved (`wisphub.configured` false): the card makes no read and
-  says *"Conecta WispHub para revisar tus formas de pago."*; a `409
+  says *"Conecta WispHub para revisar tus formas de pago."* with a link
+  *"Ir a la conexión"* to the key card; a `409
   WISPHUB_NOT_CONFIGURED` from the read says the same, with no retry.
+- A checked block offers *"Revisar otra vez"*: the business that just
+  created a method in WispHub sees it found without leaving the screen.
+  Each press is one more setup read, so it stamps like a screen visit
+  (D16). Recorded after `/speckit-converge` (2026-10-02, T054).
 - *Ejecución*: the switch cannot be turned on, and says why, in three
   cases: no key saved → *"Primero conecta WispHub."*; a required method
   missing → *"Para encender la ejecución, primero crea tus formas de pago

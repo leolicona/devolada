@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, Check, CheckCircle2, Copy, Info, KeyRound, RefreshCw, TriangleAlert, Unplug } from "lucide-react";
+import { AlertCircle, ArrowLeft, Check, CheckCircle2, Copy, Info, KeyRound, RefreshCw, TriangleAlert, Unplug } from "lucide-react";
 import {
   Button,
   Card,
@@ -185,7 +185,8 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
        the methods card speaks for the saved connection, the one the
        execution gate checks. A test of a typed key or another
        installation answers about an account not in use, so its block
-       stays in this card's result and never replaces the methods card. */
+       is shown in this card's result (TestOutcome) and never replaces
+       the methods card. */
     onSuccess: (data, candidate) => {
       if (!candidate.apiKey && !candidate.installation) keepMethods(data.devoladaMethods);
     },
@@ -200,6 +201,10 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
   });
   const result = test.data;
   const savedTest = save.data?.wisphubTest;
+  /* FR-009: only a candidate's block rides the test's result; the saved
+     connection's lands on the methods card (keepMethods) */
+  const testedMethods =
+    result && (test.variables?.apiKey || test.variables?.installation) ? result.devoladaMethods : null;
 
   return (
     <SectionCard id="conexion" title="Conexión con WispHub">
@@ -344,7 +349,9 @@ function KeyCard({ wisphub }: { wisphub: WisphubIntegration }) {
       {/* The result of the last test, typed or saved — save-then-test is
           the path an ISP actually uses, so the saved answer gets the same
           words as the typed one instead of a vaguer sentence (T029). */}
-      {(result ?? savedTest) && <TestOutcome result={(result ?? savedTest)!} saved={!result} />}
+      {(result ?? savedTest) && (
+        <TestOutcome result={(result ?? savedTest)!} saved={!result} methods={result ? testedMethods : null} />
+      )}
       {test.error && (
         <p role="status" className="flex items-start gap-2 text-sm font-medium text-error">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
@@ -412,7 +419,16 @@ const WRITE_LABELS: Record<WispHubUnverifiableWrite, string> = {
   payment_promise: "crear una promesa de pago",
 };
 
-function TestOutcome({ result, saved }: { result: WispHubTestResponse; saved: boolean }) {
+function TestOutcome({
+  result,
+  saved,
+  methods,
+}: {
+  result: WispHubTestResponse;
+  saved: boolean;
+  /* A candidate's methods block (FR-009), or null */
+  methods: DevoladaMethods | null;
+}) {
   const copy = OUTCOME_COPY[result.outcome](result.triedInstallation.label);
   return (
     <div role="status" className="space-y-2 text-sm">
@@ -443,6 +459,7 @@ function TestOutcome({ result, saved }: { result: WispHubTestResponse; saved: bo
           El permiso que falta es el de {READ_LABELS[result.missingPermission]}.
         </p>
       )}
+      {methods && <TestedMethods methods={methods} />}
       {/* FR-011 as amended: the honest half. A connection is not claimed
           to prove what cannot be proven without writing into the ISP's
           live billing — those are exercised by the first real payment,
@@ -454,6 +471,40 @@ function TestOutcome({ result, saved }: { result: WispHubTestResponse; saved: bo
           alguno falta lo verás en la cola de acciones de ese pago.
         </p>
       )}
+    </div>
+  );
+}
+
+/* payment-method-per-channel FR-009 (/speckit-analyze U1, 2026-10-02):
+   "Probar conexión" reports each of Devolada's methods for the
+   connection it tested, even one not saved yet. That answer lives here,
+   in the test's own result: the methods card below speaks only for the
+   saved connection, the one the execution gate checks. */
+function TestedMethods({ methods }: { methods: DevoladaMethods }) {
+  if (!methods.checked) {
+    /* never "missing" when WispHub did not answer */
+    return (
+      <p className="flex items-start gap-2 text-ink-soft">
+        <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+        <span>{UNCHECKED_COPY}</span>
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      <p className="text-ink-soft">Formas de pago de Devolada en la conexión que probaste:</p>
+      <ul className="space-y-1">
+        {(["link", "network"] as const).map((channel) => {
+          const line = methods[channel];
+          if (!line) return null;
+          return (
+            <li key={channel} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <code className="break-all font-mono">{line.name}</code>
+              <StatusBadge status={METHOD_STATUS[line.status]} />
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -512,8 +563,12 @@ function CopyField({
             <span>Copiado</span>
           </span>
         ) : copied === "refused" ? (
-          /* the links screen's words for the same refusal */
-          <span className="text-error">No se copió</span>
+          /* the links screen's words and icon for the same refusal:
+             colour never speaks alone (constitution VI) */
+          <span className="inline-flex items-center gap-1 text-error">
+            <AlertCircle className="size-3.5" aria-hidden />
+            <span>No se copió</span>
+          </span>
         ) : (
           <Copy className="size-3.5" aria-hidden />
         )}

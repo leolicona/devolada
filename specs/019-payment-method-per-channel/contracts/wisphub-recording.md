@@ -10,7 +10,9 @@ never appear in the core (constitution IX).
 while the provider reports more (`next` not null), within the client's
 operation budget. How many methods fit on the provider's default page was
 not measured, so the adapter must not assume one page: a business with
-many methods could have Devolada's on the second.
+many methods could have Devolada's on the second. It asks for 100 a page
+and follows at most 20 pages (D3): past 2,000 methods the list is used as
+read, and a channel whose method lies beyond records as cash (FR-004).
 
 ```json
 { "next": null, "results": [ { "id": 7, "nombre": "efectivo" }, { "id": 12, "nombre": "SPEI - LINK.DEVOLADAPAGO" }, … ] }

@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { payments } from "../db/schema";
-import type { PendingInvoices, WispHub, WispHubCustomer } from "./client";
+import type { PaymentMethod, PendingInvoices, WispHub, WispHubCustomer } from "./client";
 
 /* Provider caches (provider-latency spec D3, D4, D5; presence-freshness
    D6, which paid TD-014).
@@ -31,6 +31,7 @@ const PENDING_TTL_MS = 30_000;
 /* D5: a catalog lookup, not debt. Ten minutes, not forever — an ISP that
    adds a cash method should not wait for an isolate to recycle. */
 const PAYMENT_METHOD_TTL_MS = 10 * 60_000;
+const PAYMENT_METHODS_KIND = "payment-methods";
 
 /* Synthetic origin for the cache keys: the entries are never served,
    only matched by this Worker. presence-freshness DoD carries the
@@ -165,17 +166,58 @@ export async function pendingInvoicesForDisplay(
    above is untouched: Cobros still serves one, and still says how old
    it is. */
 
-/* D5: the cash payment-method id, on the charge path every single time
-   and unchanged for the life of a tenant. */
-export async function cashPaymentMethodId(
+/* D5: the tenant's payment methods, on the charge path every single time
+   and unchanged for long stretches of a tenant's life.
+
+   payment-method-per-channel D3: the whole list now, not the cash id —
+   the adapter picks the channel's method and the cash method from this
+   one read (`payment-methods.ts`). A new kind on purpose: an entry left
+   under the old kind holds a single id, and read as a list it would break
+   the first payment after the deploy.
+
+   D16: `seenAt` is the integration's `payment_methods_seen_at`, the
+   version of the key, as the pending list's key carries the tenant's last
+   registration. A setup read that saw the methods stamps a new moment,
+   which is a new key in every data center, so the next payment anywhere
+   reads the list again (FR-014). */
+export async function paymentMethods(
   businessId: string,
   wisphub: WispHub,
   now: Date,
-): Promise<number> {
-  const hit = await read<number>("payment-method", businessId, wisphub.baseUrl, null, now);
+  seenAt: number | null = null,
+): Promise<PaymentMethod[]> {
+  const hit = await read<PaymentMethod[]>(PAYMENT_METHODS_KIND, businessId, wisphub.baseUrl, seenAt, now);
   if (hit) return hit.value;
-  const fresh = await wisphub.getCashPaymentMethodId();
-  const readAt = now.getTime();
-  await write("payment-method", businessId, wisphub.baseUrl, null, { value: fresh, readAt, expiresAt: readAt + PAYMENT_METHOD_TTL_MS });
+  const fresh = await wisphub.listPaymentMethods();
+  await rememberPaymentMethods(businessId, wisphub, fresh, now, seenAt);
   return fresh;
+}
+
+/* D8, D16: a list read fresh by a setup read, kept where it was read
+   under the stamp that read just wrote — the other data centers read the
+   provider once on their next payment. An empty list is kept too: it is
+   an answer, and the recording decides what it means. */
+export async function rememberPaymentMethods(
+  businessId: string,
+  wisphub: WispHub,
+  methods: PaymentMethod[],
+  now: Date,
+  seenAt: number | null,
+): Promise<void> {
+  const readAt = now.getTime();
+  await write(PAYMENT_METHODS_KIND, businessId, wisphub.baseUrl, seenAt, {
+    value: methods,
+    readAt,
+    expiresAt: readAt + PAYMENT_METHOD_TTL_MS,
+  });
+}
+
+/* D6: the provider refused one of Devolada's methods (it was deleted or
+   renamed), so the list this data center holds is wrong. `cache.delete`
+   reaches this colo only; elsewhere the same refusal falls back the same
+   way until the entry expires. */
+export async function forgetPaymentMethods(businessId: string, wisphub: WispHub, seenAt: number | null): Promise<void> {
+  const cache = store();
+  if (!cache) return;
+  await cache.delete(keyFor(PAYMENT_METHODS_KIND, businessId, wisphub.baseUrl, seenAt));
 }

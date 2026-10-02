@@ -168,6 +168,31 @@ export const wisphubUnverifiableWrite = z.enum([
   "payment_promise",
 ]);
 
+/* payment-method-per-channel D8: whether each of Devolada's payment
+   methods exists in the business's WispHub — the setup step between the
+   connection and execution (US4). */
+export const devoladaMethodStatus = z.enum(["found", "missing", "duplicate"]);
+
+export const devoladaMethodLine = z.object({
+  /* The exact name to create — the adapter's constant (D1), so the
+     screen never carries a literal of its own */
+  name: z.string(),
+  /* Devolada's description to type beside it (D15); never checked */
+  description: z.string(),
+  status: devoladaMethodStatus,
+});
+
+export const devoladaMethods = z.discriminatedUnion("checked", [
+  z.object({
+    checked: z.literal(true),
+    link: devoladaMethodLine,
+    /* null when the business's store channel is off (FR-008) */
+    network: devoladaMethodLine.nullable(),
+  }),
+  /* The provider could not be reached: never "missing" (FR-009) */
+  z.object({ checked: z.literal(false) }),
+]);
+
 export const wisphubTestResponse = z.object({
   ok: z.boolean(),
   /* FR-010: which of the three failures */
@@ -186,6 +211,10 @@ export const wisphubTestResponse = z.object({
      for the permission. */
   missingPermission: wisphubVerifiableRead.nullable(),
   sampleCustomerCount: z.number().int().nullable(),
+  /* payment-method-per-channel D8: read with the payment_methods probe —
+     the block when it answered, `{ checked: false }` when it ran and
+     failed, null when the test stopped before that probe */
+  devoladaMethods: devoladaMethods.nullable(),
 });
 
 export const integrationsResponse = z.object({
@@ -249,6 +278,9 @@ export type WispHubTestOutcome = z.infer<typeof wisphubTestOutcome>;
 export type WispHubVerifiableRead = z.infer<typeof wisphubVerifiableRead>;
 export type WispHubUnverifiableWrite = z.infer<typeof wisphubUnverifiableWrite>;
 export type WispHubTestResponse = z.infer<typeof wisphubTestResponse>;
+export type DevoladaMethodStatus = z.infer<typeof devoladaMethodStatus>;
+export type DevoladaMethodLine = z.infer<typeof devoladaMethodLine>;
+export type DevoladaMethods = z.infer<typeof devoladaMethods>;
 export type ApiCredential = z.infer<typeof apiCredential>;
 export type ApiIntegrationResponse = z.infer<typeof apiIntegrationResponse>;
 export type IssueCredentialRequest = z.infer<typeof issueCredentialRequest>;

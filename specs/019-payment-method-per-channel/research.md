@@ -62,10 +62,13 @@ writes it).
 ## D3 — One cached list of methods per business and address
 
 **Decision**: `wisphub/cache.ts` caches the whole list of the business's
-payment methods (`id`, `nombre`) instead of the single cash id, with the
-same key (business + installation address, provider-address-per-isp
+payment methods (`id`, `nombre`) instead of the single cash id, keyed the
+same way (business + installation address, provider-address-per-isp
 T046) plus the integration's `payment_methods_seen_at` as its version
-(D16), and the same ten minutes (provider-latency D5). The adapter picks
+(D16), and the same ten minutes (provider-latency D5). The entry has a
+kind of its own, `payment-methods`: one left under the old kind holds a
+single id, and read as a list it would break the first payment after the
+deploy (found implementing T011). The adapter picks
 the channel's method and the cash method from that one read.
 
 **Rationale**: One read already happens per recording today; the list is
@@ -94,8 +97,12 @@ two ids separately (rejected: two keys that can disagree for ten minutes).
    method exists): today's rule — the first name, in the provider's order,
    that says "efect" or "cash" — **skipping any name that matches one of
    Devolada's two names** (FR-012). None left → the first method that is
-   not one of Devolada's. Still none → the first method, which is today's
-   behaviour for a business that has only Devolada's methods.
+   not one of Devolada's. A business that has only Devolada's methods
+   keeps today's rule whole, over the whole list: the first that says
+   "efect" or "cash" (`CASH - RED.DEVOLADAPAGO` when listed), else the
+   first. The first plan said "the first method" here, which is today's
+   answer only when nothing says cash; the order of the list would then
+   have picked the channel (`/speckit-analyze` C1, 2026-10-02).
 
 Only Devolada's two names are set aside. A business's own method that
 merely mentions Devolada (the demo has one, "Devoladapago") is not.
@@ -136,7 +143,11 @@ mistake).
 **Decision**: when `registrar-pago` answers **400 naming `forma_pago`** and
 the payment was sent with one of Devolada's methods, the adapter drops the
 cached list, and retries the same payment **once, at once, with the cash
-method**, inside the same attempt. Any other 400 stays what it is today
+method** chosen without the method just refused, inside the same attempt.
+Leaving it out matters only for a business with only Devolada's methods,
+where the cash rule could hand the refused one back and the action would
+wait in the queue for nothing (FR-004; `/speckit-analyze` C1,
+2026-10-02). Any other 400 stays what it is today
 (`INTEGRATION_UNAVAILABLE`). The client keeps the field names of a 400 JSON
 body on `WispHubError` (`fields`) so the adapter can tell.
 

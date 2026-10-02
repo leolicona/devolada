@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { feedResponse } from "@devolada/api/payments-schema";
 import { settingsResponse } from "@devolada/api/settings-schema";
 import { integrationsResponse } from "@devolada/api/integrations-schema";
-import { handlers, businessActor, ok, server } from "./msw";
+import { handlers, businessActor, methodsBlock, ok, server } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
 
@@ -153,6 +153,8 @@ describe("US-P04: the admin passes axe on every section", () => {
     server.use(
       handlers.session(() => ok(businessActor)),
       handlers.integrations(() => ok(integrationsFixture)),
+      /* payment-method-per-channel D8: the setup block's own read */
+      handlers.devoladaMethods(() => ok(methodsBlock("found"))),
     );
     renderApp("/integrations/wisphub");
     await screen.findByLabelText("Ejecutar acciones automáticamente");

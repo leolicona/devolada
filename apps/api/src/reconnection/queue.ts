@@ -9,6 +9,7 @@ import { outcomeOf, parseHypothesis, settleDispatch } from "../integrations/disp
    cash-at-stores D9: and reaches the business's system by capability,
    never by provider name (constitution IX). */
 import { capabilitiesOf } from "../integrations/registry";
+import { recordReferenceOf, storeNamesFor } from "../direct-payments/record-reference";
 
 /* The reconnection queue (reconnection-queue spec). The payment row is the
    queue (D2; business-and-memberships D6 merged the charge twin into it): one cron sweep per minute claims what is due, attempts it,
@@ -111,6 +112,9 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
     .from(businesses)
     .where(inArray(businesses.id, ispIds));
   const ispById = new Map(ispRows.map((i) => [i.id, i]));
+  /* payment-method-per-channel D10: the stores' names as they are now,
+     one query for the batch, as for the businesses above */
+  const storeNames = await storeNamesFor(db, due);
 
   for (const charge of due) {
     const integration = integrationByBusiness.get(charge.businessId);
@@ -148,6 +152,9 @@ export async function sweepReconnections(env: Bindings, now: Date = new Date()):
       paymentRegistered: charge.paymentRegisteredAt !== null,
       reconnect,
       now,
+      /* payment-method-per-channel D2 */
+      channel: charge.channel,
+      recordReference: recordReferenceOf(charge, storeNames),
     });
     /* The payment landing is progress worth keeping even when the
        attempt as a whole did not convert (D8) */

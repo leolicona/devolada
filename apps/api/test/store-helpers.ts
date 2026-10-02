@@ -221,8 +221,18 @@ export function mockCustomerDebt(
 /* The record's first action attempt (reconnection D8/D9): the opt-in,
    the cash method (cached once read), registrar-pago with its `accion`
    captured, and the verify read only when the router was asked */
-export function mockAction(opts: { invoiceId?: number; verify?: "Activo" | "Suspendido" | false; formas?: boolean; fail?: number } = {}) {
-  const captured: { accion?: number; totalCobrado?: number } = {};
+export function mockAction(
+  opts: {
+    invoiceId?: number;
+    verify?: "Activo" | "Suspendido" | false;
+    formas?: boolean;
+    fail?: number;
+    /* payment-method-per-channel T013: the tenant's list, today's one cash
+       method unless a test names another */
+    methods?: { id: number; nombre: string }[];
+  } = {},
+) {
+  const captured: { accion?: number; totalCobrado?: number; formaPago?: number; referencia?: string } = {};
   const invoiceId = opts.invoiceId ?? 42;
   fetchMock
     .get(WISPHUB)
@@ -232,7 +242,7 @@ export function mockAction(opts: { invoiceId?: number; verify?: "Activo" | "Susp
     fetchMock
       .get(WISPHUB)
       .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })
-      .reply(...json({ results: [{ id: 7, nombre: "efectivo" }] }));
+      .reply(...json({ next: null, results: opts.methods ?? [{ id: 7, nombre: "efectivo" }] }));
   }
   const pay = fetchMock.get(WISPHUB).intercept({
     method: "POST",
@@ -241,6 +251,12 @@ export function mockAction(opts: { invoiceId?: number; verify?: "Activo" | "Susp
       const b = JSON.parse(String(raw));
       captured.accion = b.accion;
       captured.totalCobrado = b.total_cobrado;
+      /* Only for a test that names the list: the suites before it
+         compare the whole capture */
+      if (opts.methods) {
+        captured.formaPago = b.forma_pago;
+        captured.referencia = b.referencia;
+      }
       return true;
     },
   });

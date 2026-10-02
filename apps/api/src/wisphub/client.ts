@@ -40,10 +40,37 @@ export class WispHubError extends Error {
     /* The HTTP status when there was one: 422 on registrar-pago means
        "already paid", which the reconnection treats as the goal state */
     public status?: number,
+    /* payment-method-per-channel D6: the top-level keys of a 400's JSON
+       body — the fields the provider refused. Measured 2026-10-02 (R9):
+       an unknown payment method answers
+       `{"forma_pago": ["Clave primaria \"…\" inválida - objeto no existe."]}`
+       and leaves the invoice pending, which is what lets the adapter tell
+       a missing method from any other refusal. */
+    public fields?: string[],
   ) {
     super(detail ?? code);
   }
 }
+
+/* D6: the field names of a refusal's body, read safely — a body that is
+   not a JSON object names no field */
+function refusedFields(text: string): string[] {
+  try {
+    const body: unknown = JSON.parse(text);
+    return body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body) : [];
+  } catch {
+    return [];
+  }
+}
+
+/* payment-method-per-channel D3: one payment method as the provider lists
+   it — an id and a name, nothing else (R8) */
+export type PaymentMethod = { id: number; nombre: string };
+
+/* D3: how far the list is followed. The provider's default page size was
+   never measured, so the read asks for 100 a page and follows `next`;
+   the cap only guards a provider that would answer `next` forever. */
+const PAYMENT_METHOD_PAGES = 20;
 
 export type WispHubCustomer = {
   wisphubId: number;
@@ -290,6 +317,11 @@ export class WispHub {
     if (res.status === 401 || res.status === 403) {
       throw new WispHubError("WISPHUB_AUTH_FAILED", `status ${res.status}`, res.status);
     }
+    if (res.status === 400) {
+      /* payment-method-per-channel D6: a 400 keeps what it refused */
+      const fields = refusedFields(await res.text().catch(() => ""));
+      throw new WispHubError("WISPHUB_UNAVAILABLE", `status 400 (${fields.join(", ")})`, 400, fields);
+    }
     if (!res.ok) throw new WispHubError("WISPHUB_UNAVAILABLE", `status ${res.status}`, res.status);
     /* The deadline covers the body too: a provider that answers headers
        and then stalls mid-stream aborts here, and must surface as the
@@ -447,16 +479,34 @@ export class WispHub {
     return data.results.map(mapCustomer).find((c) => c.usuario === usuario) ?? null;
   }
 
-  /* D6 (charge-record spec): find the cash payment method by name. */
-  async getCashPaymentMethodId(): Promise<number> {
-    const data = await this.get<{ results: { id: number; nombre: string }[] }>(
-      "/formas-de-pago/",
-    );
-    if (data.results.length === 0) {
-      throw new WispHubError("WISPHUB_UNAVAILABLE", "no payment methods");
+  /* payment-method-per-channel D3: every payment method of the tenant,
+     in the provider's order — the order decides the cash method (D4,
+     R11). Replaces charge-record D6's one-row read: the choice of the
+     channel's method and of the cash method now lives in
+     `payment-methods.ts`, over this list. Paged by `limit` and `offset`
+     while the provider says there is more, inside this operation's
+     budget; a business with many methods may have Devolada's on the
+     second page. An empty list is an answer, not an error: whoever must
+     record a payment decides what that means (`cashMethodOf`). */
+  async listPaymentMethods(): Promise<PaymentMethod[]> {
+    const out: PaymentMethod[] = [];
+    for (let page = 0, offset = 0; page < PAYMENT_METHOD_PAGES; page++) {
+      const data = await this.get<{ next?: unknown; results?: unknown }>(
+        `/formas-de-pago/?limit=100&offset=${offset}`,
+      );
+      if (!Array.isArray(data.results)) {
+        throw new WispHubError("WISPHUB_UNAVAILABLE", "payment methods: unreadable body");
+      }
+      for (const raw of data.results) {
+        const m = raw as { id?: unknown; nombre?: unknown } | null;
+        if (typeof m?.id === "number" && Number.isSafeInteger(m.id) && typeof m.nombre === "string") {
+          out.push({ id: m.id, nombre: m.nombre });
+        }
+      }
+      if (typeof data.next !== "string" || data.results.length === 0) break;
+      offset += data.results.length;
     }
-    const cash = data.results.find((m) => /efect|cash/i.test(m.nombre));
-    return (cash ?? data.results[0]).id;
+    return out;
   }
 
   /* Health probes for the connection test (provider-address-per-isp
@@ -471,10 +521,6 @@ export class WispHub {
      the provider's own refusal means anything here. */
   async probeInvoices(): Promise<void> {
     await this.get<{ results: unknown[] }>("/facturas/?limit=1");
-  }
-
-  async probePaymentMethods(): Promise<void> {
-    await this.get<{ results: unknown[] }>("/formas-de-pago/?limit=1");
   }
 
   /* The pending invoices of the whole tenant, for an explicit window
@@ -732,6 +778,10 @@ export class WispHub {
     amountCents: number,
     dateTime: string,
     reconnect = true,
+    /* payment-method-per-channel D7: the text that ties the record back
+       to Devolada, already in this provider's limits (`referenceFor`).
+       Sent only when given, so a body without one stays today's. */
+    reference?: string,
   ): Promise<void> {
     await this.request<{ messages?: string[] }>(`/facturas/${invoiceId}/registrar-pago/`, {
       method: "POST",
@@ -740,6 +790,7 @@ export class WispHub {
         accion: reconnect ? 1 : 0,
         fecha_pago: dateTime,
         total_cobrado: amountCents / 100,
+        ...(reference !== undefined ? { referencia: reference } : {}),
       }),
     });
   }

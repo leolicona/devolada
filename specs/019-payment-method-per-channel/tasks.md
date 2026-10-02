@@ -66,7 +66,20 @@ the first payment after the deploy.
 - The T017 tests decide one open point: when a key save's own connection
   test reads the methods, the list is kept here under the patch's new
   stamp, as the setup read does (D16, "the place that read it keeps it").
-- T017 and T018 are written; they go green with T021–T023.
+- T018 met one more expected object than T001 listed: the
+  `INSTALLATION_UNREACHABLE` answer in `apps/api/test/integrations.test.ts`
+  ("tests a typed key without saving") gains `devoladaMethods: null`.
+- The methods probe now reads the list, so a 200 whose body is not a list
+  fails the probe as `INSTALLATION_UNREACHABLE` — the installation not
+  answering usefully, as a 5xx is. Before, any JSON passed it.
+
+**Checks run (T034–T036, 2026-10-02)**: API 68 files / 1,255 tests;
+admin 30 / 388; ui, pago, red, landing green; typecheck in every
+workspace; spec-lint, contrast-lint, pending-lint and gen-banks --check
+green. The IX grep finds the two names only in the adapter. Browser layer:
+274 passed. This container's Playwright browser is build 1194 while the
+repo pins a newer one, so the run used a throwaway config pointing at the
+installed Chromium; CI runs its own.
 
 **Release rule (D12), before any code**: the pilot must not create
 `CASH - RED.DEVOLADAPAGO` before the release that carries FR-012. Today's
@@ -205,25 +218,25 @@ reopen, and it turns on (quickstart §2, steps 3, 6–7).
 
 ### Tests for User Story 4
 
-- [ ] T017 [P] [US4] In `apps/api/test/payment-method-per-channel.test.ts`, add `describe("payment-method-per-channel US4 …")`:
+- [X] T017 [P] [US4] In `apps/api/test/payment-method-per-channel.test.ts`, add `describe("payment-method-per-channel US4 …")`:
   - `GET /integrations/wisphub/payment-methods`: both found (store channel on, `seedStoreChannel`) → two lines, each with its `name` and `description`; store channel off → `network: null`; one missing → `missing`; two with one name → `duplicate`; WispHub timing out → `{ checked: false }`; no key → `409 WISPHUB_NOT_CONFIGURED`; a role without `integrations: manage` → refused as the hub's other routes are;
   - after a first payment cached `[efectivo 7]`, a setup read that finds the SPEI method makes the next SPEI payment record with `12` (FR-014);
   - `POST /integrations/wisphub/test`: `devoladaMethods` carries the block of the candidate key; a test that stops before the payment-methods probe → `devoladaMethods: null`; a candidate key's read writes no cache;
   - the probe's three cases (D8): answered → the block; refused or timed out at the methods probe → `{ checked: false }`; stopped at an earlier probe → `null`;
   - the gate, each row of the D14 table in `quickstart.md` §1, the no-key row included (`409 WISPHUB_NOT_CONFIGURED`, no WispHub call): the status and code, and that the row's `actions_enabled` is unchanged when refused; turning off, and `true` on a row already on, make no WispHub call;
   - the stamp (D16): the setup read, the test of the saved connection, a successful gate, and a patch that saves a new key or installation each move `payment_methods_seen_at`; a test of a candidate key and a refused gate do not; `paymentMethods` with a cached list under one stamp reads the provider again when asked with a newer stamp; and after a first payment cached one account's list, saving another key on the same installation makes the next payment read the list again.
-- [ ] T018 [P] [US4] Add `devoladaMethods` to `HEALTHY` in `apps/api/test/integrations.test.ts` (its stub lists only "Efectivo": `link` missing, `network: null`) and to the expected answers in `apps/api/test/integrations-installation.test.ts`.
+- [X] T018 [P] [US4] Add `devoladaMethods` to `HEALTHY` in `apps/api/test/integrations.test.ts` (its stub lists only "Efectivo": `link` missing, `network: null`) and to the expected answers in `apps/api/test/integrations-installation.test.ts`.
 
 ### Implementation for User Story 4
 
 - [X] T019 [US4] In `apps/api/src/routes/integrations/schema.ts`, add `devoladaMethodStatus`, `devoladaMethodLine` (`name`, `description`, `status`) and `devoladaMethods` exactly as `contracts/integrations-payment-methods.md` gives them; add `devoladaMethods: devoladaMethods.nullable()` to `wisphubTestResponse`; export the types (`DevoladaMethods`, `DevoladaMethodLine`). The package export `./integrations-schema` already exists.
 - [X] T020 [US4] In `apps/api/src/wisphub/payment-methods.ts`, add `setupBlockOf(methods, storeChannelOn): DevoladaMethods` (`found` for one match, `duplicate` for more, `missing` for none; `network` only with the store channel on) and `readDevoladaMethods(wisphub, storeChannelOn)`, which lists fresh and answers `{ checked: false }` on any `WispHubError` (FR-009). The block's type is imported type-only from the integration's schema. Depends on T019.
-- [ ] T021 [US4] In `apps/api/src/routes/integrations/handler.ts`:
+- [X] T021 [US4] In `apps/api/src/routes/integrations/handler.ts`:
   - `getWisphubPaymentMethods(c)`: `businessGuard`, the stored key and installation (`409 WISPHUB_NOT_CONFIGURED` without a key), the business's `store_channel_on`; reads the list fresh; when the provider answered, stamps `payment_methods_seen_at` with `upsertIntegration` and keeps the list with `rememberPaymentMethods` under the new stamp (D8, D16); answers the block;
   - `testKey`: the `payment_methods` probe reads `listPaymentMethods` instead of `probePaymentMethods` (then delete `probePaymentMethods` from `client.ts`), and `answer()` carries `devoladaMethods` by the contract's table: the block when the probe answered, `{ checked: false }` when it ran and failed, `null` when the test stopped before it (D8, FR-009). Only a test of the saved key and installation stamps (D16). The probe's outcome rules do not change.
   - Depends on T019, T020.
-- [ ] T022 [US4] In `patchWisphub` (same file), the gate (D14): only when the patch carries `actionsEnabled: true` and the stored row has it false (or there is no row yet): with no key after this patch, refuse with `409 WISPHUB_NOT_CONFIGURED` before any provider call; otherwise read the block with the key and installation the row will have after this patch; refuse the whole patch with `409 PAYMENT_METHODS_MISSING` when a required line is `missing`, or `503 PAYMENT_METHODS_UNCHECKED` when `checked` is false; save nothing. A passing check saves the patch and `payment_methods_seen_at` in the same write (D16). Separately, whatever else it carries, a patch that saves a new key or installation also sets `payment_methods_seen_at` to now, with no provider call for it (D16: the cache key carries the address, not the key). Required: `link` always, `network` when the store channel is on; `duplicate` counts as present. Comment D14 and FR-013's "never turned off". Depends on T021.
-- [ ] T023 [US4] In `apps/api/src/routes/integrations/index.ts`, `GET /wisphub/payment-methods` with `requireSession`, `requireArea("integrations", "manage")`, wired to `getWisphubPaymentMethods`. Pure router. Depends on T021.
+- [X] T022 [US4] In `patchWisphub` (same file), the gate (D14): only when the patch carries `actionsEnabled: true` and the stored row has it false (or there is no row yet): with no key after this patch, refuse with `409 WISPHUB_NOT_CONFIGURED` before any provider call; otherwise read the block with the key and installation the row will have after this patch; refuse the whole patch with `409 PAYMENT_METHODS_MISSING` when a required line is `missing`, or `503 PAYMENT_METHODS_UNCHECKED` when `checked` is false; save nothing. A passing check saves the patch and `payment_methods_seen_at` in the same write (D16). Separately, whatever else it carries, a patch that saves a new key or installation also sets `payment_methods_seen_at` to now, with no provider call for it (D16: the cache key carries the address, not the key). Required: `link` always, `network` when the store channel is on; `duplicate` counts as present. Comment D14 and FR-013's "never turned off". Depends on T021.
+- [X] T023 [US4] In `apps/api/src/routes/integrations/index.ts`, `GET /wisphub/payment-methods` with `requireSession`, `requireArea("integrations", "manage")`, wired to `getWisphubPaymentMethods`. Pure router. Depends on T021.
 - [X] T024 [P] [US4] In `packages/ui/src/components/status-badge.tsx`, add `methodFound` (success, check, "Creada"), `methodMissing` (info, "Falta crearla") and `methodDuplicate` (warning, "Repetida"), each with a lucide icon, with a comment citing payment-method-per-channel D8 and why missing is not a failure (FR-008).
 - [X] T025 [US4] In `apps/admin/src/features/integrations/WispHubScreen.tsx`:
   - a `PaymentMethodsCard` between `KeyCard` and `MappingCard`: without a key (`wisphub.configured` false) no query and *"Conecta WispHub para revisar tus formas de pago."*; otherwise a query on `GET /integrations/wisphub/payment-methods` (its own loading inside `<Pending>`, its own error state with retry; a `409 WISPHUB_NOT_CONFIGURED` reads as the no-key text, with no retry), one line per method — the name in the mono face and the description, each field itself a `<button>` that copies its value in place (label with a copy icon, then the value; after copying, a check and "Copiado"; `navigator.clipboard.writeText`, as `ApiScreen.tsx` does), the `StatusBadge` — and the copy of `contracts/integrations-payment-methods.md` ("The screen");
@@ -287,9 +300,9 @@ record lands on the invoice with the network's method (quickstart §2).
 
 ## Phase 7: Polish & cross-cutting
 
-- [ ] T034 Run quickstart §1 end to end: the API and admin suites, `pnpm -r --if-present typecheck`, `node scripts/spec-lint.mjs`, `node scripts/contrast-lint.mjs`, `node scripts/pending-lint.mjs`, `node scripts/gen-banks.mjs --check`.
-- [ ] T035 [P] Constitution IX check: `rg -n "DEVOLADAPAGO" apps packages --glob '!apps/api/src/wisphub/**' --glob '!**/test/**' --glob '!tests/**'` returns nothing — the names live in the adapter only (D1); the admin shows them from the contract.
-- [ ] T036 [P] `pnpm e2e` (contrast and responsive on the WispHub screen, both themes).
+- [X] T034 Run quickstart §1 end to end: the API and admin suites, `pnpm -r --if-present typecheck`, `node scripts/spec-lint.mjs`, `node scripts/contrast-lint.mjs`, `node scripts/pending-lint.mjs`, `node scripts/gen-banks.mjs --check`.
+- [X] T035 [P] Constitution IX check: `rg -n "DEVOLADAPAGO" apps packages --glob '!apps/api/src/wisphub/**' --glob '!**/test/**' --glob '!tests/**'` returns nothing — the names live in the adapter only (D1); the admin shows them from the contract.
+- [X] T036 [P] `pnpm e2e` (contrast and responsive on the WispHub screen, both themes).
 - [ ] T037 Run `/speckit-analyze` and resolve every CRITICAL finding before the PR is marked ready.
 - [ ] T038 Release (D12), with the creator:
   - before the `v*` tag: confirm the pilot has not created `CASH - RED.DEVOLADAPAGO`;

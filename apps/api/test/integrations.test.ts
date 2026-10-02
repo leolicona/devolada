@@ -227,6 +227,8 @@ describe("US-I01: the connection test speaks for WispHub (settings D2, moved)", 
       unverified: ["create_invoice", "register_payment", "auto_activate", "payment_promise"],
       missingPermission: null,
       sampleCustomerCount: null,
+      /* payment-method-per-channel D8: stopped before the methods probe */
+      devoladaMethods: null,
     });
   });
 });

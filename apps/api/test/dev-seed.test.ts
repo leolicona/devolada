@@ -3,10 +3,9 @@ import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { account, businesses, cepBundles, cepRecords, member, user as userTable } from "../src/db/schema";
-import { makeAuth } from "../src/auth/better";
 import { listCredentials } from "../src/api-clients/store";
 import type { Bindings } from "../src/env";
-import { app, json, sessionOf } from "./helpers";
+import { app, json, seedLegacyUser, sessionOf } from "./helpers";
 import {
   buildBundleZip,
   bundleOf,
@@ -98,10 +97,7 @@ describe("dev seed creates the demo business with its owner", () => {
        email and no business (left by a failed signup). The seed gives it
        the business; like every account now, it holds no password, and a
        código opens it. */
-    const auth = makeAuth(env as unknown as Bindings);
-    await auth.api.signUpEmail({
-      body: { name: "Leo", email: "demo@devolada.app", password: "clave-recuperada-1" },
-    });
+    await seedLegacyUser("Leo", "demo@devolada.app");
 
     const seed = await (await app()).request("/dev/seed", { method: "POST" }, env);
     expect(seed.status).toBe(200);

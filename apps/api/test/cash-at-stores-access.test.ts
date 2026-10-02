@@ -4,7 +4,8 @@ import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { organization, session as sessionTable, storeInvitations, stores, user as userTable } from "../src/db/schema";
 import type { Bindings } from "../src/env";
-import { app, json, mintCode, PASSWORD, seedBusiness, sentCode, sessionCookieHeader, sessionOf } from "./helpers";
+import { storeMeResponse } from "../src/routes/store/schema";
+import { app, json, mintCode, seedBusiness, sentCode, sessionCookieHeader, sessionOf } from "./helpers";
 import { seedActiveStore, seedStore, seedStoreChannel, storeSession } from "./store-helpers";
 
 /* cash-at-stores US3 (T014, T041) — the shopkeeper is a second kind of
@@ -17,7 +18,15 @@ import { seedActiveStore, seedStore, seedStoreChannel, storeSession } from "./st
    while the store keeps its phone and password until US6. The códigos are
    hashed now (D2), so they come from the sender's log (`sentCode`), and the
    `username` refusals once proven on `/sign-up/email` — closed, 404 — are
-   proven on the doors that stay open. */
+   proven on the doors that stay open.
+
+   passwordless-access US6 (T059): the store's password goes too. The phone
+   and password door (`/auth/sign-in/username`), the password acceptance and
+   the `forget-password` recovery left this suite; their absence, and the
+   email-and-código acceptance and phone sign-in that replace them, are
+   proven in passwordless-store.test.ts. What stays here is what did not
+   change: no request writes a username, the store's own row decides on
+   every request, and a store's account opens no business door. */
 
 beforeAll(() => {
   fetchMock.activate();
@@ -32,38 +41,7 @@ const withCookie = (cookie: string, init: RequestInit = {}): RequestInit => ({
   headers: { ...(init.headers as Record<string, string>), Cookie: cookie, Origin: "http://localhost:5177" },
 });
 
-describe("cash-at-stores US3 — M1: the username plugin on a local D1 (D3, D5)", () => {
-  it("a user whose username was written in the DB signs in by phone with POST /auth/sign-in/username", async () => {
-    const { store, email } = await seedActiveStore({ phone: "5512345678" });
-    const res = await call("/auth/sign-in/username", json({ username: store.phone, password: PASSWORD }));
-    expect(res.status).toBe(200);
-    expect(sessionOf(res)).toContain("better-auth.session_token=");
-    const body = (await res.json()) as { user: { email: string } };
-    expect(body.user.email).toBe(email);
-
-    /* and the session it opened is the store's */
-    const me = await call("/auth/me", withCookie(sessionOf(res)));
-    expect(me.status).toBe(200);
-    expect((await me.json()).data).toMatchObject({ type: "store", storeId: store.id });
-  });
-
-  it("the same user, unverified, gets 403 EMAIL_NOT_VERIFIED — requireEmailVerification holds on this door", async () => {
-    const { store, userId } = await seedActiveStore({ phone: "5512345678" });
-    await db().update(userTable).set({ emailVerified: false }).where(eq(userTable.id, userId));
-    const res = await call("/auth/sign-in/username", json({ username: store.phone, password: PASSWORD }));
-    expect(res.status).toBe(403);
-    expect(((await res.json()) as { code: string }).code).toBe("EMAIL_NOT_VERIFIED");
-  });
-
-  it("a wrong password answers the plugin's generic refusal, never which half was wrong", async () => {
-    const { store } = await seedActiveStore({ phone: "5512345678" });
-    const res = await call("/auth/sign-in/username", json({ username: store.phone, password: "otra-cosa-123" }));
-    expect(res.status).toBe(401);
-    const unknown = await call("/auth/sign-in/username", json({ username: "5599999999", password: PASSWORD }));
-    expect(unknown.status).toBe(401);
-    expect(((await res.json()) as { code: string }).code).toBe(((await unknown.json()) as { code: string }).code);
-  });
-
+describe("cash-at-stores US3 — M1: no request writes a username (D3)", () => {
   it("a right código with a username in the body is refused, and no user is born (passwordless-access US2)", async () => {
     const otp = await mintCode("intruso@correo.mx");
     const res = await call(
@@ -158,13 +136,21 @@ describe("cash-at-stores US3 — a store's account opens no business door (D2, F
 describe("cash-at-stores US3 — the store's own row decides, on every request (D2, FR-014)", () => {
   it("/auth/me answers the store branch: the store and the business with the channel on", async () => {
     const business = await seedBusiness({ name: "WiFi Plus" });
-    const { store, headers } = await seedActiveStore();
+    const { store, headers, email } = await seedActiveStore();
     const before = await call("/auth/me", { headers });
-    expect((await before.json()).data).toEqual({ type: "store", storeId: store.id, name: store.name, businessName: null });
+    const data = storeMeResponse.parse((await before.json()).data);
+    /* passwordless-access US6 (D8): with the store account's own email */
+    expect(data).toEqual({ type: "store", storeId: store.id, name: store.name, businessName: null, email });
 
     await seedStoreChannel(business);
     const after = await call("/auth/me", { headers });
-    expect((await after.json()).data).toEqual({ type: "store", storeId: store.id, name: store.name, businessName: "WiFi Plus" });
+    expect(storeMeResponse.parse((await after.json()).data)).toEqual({
+      type: "store",
+      storeId: store.id,
+      name: store.name,
+      businessName: "WiFi Plus",
+      email,
+    });
   });
 
   it("a suspended store gets STORE_SUSPENDED and its session row is gone", async () => {
@@ -213,53 +199,36 @@ async function invite(phone = "5512345678") {
   return { store: data.store as { id: string }, token: (data.invitation.url as string).split("/invitacion/")[1] };
 }
 
-describe("cash-at-stores US3 — the invitation: preview, acceptance, the código (D4, D5, FR-009)", () => {
+/* passwordless-access US6: the acceptance as the store app makes it — the
+   invitation's código, then the address and that código */
+async function accept(token: string, email: string, e: unknown = env) {
+  await call(`/store/invitations/${token}/code`, json({ email }), e);
+  return call(`/store/invitations/${token}/accept`, json({ email, otp: sentCode(email) }), e);
+}
+
+describe("cash-at-stores US3 — the invitation: preview and the acceptance's races (D4, D5, T089)", () => {
   it("the preview shows the store and the last four digits; anything else is `invalid`", async () => {
     const { token } = await invite();
     expect((await (await call(`/store/invitations/${token}`)).json()).data).toEqual({ state: "open", storeName: "Abarrotes Lupita", phoneTail: "5678" });
     expect((await (await call("/store/invitations/no-such-token")).json()).data).toEqual({ state: "invalid" });
   });
 
-  it("an expired invitation reads `invalid`", async () => {
+  it("an expired invitation reads `invalid`, and neither asks for a código nor accepts one", async () => {
     const { token } = await invite();
     await db().update(storeInvitations).set({ expiresAt: new Date(Date.now() - 1000) });
     expect((await (await call(`/store/invitations/${token}`)).json()).data).toEqual({ state: "invalid" });
-    const res = await call(`/store/invitations/${token}/accept`, json({ email: "lupita@correo.mx", password: "secreta123" }));
+    const code = await call(`/store/invitations/${token}/code`, json({ email: "lupita@correo.mx" }));
+    expect(code.status).toBe(400);
+    expect((await code.json()).error.code).toBe("INVALID_INVITATION");
+    const res = await call(`/store/invitations/${token}/accept`, json({ email: "lupita@correo.mx", otp: await mintCode("lupita@correo.mx") }));
     expect(res.status).toBe(400);
     expect((await res.json()).error.code).toBe("INVALID_INVITATION");
-  });
-
-  it("acceptance: a user with no username, then the phone written, the store active, the code sent; the código signs in", async () => {
-    const { store, token } = await invite();
-    const res = await call(`/store/invitations/${token}/accept`, json({ email: " Lupita@Correo.MX ", password: "secreta123" }));
-    expect(res.status).toBe(201);
-    expect((await res.json()).data).toEqual({ email: "lupita@correo.mx" });
-
-    const [user] = await db().select().from(userTable).where(eq(userTable.email, "lupita@correo.mx"));
-    expect(user).toMatchObject({ username: "5512345678", displayUsername: "5512345678", emailVerified: false, name: "Lupita Hernández" });
-    const [row] = await db().select().from(stores).where(eq(stores.id, store.id));
-    expect(row).toMatchObject({ userId: user.id, status: "active" });
-    const [inv] = await db().select().from(storeInvitations);
-    expect(inv.status).toBe("accepted");
-    /* used: it no longer opens */
-    expect((await (await call(`/store/invitations/${token}`)).json()).data.state).toBe("invalid");
-
-    /* before the código, a sign-in by phone is EMAIL_NOT_VERIFIED */
-    const early = await call("/auth/sign-in/username", json({ username: "5512345678", password: "secreta123" }));
-    expect(early.status).toBe(403);
-
-    const verified = await call("/auth/email-otp/verify-email", json({ email: "lupita@correo.mx", otp: sentCode("lupita@correo.mx") }));
-    expect(verified.status).toBe(200);
-    const me = await call("/auth/me", withCookie(sessionOf(verified)));
-    expect((await me.json()).data).toMatchObject({ type: "store", storeId: store.id });
-
-    const signIn = await call("/auth/sign-in/username", json({ username: "5512345678", password: "secreta123" }));
-    expect(signIn.status).toBe(200);
+    expect(await db().select().from(userTable).where(eq(userTable.email, "lupita@correo.mx"))).toHaveLength(0);
   });
 
   it("the panel's registration of a shopkeeper's address opens the store's account by código, which the panel refuses (passwordless-access US1)", async () => {
     const { store, token } = await invite();
-    await call(`/store/invitations/${token}/accept`, json({ email: "lupita@correo.mx", password: "secreta123" }));
+    expect((await accept(token, "lupita@correo.mx")).status).toBe(201);
     const [shopkeeper] = await db().select().from(userTable).where(eq(userTable.email, "lupita@correo.mx"));
 
     /* the registration door answers as for anyone (FR-005), and the código
@@ -283,32 +252,20 @@ describe("cash-at-stores US3 — the invitation: preview, acceptance, the códig
     expect((await feed.json()).error.code).toBe("WRONG_ACTOR");
   });
 
-  it("EMAIL_TAKEN for an existing user and for an operator's address; the invitation stays open", async () => {
-    const { token } = await invite();
-    await seedBusiness({ email: "tomado@correo.mx" });
-    const taken = await call(`/store/invitations/${token}/accept`, json({ email: "tomado@correo.mx", password: "secreta123" }));
-    expect(taken.status).toBe(409);
-    expect((await taken.json()).error.code).toBe("EMAIL_TAKEN");
-
-    const opEnv = { ...(env as unknown as Bindings), PLATFORM_OPERATOR_EMAILS: "jefa@devolada.app" };
-    const operator = await call(`/store/invitations/${token}/accept`, json({ email: "jefa@devolada.app", password: "secreta123" }), opEnv);
-    expect(operator.status).toBe(409);
-    expect((await operator.json()).error.code).toBe("EMAIL_TAKEN");
-    expect(await db().select().from(userTable).where(eq(userTable.email, "jefa@devolada.app"))).toHaveLength(0);
-    expect((await (await call(`/store/invitations/${token}`)).json()).data.state).toBe("open");
-  });
-
   it("two acceptances at once: one wins, the other is INVALID_INVITATION — never a 500 — and writes nothing (T089, D5)", async () => {
     const { store, token } = await invite();
+    await call(`/store/invitations/${token}/code`, json({ email: "uno@correo.mx" }));
+    await call(`/store/invitations/${token}/code`, json({ email: "dos@correo.mx" }));
     const [a, b] = await Promise.all([
-      call(`/store/invitations/${token}/accept`, json({ email: "uno@correo.mx", password: "secreta123" })),
-      call(`/store/invitations/${token}/accept`, json({ email: "dos@correo.mx", password: "secreta123" })),
+      call(`/store/invitations/${token}/accept`, json({ email: "uno@correo.mx", otp: sentCode("uno@correo.mx") })),
+      call(`/store/invitations/${token}/accept`, json({ email: "dos@correo.mx", otp: sentCode("dos@correo.mx") })),
     ]);
     expect([a.status, b.status].sort()).toEqual([201, 400]);
     const loser = a.status === 400 ? a : b;
     expect((await loser.json()).error.code).toBe("INVALID_INVITATION");
     const winnerEmail = a.status === 201 ? "uno@correo.mx" : "dos@correo.mx";
     const loserEmail = a.status === 201 ? "dos@correo.mx" : "uno@correo.mx";
+    /* D5's rollback: the loser's user is gone, with its session */
     expect(await db().select().from(userTable).where(eq(userTable.email, loserEmail))).toHaveLength(0);
     const [winner] = await db().select().from(userTable).where(eq(userTable.email, winnerEmail));
     const [row] = await db().select().from(stores).where(eq(stores.id, store.id));
@@ -316,29 +273,24 @@ describe("cash-at-stores US3 — the invitation: preview, acceptance, the códig
     expect(winner.username).toBe("5512345678");
     const [inv] = await db().select().from(storeInvitations);
     expect(inv.status).toBe("accepted");
+    /* no session outlives its user */
+    const users = new Set((await db().select({ id: userTable.id }).from(userTable)).map((u) => u.id));
+    for (const row of await db().select().from(sessionTable)) expect(users.has(row.userId)).toBe(true);
+    expect(await db().select().from(sessionTable).where(eq(sessionTable.userId, winner.id))).toHaveLength(1);
   });
 
-  it("a store another request accepted meanwhile: the late user is removed, and the answer is INVALID_INVITATION", async () => {
+  it("a store another request accepted meanwhile: no user is born, and the answer is INVALID_INVITATION", async () => {
     const { store, token } = await invite();
     /* the race, as the second request meets it: the store already has its
-       shopkeeper by the time this one writes */
-    const first = await call(`/store/invitations/${token}/accept`, json({ email: "uno@correo.mx", password: "secreta123" }));
-    expect(first.status).toBe(201);
+       shopkeeper by the time this one reads it */
+    expect((await accept(token, "uno@correo.mx")).status).toBe(201);
     await db().update(storeInvitations).set({ status: "sent" });
     await db().update(stores).set({ status: "invited" }).where(eq(stores.id, store.id));
-    const second = await call(`/store/invitations/${token}/accept`, json({ email: "dos@correo.mx", password: "secreta123" }));
+    const second = await call(`/store/invitations/${token}/accept`, json({ email: "dos@correo.mx", otp: await mintCode("dos@correo.mx") }));
     expect(second.status).toBe(400);
+    expect((await second.json()).error.code).toBe("INVALID_INVITATION");
     expect(await db().select().from(userTable).where(eq(userTable.email, "dos@correo.mx"))).toHaveLength(0);
     const [row] = await db().select().from(stores).where(eq(stores.id, store.id));
     expect(row.userId).not.toBeNull();
-  });
-
-  it("recovery: the forget-password código resets the password, and the phone signs in with the new one (FR-011)", async () => {
-    const { email } = await seedActiveStore({ phone: "5512345678" });
-    expect((await call("/auth/email-otp/send-verification-otp", json({ email, type: "forget-password" }))).status).toBe(200);
-    const reset = await call("/auth/email-otp/reset-password", json({ email, otp: sentCode(email), password: "nueva-clave-1" }));
-    expect(reset.status).toBe(200);
-    expect((await call("/auth/sign-in/username", json({ username: "5512345678", password: PASSWORD }))).status).toBe(401);
-    expect((await call("/auth/sign-in/username", json({ username: "5512345678", password: "nueva-clave-1" }))).status).toBe(200);
   });
 });

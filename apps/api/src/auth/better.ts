@@ -28,14 +28,17 @@ export async function isStoreUser(db: ReturnType<typeof drizzle>, userId: string
   return Boolean(row);
 }
 
-/* cash-at-stores D3: the one door that takes a username from a request —
-   the shopkeeper's phone, as a sign-in name. Every other door refuses
-   one, so only the store acceptance route (which writes the column
-   directly) can give a user a phone. Measured M1, 2026-10-01, against
-   1.6.29's dist: besides `/sign-up/email` and `/update-user`, which the
-   plan named, `/sign-in/email-otp` creates a user from any extra body
-   field, and the plugin's own sign-up hook copies a `displayUsername`
-   into `username` — so the refusal covers every path and both fields. */
+/* cash-at-stores D3: the shopkeeper's phone lives in `user.username`, and
+   no request may write it. Measured M1, 2026-10-01, against 1.6.29's dist:
+   besides `/sign-up/email` and `/update-user`, `/sign-in/email-otp` creates
+   a user from any extra body field, and the plugin's own sign-up hook
+   copies a `displayUsername` into `username` — so the refusal covers every
+   path and both fields.
+   passwordless-access D4 (PR 2): the one path left out, `/sign-in/username`
+   (the phone-and-password door), is in `disabledPaths`, so no request may
+   carry a username any more. Only the store acceptance route writes the
+   column, directly (D10). The set stays so a door re-opened by mistake
+   would still be the only one. */
 const USERNAME_INPUT_PATHS = new Set(["/sign-in/username"]);
 
 /* passwordless-access analysis A3: the two doors that take a person's name
@@ -47,7 +50,9 @@ const NAME_MIN = 2;
 const NAME_MAX = 80;
 
 /* The plugin's own kinds of código (email-otp `routes.mjs`, `types`): only
-   these name an identifier the plugin writes. */
+   these name an identifier the plugin writes. passwordless-access D4 (PR 2):
+   only `sign-in` has a door left; the other two stay listed so a request
+   for one still ends that kind's previous código. */
 const OTP_TYPES = new Set(["email-verification", "sign-in", "forget-password"]);
 
 /* Better Auth instance (better-auth.spec.md). Per-request construction is
@@ -74,37 +79,43 @@ export function makeAuth(env: Bindings) {
     secret: env.BETTER_AUTH_SECRET ?? "devolada-dev-only-insecure-secret",
     database: drizzleAdapter(db, { provider: "sqlite", schema: authSchema }),
     trustedOrigins: exactOrigins,
-    /* D16 (owner, 2026-09-02): verification gates the session. Signup
-       births the user without a session; sign-in of an unverified email
-       answers 403 EMAIL_NOT_VERIFIED; `email-otp/verify-email` is the
-       door — it creates the session itself (pinned against 1.6.29's
-       dist).
-       passwordless-access D4: since PR 1 only the store app reaches this
-       block — its phone and password (`/sign-in/username`) and their
-       recovery — and it turns off with User Story 6. The panel's two doors
-       are in `disabledPaths`. */
-    emailAndPassword: {
-      enabled: true,
-      requireEmailVerification: true,
-      /* D17: a new password closes every door the old one opened. Better
-         Auth's default keeps them open (a stolen session outlived the
-         reset by up to 30 days). */
-      revokeSessionsOnPasswordReset: true,
-    },
-    emailVerification: { autoSignInAfterVerification: true },
+    /* passwordless-access D4 (PR 2): no password door is left, so the
+       password machinery is off. With it go better-auth D16's
+       `requireEmailVerification` and D17's `revokeSessionsOnPasswordReset`
+       — both guarded doors that no longer exist — and
+       `emailVerification.autoSignInAfterVerification`, read only by the
+       email-OTP plugin's `verify-email`, disabled below. Every person enters
+       through the código (`/sign-in/email-otp`, D1), which births the
+       account verified or verifies a legacy one. The middleware's own check
+       stays: a session whose user is unverified is revoked (better-auth
+       D16's belt). */
+    emailAndPassword: { enabled: false },
     disabledPaths: [
       /* cash-at-stores D3: whether a phone is a store's is nobody's to probe */
       "/is-username-available",
-      /* passwordless-access D4 (PR 1): no password can be created over
-         HTTP — registration is the código door (D1). Better Auth answers
-         404 from its router, so the server's own `auth.api.*` calls keep
-         the path (measured 2026-10-02, M3). */
+      /* passwordless-access D4: no account can be created with a password —
+         registration is the código door (D1). Better Auth answers 404 from
+         its router, so the server's own `auth.api.*` calls keep the path
+         (measured 2026-10-02, M3). */
       "/sign-up/email",
-      /* passwordless-access D4 (PR 1): the panel's sign-in door. With it the
-         panel has no password door left. `emailAndPassword` stays enabled
-         below: the store app's `/sign-in/username` and its recovery need it
-         until User Story 6 (PR 2). */
+      /* passwordless-access D4 (PR 1): the panel's password door */
       "/sign-in/email",
+      /* passwordless-access D4 (PR 2): the store app's phone and password —
+         the shopkeeper signs in by phone and código now (D10) */
+      "/sign-in/username",
+      /* passwordless-access D4 (PR 2): password recovery, both the plugin's
+         paths and the old alias. There is no password to recover. */
+      "/email-otp/request-password-reset",
+      "/email-otp/reset-password",
+      "/forget-password/email-otp",
+      /* passwordless-access D4 (PR 2): the old verification door (better-auth
+         D16). The sign-in código verifies the address itself (D1). */
+      "/email-otp/verify-email",
+      /* passwordless-access D4 (PR 2): over HTTP it would tell a stranger
+         whether an address has an account once they hold its código. The
+         store acceptance still calls it from the server (D10), which this
+         list does not reach. */
+      "/email-otp/check-verification-otp",
     ],
     hooks: {
       /* cash-at-stores D3: see USERNAME_INPUT_PATHS. Runs before every
@@ -154,14 +165,13 @@ export function makeAuth(env: Bindings) {
        plugin's 3 would stop a person who mistyped twice and then pasted
        the código, and three wrong tries already kill each código (D2).
        `send-verification-otp` keeps the plugin's 3/60s: it is what stops a
-       script from filling an inbox. */
+       script from filling an inbox. The rules for `verify-email` and
+       `reset-password` left with their doors (D4, PR 2). */
     rateLimit: {
       enabled: env.AUTH_RATE_LIMIT !== "off",
       storage: "database",
       customRules: {
         "/sign-in/email-otp": { window: 60, max: 5 },
-        "/email-otp/verify-email": { window: 60, max: 5 },
-        "/email-otp/reset-password": { window: 60, max: 5 },
         "/organization/accept-invitation": { window: 60, max: 10 },
       },
     },
@@ -224,9 +234,10 @@ export function makeAuth(env: Bindings) {
         },
       }),
       emailOTP({
-        /* The business signup route sends the code itself (D16): a user
-           born through an invitation (D14) is verified by the invitation
-           and must not receive a code for nothing. */
+        /* passwordless-access D4: there is no password sign-up for this to
+           follow; the plugin's default, written so nobody turns it on
+           thinking it matters. Every código goes out because a person asked
+           for one (D1, D10). */
         sendVerificationOnSignUp: false,
         /* passwordless-access D2: the código's terms, written. Each was a
            default nobody chose (read in 1.6.29's dist on 2026-10-02:
@@ -239,8 +250,9 @@ export function makeAuth(env: Bindings) {
         allowedAttempts: 3,
         storeOTP: "hashed",
         async sendVerificationOTP({ email, otp, type }) {
-          /* Never throw: onboarding and recovery must not depend on the
-             email provider (spec D8; same law as the old sender). */
+          /* Never throw: the door must not depend on the email provider
+             (spec D8; same law as the old sender). "Reenviar código"
+             retries. */
           try {
             await sendAuthCode(env, type, email, otp);
           } catch (e) {
@@ -248,11 +260,12 @@ export function makeAuth(env: Bindings) {
           }
         },
       }),
-      /* cash-at-stores D3: the shopkeeper signs in with their phone
-         (`POST /auth/sign-in/username`). It honours
-         requireEmailVerification: an unverified shopkeeper gets 403
-         EMAIL_NOT_VERIFIED (measured M1). The default validator
-         (`[a-zA-Z0-9_.]`, 3–30) takes ten digits as they are. */
+      /* cash-at-stores D3: owns the `user.username` column, where the
+         store's phone lives. passwordless-access D4 (PR 2): it stays
+         installed for the column alone — its sign-in path is disabled
+         above, and `POST /store/sign-in` reads the column to find the
+         store's email (D10). Removing it would change `auth-schema.ts`,
+         which comes from the generator (better-auth D10). */
       username(),
       passkey({
         rpID: env.PASSKEY_RP_ID ?? "localhost",

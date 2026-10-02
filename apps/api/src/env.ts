@@ -246,6 +246,9 @@ export type StoreActor = {
   userId: string;
   /* The store's name, for the app's header */
   name: string;
+  /* passwordless-access D8: the store account's own address, from the
+     session's user — where Caja's step-up sends its código */
+  email: string;
   status: "active";
 };
 

@@ -5,12 +5,15 @@ import type { Bindings, Variables } from "../../env";
 import {
   account as accountTable,
   businesses,
+  member,
+  passkey as passkeyTable,
   paymentLinks,
   payments,
   session as sessionTable,
   storeInvitations,
   stores,
   user as userTable,
+  verification,
 } from "../../db/schema";
 import { makeAuth } from "../../auth/better";
 import { isPlatformOperator } from "../../platform/settings";
@@ -40,12 +43,20 @@ import { makeFolio } from "../../folio";
 import { renderReceipt, toWhatsAppPhone, whatsAppLink } from "../../receipt";
 import { DEFAULT_RECEIPT_TEMPLATE } from "../../receipt/template";
 import { deferOf } from "../defer";
+import { nationalPhone } from "../../phone";
 import {
   STORE_SEARCH_LIMIT,
   STORE_SEARCH_MIN,
   STORE_LEDGER_PAGE,
   STORE_HANDOVERS_PAGE,
   type AcceptStoreInvitationRequest,
+  type AcceptStoreInvitationResponse,
+  type StoreInvitationCodeRequest,
+  type StoreInvitationCodeResponse,
+  type StoreSignInCodeRequest,
+  type StoreSignInCodeResponse,
+  type StoreSignInRequest,
+  type StoreSignInResponse,
   type CashboxResponse,
   type DeclareHandoverRequest,
   type DeclareHandoverResponse,
@@ -506,26 +517,85 @@ export async function previewInvitation(c: Ctx, token: string) {
   return c.json({ success: true, data });
 }
 
-/* D5's rollback: the user the acceptance made, and nothing else of it */
+/* D5's rollback: the user the acceptance made, and nothing else of it.
+   passwordless-access D10: its keys too — none of the four cascades, so
+   they go first, in one batch with the user. */
 async function removeUser(db: DB, userId: string) {
   await db.batch([
     db.delete(sessionTable).where(eq(sessionTable.userId, userId)),
     db.delete(accountTable).where(eq(accountTable.userId, userId)),
+    db.delete(passkeyTable).where(eq(passkeyTable.userId, userId)),
     db.delete(userTable).where(eq(userTable.id, userId)),
   ]);
 }
 
-/* POST /store/invitations/:token/accept (D5, FR-009), in this order:
+/* passwordless-access D10: the email-OTP plugin's own words for a código,
+   carried through the envelope (contracts/store-access.md). Better Auth
+   throws an APIError with `statusCode` and `body.code`; anything else is
+   not a código's answer and stays thrown. */
+const OTP_REFUSALS: Record<string, 400 | 403> = {
+  INVALID_OTP: 400,
+  OTP_EXPIRED: 400,
+  TOO_MANY_ATTEMPTS: 403,
+};
+function codeOf(e: unknown): string | null {
+  const body = (e as { body?: { code?: unknown } } | null)?.body;
+  return typeof body?.code === "string" ? body.code : null;
+}
+function otpRefusal(c: Ctx, e: unknown): Response | null {
+  const code = codeOf(e);
+  return code && code in OTP_REFUSALS ? c.json({ success: false, error: { code } }, OTP_REFUSALS[code]) : null;
+}
+
+const forwardCookies = (c: Ctx, headers: Headers) => {
+  for (const cookie of (headers as Headers & { getSetCookie(): string[] }).getSetCookie()) {
+    c.header("set-cookie", cookie, { append: true });
+  }
+};
+
+/* passwordless-access D10: the address's live sign-in código, gone — the
+   código that proved a taken address must open nothing after it */
+const dropSignInCode = (db: DB, email: string) =>
+  db.delete(verification).where(eq(verification.identifier, `sign-in-otp-${email.toLowerCase()}`));
+
+/* POST /store/invitations/:token/code — passwordless-access D10, FR-031,
+   FR-032. The token opens an invitation (D4), then a sign-in código goes
+   to the typed address WHATEVER it holds: a taken address is named only
+   after its código, at the acceptance. Nothing else is written — the store
+   stays `invited` and the invitation `sent` until the código is typed. */
+export async function sendInvitationCode(c: Ctx, token: string, body: StoreInvitationCodeRequest) {
+  const db = drizzle(c.env.DB);
+  const open = await openInvitation(db, token, new Date());
+  if (!open) return refuse(c, "INVALID_INVITATION", 400);
+  /* The plugin's server door skips Better Auth's limiter (better-auth D11's
+     known gap); the route's own `rateLimitRoute` stands in (D3). The hook
+     in better.ts ends the address's previous código first (D2). */
+  await makeAuth(c.env).api.sendVerificationOTP({ body: { email: body.email, type: "sign-in" } });
+  const data: StoreInvitationCodeResponse = { sentTo: body.email };
+  return c.json({ success: true, data });
+}
+
+/* POST /store/invitations/:token/accept {email, otp} — passwordless-access
+   D10 over cash-at-stores D5 and T089, in this order:
      1. the token opens an invitation (D4);
-     2. an email with a user, or an operator's, is EMAIL_TAKEN — the same
-        word, so an operator's address is not revealed (D2);
-     3. the user is born through Better Auth, with no username;
-     4. in one batch: the username (the store's phone, as `nationalPhone`
-        reads it — L5), the store's user and `active`, the invitation
-        `accepted`. A store another request took meanwhile writes no row,
-        and is the same refusal;
-     5. the código goes out (best-effort: the app's "Reenviar" retries).
-   Steps 3–4 failing remove the user, and the invitation stays `sent`. */
+     2. a taken address — a user has it, or it is an operator's (D2: the
+        same word, so an operator's address is not revealed) — is checked
+        with the plugin's `checkVerificationOTP`, which validates without
+        consuming (measured 2026-10-02, M6). A wrong código answers as for
+        anyone; a right one is EMAIL_TAKEN, named only now (FR-032), and the
+        código is deleted. The invitation stays `sent`;
+     3. a new address goes through the plugin's `signInEmailOTP` with the
+        shopkeeper's name: the user is born verified, with a session;
+     4. the race guard: a user that existed before step 2, or already holds
+        a membership or a store, is someone else's — its session from this
+        request goes, nothing is linked, EMAIL_TAKEN;
+     5. T089's batch: the store linked first, then the username (the
+        store's phone, as `nationalPhone` reads it — L5) and the invitation
+        `accepted` only if the link is this user's;
+     6. the cookies are forwarded. The store becomes `active` here, at the
+        código, never at the email (FR-031).
+   Step 5 failing removes the user step 3 made (D5's rollback), and the
+   invitation stays `sent`. */
 export async function acceptInvitation(c: Ctx, token: string, body: AcceptStoreInvitationRequest) {
   const db = drizzle(c.env.DB);
   const now = new Date();
@@ -533,16 +603,56 @@ export async function acceptInvitation(c: Ctx, token: string, body: AcceptStoreI
   if (!open) return refuse(c, "INVALID_INVITATION", 400);
   const { store, invitation } = open;
 
-  const email = body.email;
-  const [existing] = await db.select({ id: userTable.id }).from(userTable).where(eq(userTable.email, email));
-  if (existing || isPlatformOperator(c.env, email)) return refuse(c, "EMAIL_TAKEN", 409);
-
+  const { email, otp } = body;
   const auth = makeAuth(c.env);
-  const { response } = await auth.api.signUpEmail({
-    body: { name: store.shopkeeperName, email, password: body.password },
-    returnHeaders: true,
-  });
+  const [existing] = await db.select({ id: userTable.id }).from(userTable).where(eq(userTable.email, email));
+  if (existing || isPlatformOperator(c.env, email)) {
+    try {
+      await auth.api.checkVerificationOTP({ body: { email, type: "sign-in", otp } });
+    } catch (e) {
+      /* M6: the plugin checks the código before it looks for the user, so
+         USER_NOT_FOUND (an operator's address with no account) means the
+         código was right */
+      if (codeOf(e) !== "USER_NOT_FOUND") {
+        const refused = otpRefusal(c, e);
+        if (refused) return refused;
+        throw e;
+      }
+    }
+    await dropSignInCode(db, email);
+    return refuse(c, "EMAIL_TAKEN", 409);
+  }
+
+  let signedIn: { headers: Headers; response: { token: string; user: { id: string; createdAt: Date } } };
+  try {
+    /* `name` passes better.ts's 2–80 rule: the operator's create holds
+       `shopkeeperName` to the same (platform schema) */
+    signedIn = await auth.api.signInEmailOTP({
+      body: { email, otp, name: store.shopkeeperName },
+      returnHeaders: true,
+    });
+  } catch (e) {
+    const refused = otpRefusal(c, e);
+    if (refused) return refused;
+    throw e;
+  }
+  const { headers, response } = signedIn;
   const userId = response.user.id;
+
+  /* Step 4, the race guard (D10). Better Auth stores `created_at` to the
+     second, so "before the check" is compared in seconds: a user born in
+     the check's own second is this request's, unless a membership or a
+     store says otherwise. */
+  const bornBefore = Math.floor(new Date(response.user.createdAt).getTime() / 1000) < Math.floor(now.getTime() / 1000);
+  const [[membership], [ownStore]] = await Promise.all([
+    db.select({ id: member.id }).from(member).where(eq(member.userId, userId)).limit(1),
+    db.select({ id: stores.id }).from(stores).where(eq(stores.userId, userId)).limit(1),
+  ]);
+  if (bornBefore || membership || ownStore) {
+    await db.delete(sessionTable).where(eq(sessionTable.token, response.token));
+    return refuse(c, "EMAIL_TAKEN", 409);
+  }
+
   /* T089 (D5's rollback): the store is linked FIRST, and the phone and the
      invitation are written only if that link is this user's — so a
      request that lost the race writes nothing, never meets the phone's
@@ -576,12 +686,80 @@ export async function acceptInvitation(c: Ctx, token: string, body: AcceptStoreI
     throw e;
   }
 
-  try {
-    await auth.api.sendVerificationOTP({ body: { email, type: "email-verification" } });
-  } catch (e) {
-    console.error("store acceptance code failed", e);
+  forwardCookies(c, headers);
+  const data: AcceptStoreInvitationResponse = { storeName: store.name };
+  return c.json({ success: true, data }, 201);
+}
+
+/* ---- The sign-in by phone, session-less (passwordless-access D10) ----
+
+   The network knows the shopkeeper by the phone (spec Assumptions); the
+   código goes to the store account's email. Two calls, so each answer is
+   the same for every phone (FR-033, cash-at-stores D3). Neither ever
+   creates a user (FR-034): `signInEmailOTP` is only reached with an
+   address a store row already names. */
+
+/* The store a phone signs into: the user whose `username` is the phone
+   (cash-at-stores D3, written only by the acceptance) AND whom a store row
+   names. A phone with neither is no store's. */
+async function storeByPhone(db: DB, phone: string) {
+  const [row] = await db
+    .select({ email: userTable.email, storeName: stores.name, status: stores.status })
+    .from(userTable)
+    .innerJoin(stores, eq(stores.userId, userTable.id))
+    .where(eq(userTable.username, phone))
+    .limit(1);
+  return row ?? null;
+}
+
+const badPhone = (c: Ctx) => refuse(c, "VALIDATION_ERROR", 400);
+
+/* POST /store/sign-in/code {phone} — always `{sent: true}` for a
+   well-formed phone; the código goes out only when a store names it */
+export async function sendSignInCode(c: Ctx, body: StoreSignInCodeRequest) {
+  const phone = nationalPhone(body.phone);
+  if (!phone) return badPhone(c);
+  const found = await storeByPhone(drizzle(c.env.DB), phone);
+  if (found) {
+    await makeAuth(c.env).api.sendVerificationOTP({ body: { email: found.email, type: "sign-in" } });
   }
-  return c.json({ success: true, data: { email } }, 201);
+  const data: StoreSignInCodeResponse = { sent: true };
+  return c.json({ success: true, data });
+}
+
+/* POST /store/sign-in {phone, otp}. A phone no store names answers
+   INVALID_OTP, exactly as a wrong código does. The código is checked
+   before the store's status, so a suspension is said only to whoever
+   holds the store's código — and the session that check opened goes at
+   once, as `requireStore` deletes a suspended store's (FR-014). A legacy
+   shopkeeper who never typed their first código is verified here, and the
+   plugin drops the password and sessions they held (measured: its
+   `revokeUnprovenAccountAccess`). */
+export async function signInWithCode(c: Ctx, body: StoreSignInRequest) {
+  const phone = nationalPhone(body.phone);
+  if (!phone) return badPhone(c);
+  const db = drizzle(c.env.DB);
+  const found = await storeByPhone(db, phone);
+  if (!found) return refuse(c, "INVALID_OTP", 400);
+
+  let signedIn: { headers: Headers; response: { token: string } };
+  try {
+    signedIn = await makeAuth(c.env).api.signInEmailOTP({
+      body: { email: found.email, otp: body.otp },
+      returnHeaders: true,
+    });
+  } catch (e) {
+    const refused = otpRefusal(c, e);
+    if (refused) return refused;
+    throw e;
+  }
+  if (found.status === "suspended") {
+    await db.delete(sessionTable).where(eq(sessionTable.token, signedIn.response.token));
+    return c.json({ success: false, error: { code: "STORE_SUSPENDED" } }, 403);
+  }
+  forwardCookies(c, signedIn.headers);
+  const data: StoreSignInResponse = { storeName: found.storeName };
+  return c.json({ success: true, data });
 }
 
 /* ---- The cash book (D19, D20) ---- */

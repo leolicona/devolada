@@ -8,6 +8,7 @@ import {
   stubOperatorReaderApi,
   stubOperatorStoresApi,
   stubRedApi,
+  storeAccessScreens,
 } from "./stubs";
 
 /* docs/legacy/polish/responsive.spec.md — US-P03.
@@ -285,8 +286,10 @@ const redScreens: { name: string; url: string; stub?: (page: Page) => Promise<vo
      cash book — their links clear 48px too */
   { name: "Movimientos of one business", url: `${RED}/movimientos?businessId=business-1&kind=collection`, ready: "Ver todos" },
   { name: "the hand-overs", url: `${RED}/caja/entregas?businessId=business-1`, ready: "«Faltaron $200 en el sobre»" },
-  { name: "the sign-in", url: `${RED}/entrar`, ready: "Olvidé mi contraseña" },
-  { name: "the recovery", url: `${RED}/recuperar`, ready: "Volver a entrar" },
+  /* passwordless-access US6: the phone and its código, no password; the
+     old recovery address lands on the sign-in (D10) */
+  { name: "the sign-in", url: `${RED}/entrar`, ready: "Enviar código" },
+  { name: "the old recovery address", url: `${RED}/recuperar`, ready: "Enviar código" },
   { name: "the invitation", url: `${RED}/invitacion/tok-1`, ready: "Abarrotes Lupita" },
   {
     name: "the suspended store",
@@ -465,4 +468,41 @@ test.describe("passwordless-access: the access screens at 360/768/1280", () => {
       });
     }
   }
+});
+
+/* passwordless-access US6 (T074; constitution IV, VI): the store app's ways
+   in — /entrar's two steps and the browser without passkey support, the
+   invitation's three steps, and Caja's keys card — at the floor, the
+   tablet, the computer layout from 1024 px (cash-at-stores D32) and the
+   desktop. None scrolls sideways or cuts a word, every control is a 48 px
+   target, and the activation, the screen's decisive action, is 64 px
+   (contracts/store-access.md § UI). */
+test.describe("passwordless-access US6: the store app's access at 360/768/1024/1280", () => {
+  for (const size of [PHONE, TABLET, { width: 1024, height: 800 }, DESKTOP]) {
+    for (const screen of storeAccessScreens(RED)) {
+      test(`${screen.name} fits ${size.width}px with 48px targets`, async ({ page }) => {
+        await page.setViewportSize(size);
+        await screen.stub(page);
+        await page.goto(screen.url);
+        if (screen.open) await screen.open(page);
+        await expect(page.getByText(screen.ready, { exact: true }).first()).toBeVisible();
+        await expectNoHorizontalScroll(page);
+        await expectNothingClipped(page);
+        if (screen.touch) await expectTouchTargets(page, 48, "main");
+        if (screen.decisive) {
+          const box = await page.getByRole("button", { name: screen.decisive }).boundingBox();
+          expect(box!.height, `${screen.decisive}'s height`).toBeGreaterThanOrEqual(64);
+        }
+      });
+    }
+  }
+
+  /* D10: no password is left to recover — the old address, which an email
+     or a bookmark may carry, lands on the sign-in */
+  test("/recuperar lands on /entrar", async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await page.goto(`${RED}/recuperar`);
+    await expect(page.getByRole("button", { name: "Enviar código" })).toBeVisible();
+    await expect(page).toHaveURL(`${RED}/entrar`);
+  });
 });

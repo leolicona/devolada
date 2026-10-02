@@ -1,7 +1,6 @@
-import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter, Outlet, redirect } from "@tanstack/react-router";
 import { TabLayout } from "./layout/TabLayout";
 import { LoginScreen } from "./features/auth/LoginScreen";
-import { RecoverScreen } from "./features/auth/RecoverScreen";
 import { InvitationScreen } from "./features/auth/InvitationScreen";
 import { CounterIndex, CounterLayout } from "./features/counter/CounterLayout";
 import { QuoteScreen } from "./features/counter/QuoteScreen";
@@ -17,7 +16,16 @@ import { HandoversScreen } from "./features/cashbox/HandoversScreen";
 const rootRoute = createRootRoute({ component: () => <Outlet /> });
 
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: "/entrar", component: LoginScreen });
-const recoverRoute = createRoute({ getParentRoute: () => rootRoute, path: "/recuperar", component: RecoverScreen });
+/* passwordless-access D10: no password is left to recover — a shopkeeper
+   who lost the way in gets a código at /entrar. The old address still
+   lands somewhere that works (an email or a bookmark may carry it). */
+const recoverRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/recuperar",
+  beforeLoad: () => {
+    throw redirect({ to: "/entrar", replace: true });
+  },
+});
 const invitationRoute = createRoute({ getParentRoute: () => rootRoute, path: "/invitacion/$token", component: InvitationScreen });
 
 const appRoute = createRoute({ getParentRoute: () => rootRoute, id: "app", component: TabLayout });

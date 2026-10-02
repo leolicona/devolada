@@ -3,17 +3,17 @@ import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { and, eq } from "drizzle-orm";
 import { account, passkey, session as sessionTable, stores, topUps, user as userTable } from "../src/db/schema";
-import { makeAuth } from "../src/auth/better";
 import { eraseLegacyCredentials } from "../src/auth/credentials-sweep";
 import worker from "../src/index";
 import type { Bindings } from "../src/env";
-import { seedBusiness, seedMember, seedSession } from "./helpers";
-import { seedActiveStore, seedStore } from "./store-helpers";
+import { seedBusiness, seedLegacyUser, seedMember, seedSession } from "./helpers";
+import { seedStore } from "./store-helpers";
 
 /* passwordless-access US2 (FR-029, research D5): the passwords that exist
    are erased by a sweep on the every-minute cron, and so are the legacy
    accounts whose email was never proven and that nothing names. PR 1
-   keeps the store's password: the store app still uses it until US6. */
+   kept the store's password while the store app still used it;
+   passwordless-access US6 (PR 2, T064) erases it too. */
 
 const db = () => drizzle(env.DB);
 const bindings = env as unknown as Bindings;
@@ -23,11 +23,8 @@ const credentialsOf = async (userId: string) =>
   db().select().from(account).where(and(eq(account.userId, userId), eq(account.providerId, "credential")));
 
 /* A user as the retired password doors left one: a `credential` account */
-async function withPassword(name: string, email: string, verified: boolean) {
-  const { user } = await makeAuth(bindings).api.signUpEmail({ body: { name, email, password: "una-clave-123" } });
-  await db().update(userTable).set({ emailVerified: verified }).where(eq(userTable.id, user.id));
-  return user.id;
-}
+const withPassword = (name: string, email: string, verified: boolean) =>
+  seedLegacyUser(name, email, { emailVerified: verified });
 
 describe("passwordless-access US2 — the sweep erases the passwords (D5, FR-029)", () => {
   it("deletes a panel user's password, and keeps the user", async () => {
@@ -40,11 +37,17 @@ describe("passwordless-access US2 — the sweep erases the passwords (D5, FR-029
     expect(await db().select().from(userTable).where(eq(userTable.id, userId))).toHaveLength(1);
   });
 
-  it("keeps a store user's password in PR 1: the store app signs in with it until US6", async () => {
-    const { userId } = await seedActiveStore({ phone: "5512345678" });
+  it("erases a store user's password too, and keeps the user and the store (passwordless-access US6, T064)", async () => {
+    const store = await seedStore({ status: "active", phone: "5512345678" });
+    const userId = await withPassword("Lupita", "lupita@correo.mx", true);
+    await db().update(stores).set({ userId }).where(eq(stores.id, store.id));
     expect(await credentialsOf(userId)).toHaveLength(1);
-    await eraseLegacyCredentials(bindings, later());
-    expect(await credentialsOf(userId)).toHaveLength(1);
+
+    expect(await eraseLegacyCredentials(bindings, later())).toEqual({ credentials: 1, users: 0 });
+    expect(await credentialsOf(userId)).toHaveLength(0);
+    expect(await db().select().from(userTable).where(eq(userTable.id, userId))).toHaveLength(1);
+    const [row] = await db().select().from(stores).where(eq(stores.id, store.id));
+    expect(row.userId).toBe(userId);
   });
 
   it("leaves an account still being born alone, for the grace (D5)", async () => {
@@ -98,8 +101,8 @@ describe("passwordless-access US2 — the sweep erases the legacy unverified acc
       expect(await db().select().from(userTable).where(eq(userTable.id, id)), id).toHaveLength(1);
     }
     expect(await credentialsOf(panel)).toHaveLength(0);
-    /* the shopkeeper keeps their password (PR 1); the others lose theirs */
-    expect(await credentialsOf(shopkeeper)).toHaveLength(1);
+    /* every password goes, the shopkeeper's too (US6, T064) */
+    expect(await credentialsOf(shopkeeper)).toHaveLength(0);
     expect(await credentialsOf(submitter)).toHaveLength(0);
   });
 });

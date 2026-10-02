@@ -20,8 +20,6 @@ import type { Bindings } from "../src/env";
    module top level): it signs a deterministic token, and the seed
    functions insert the matching session row. */
 
-export const PASSWORD = "devolada123";
-
 /* In-memory R2 for the proof bucket: real R2 writes trip
    vitest-pool-workers' isolated storage (its snapshotter rejects the
    bucket's sqlite WAL files). D1 stays real — the "no database mocks"
@@ -137,6 +135,29 @@ async function seedAuthUser(
     name,
     email,
     emailVerified: opts.emailVerified !== false,
+  });
+  return user.id;
+}
+
+/* passwordless-access D14 (PR 2): a user as the retired password doors
+   left one — a `user` row and a `credential` account holding a password
+   hash — for the cases the sweep and the código are proven against (D5,
+   analysis G1). `signUpEmail` cannot write one any more: `emailAndPassword`
+   is off (D4). Unverified by default, as the old sign-up left a person
+   before their first código. */
+export async function seedLegacyUser(
+  name: string,
+  email: string,
+  opts: { emailVerified?: boolean } = {},
+) {
+  const ctx = await auth().$context;
+  const user = await ctx.internalAdapter.createUser({ name, email, emailVerified: opts.emailVerified === true });
+  await ctx.internalAdapter.linkAccount({
+    userId: user.id,
+    providerId: "credential",
+    accountId: user.id,
+    /* Never checked by anything now: no door reads a password */
+    password: "legacy-salt:legacy-hash",
   });
   return user.id;
 }

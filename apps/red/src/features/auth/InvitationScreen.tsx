@@ -3,18 +3,21 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MailCheck, TriangleAlert } from "lucide-react";
 import { Alert, Button, Field, Input, Pending, Skeleton } from "@devolada/ui";
-import type { AcceptStoreInvitationRequest, InvitationPreviewResponse } from "@devolada/api/store-schema";
-import { api, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { canVerifyPerson } from "@/lib/auth-client";
 import { AccessLayout, EMAIL_SHAPE, FieldError } from "./AccessLayout";
-import { sendCode, verifyEmail } from "./session";
+import { CodeStep } from "./CodeStep";
+import { sendProblemLine } from "./keys";
+import { OfferStep } from "./OfferStep";
+import { acceptInvitation, previewInvitation, sendInvitationCode } from "./session";
 
-/* cash-at-stores FR-009, D4, D5: the invitation's two steps — an email and
-   a password, then the código that signs the shopkeeper in. Every bad
-   invitation reads the same: it no longer works. */
-
-const preview = (token: string) => api<InvitationPreviewResponse>(`/store/invitations/${encodeURIComponent(token)}`);
-const accept = (token: string, body: AcceptStoreInvitationRequest) =>
-  api<{ email: string }>(`/store/invitations/${encodeURIComponent(token)}/accept`, { method: "POST", body: JSON.stringify(body) });
+/* cash-at-stores FR-009, D4; passwordless-access D10 (contracts/
+   store-access.md § /invitacion/:token): the invitation in three steps —
+   the email, its código, then the key where the device can verify the
+   person (D7). The código goes to whatever address was typed; a taken one
+   is named only after its código (FR-032), and the store becomes active at
+   the código, not at the email (FR-031). Every bad invitation reads the
+   same: it no longer works. */
 
 function Invalid() {
   return (
@@ -27,18 +30,26 @@ function Invalid() {
   );
 }
 
+const TAKEN = "Ese correo ya tiene una cuenta en Devolada. Usa otro para tu tienda.";
+const isInvalid = (e: unknown) => e instanceof ApiError && e.code === "INVALID_INVITATION";
+
 export function InvitationScreen() {
   const { token } = useParams({ strict: false }) as { token: string };
-  const invitation = useQuery({ queryKey: ["store-invitation", token], queryFn: () => preview(token) });
+  const invitation = useQuery({ queryKey: ["store-invitation", token], queryFn: () => previewInvitation(token) });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [step, setStep] = useState<"email" | "code" | "offer">("email");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [accepted, setAccepted] = useState<string | null>(null);
-  const [code, setCode] = useState("");
+  const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [invalid, setInvalid] = useState(false);
+  const address = email.trim().toLowerCase();
+  const goHome = () => void navigate({ to: "/", replace: true });
+
+  /* Accepted: the invitation is spent, so whatever its preview says now
+     must not take the activation away */
+  if (step === "offer") return <OfferStep onDone={goHome} />;
 
   if (invitation.isPending) {
     return (
@@ -50,94 +61,90 @@ export function InvitationScreen() {
     );
   }
   if (invalid || invitation.isError || invitation.data?.state !== "open") return <Invalid />;
-  const { storeName, phoneTail } = invitation.data;
+  const { storeName } = invitation.data;
 
-  if (accepted) {
+  if (step === "code") {
     return (
       <AccessLayout title="Escribe el código">
         <Alert layout="icon">
           <MailCheck aria-hidden />
-          Te enviamos un código a {accepted}. Escríbelo para entrar.
+          Te enviamos un código a {address}. Vence en 10 minutos.
         </Alert>
-        <Field label="Código">
-          <Input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
-        </Field>
-        <FieldError id="code-error">{error}</FieldError>
-        <Pending active={busy} label="Verificando el código">
-          <Button
-            className="w-full"
-            disabled={busy || code.length !== 6}
-            onClick={async () => {
-              setBusy(true);
-              setError(null);
-              try {
-                await verifyEmail(accepted, code);
-                await queryClient.invalidateQueries({ queryKey: ["session"] });
-                void navigate({ to: "/" });
-              } catch {
-                setError("El código no es válido o ya venció. Pide uno nuevo.");
-              } finally {
-                setBusy(false);
+        <CodeStep
+          onSubmit={async (otp) => {
+            try {
+              await acceptInvitation(token, address, otp);
+            } catch (e) {
+              if (isInvalid(e)) return setInvalid(true);
+              /* FR-032: named only now, after a right código. Back to the
+                 address, kept, so one letter can be changed */
+              if (e instanceof ApiError && e.code === "EMAIL_TAKEN") {
+                setError(TAKEN);
+                setStep("email");
+                return;
               }
-            }}
-          >
-            Entrar
-          </Button>
-        </Pending>
-        {/* T083 (constitution VI): the link button keeps a 48px target */}
-        <Button
-          variant="link"
-          className="min-h-12"
-          onClick={async () => {
-            setError(null);
-            await sendCode(accepted, "email-verification").catch(() => setError("No pudimos reenviar el código."));
+              throw e;
+            }
+            /* A new session: whatever the cache knew of the last one is stale */
+            queryClient.removeQueries({ queryKey: ["session"] });
+            if (await canVerifyPerson()) setStep("offer");
+            else goHome();
           }}
-        >
-          Reenviar código
-        </Button>
+          onResend={() =>
+            sendInvitationCode(token, address).catch((e: unknown) => {
+              if (isInvalid(e)) setInvalid(true);
+              throw e;
+            })
+          }
+          other={{ label: "Usar otro correo", onClick: () => setStep("email") }}
+        />
       </AccessLayout>
     );
   }
 
-  const emailProblem = email && !EMAIL_SHAPE.test(email.trim()) ? "Escribe un correo válido, como nombre@dominio.com." : null;
-  const passwordProblem = password && password.length < 8 ? "Usa al menos 8 caracteres." : null;
+  const emailProblem = touched && !EMAIL_SHAPE.test(address) ? "Escribe un correo válido, como nombre@dominio.com." : null;
 
   return (
     <AccessLayout title={`Bienvenido a Devolada, ${storeName}`}>
-      <p className="text-base text-ink-soft">
-        Entrarás con tu teléfono (termina en <span className="font-mono">{phoneTail}</span>) y una contraseña. Tu correo
-        sirve para recuperar el acceso.
-      </p>
+      <p className="text-base text-ink-soft">Entrarás con tu huella o rostro, o con un código que te enviamos a tu correo.</p>
       <form
         className="space-y-4"
+        noValidate
         onSubmit={async (e) => {
           e.preventDefault();
+          setTouched(true);
+          if (!EMAIL_SHAPE.test(address) || busy) return;
           setBusy(true);
           setError(null);
           try {
-            const { email: sentTo } = await accept(token, { email: email.trim(), password });
-            setAccepted(sentTo);
+            await sendInvitationCode(token, address);
+            setStep("code");
           } catch (err) {
-            const code = err instanceof ApiError ? err.code : "";
-            if (code === "INVALID_INVITATION") setInvalid(true);
-            else if (code === "EMAIL_TAKEN") setError("Ese correo ya tiene una cuenta. Usa otro.");
-            else setError("No pudimos aceptar la invitación. Intenta de nuevo.");
+            if (isInvalid(err)) setInvalid(true);
+            else if (err instanceof ApiError && err.code === "VALIDATION_ERROR") setError("Escribe un correo válido, como nombre@dominio.com.");
+            else setError(sendProblemLine(err));
           } finally {
             setBusy(false);
           }
         }}
       >
-        <Field label="Correo de recuperación">
-          <Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <Field label="Tu correo">
+          <Input
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (error === TAKEN) setError(null);
+            }}
+            onBlur={() => setTouched(Boolean(email))}
+            aria-invalid={Boolean(emailProblem || error === TAKEN) || undefined}
+          />
         </Field>
         <FieldError id="email-error">{emailProblem}</FieldError>
-        <Field label="Contraseña">
-          <Input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </Field>
-        <FieldError id="password-error">{passwordProblem}</FieldError>
-        <FieldError id="accept-error">{error}</FieldError>
-        <Pending active={busy} label="Aceptando la invitación">
-          <Button type="submit" className="w-full" disabled={busy || !email || !password || Boolean(emailProblem || passwordProblem)}>
+        <FieldError id="invitation-error">{error}</FieldError>
+        <Pending active={busy} label="Enviando el código">
+          <Button type="submit" className="w-full" disabled={busy || !EMAIL_SHAPE.test(address)}>
             Continuar
           </Button>
         </Pending>

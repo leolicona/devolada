@@ -1,6 +1,7 @@
 import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
 import {
+  acceptStoreInvitationResponse,
   cashboxResponse,
   collectionReceiptResponse,
   collectionStatusResponse,
@@ -10,6 +11,9 @@ import {
   storeMeResponse,
   storeQuoteResponse,
   storeSearchResponse,
+  storeInvitationCodeResponse,
+  storeSignInCodeResponse,
+  storeSignInResponse,
 } from "@devolada/api/store-schema";
 
 /* The store app's network layer (constitution IV): every fixture is parsed
@@ -21,6 +25,8 @@ export const storeMe = storeMeResponse.parse({
   storeId: "store-1",
   name: "Abarrotes Lupita",
   businessName: "WiFi Plus",
+  /* passwordless-access D8: where Caja's step-up sends its código */
+  email: "lupita@correo.mx",
 });
 
 export const searchRows = storeSearchResponse.parse({
@@ -109,14 +115,29 @@ export const handoverList = (handovers: unknown[], nextCursor: string | null = n
 export const invitation = (state: "open" | "invalid") =>
   invitationPreviewResponse.parse(state === "open" ? { state, storeName: "Abarrotes Lupita", phoneTail: "5678" } : { state });
 
+/* passwordless-access D10: the store's two doors, each answer parsed by its
+   schema (contracts/store-access.md) */
+export const invitationCodeSent = (sentTo = "lupita@correo.mx") => storeInvitationCodeResponse.parse({ sentTo });
+export const invitationAccepted = acceptStoreInvitationResponse.parse({ storeName: "Abarrotes Lupita" });
+export const signInCodeSent = storeSignInCodeResponse.parse({ sent: true });
+export const signedIn = storeSignInResponse.parse({ storeName: "Abarrotes Lupita" });
+
 export const ok = (data: unknown, status = 200) => HttpResponse.json({ success: true, data }, { status });
 export const fail = (code: string, status: number) => HttpResponse.json({ success: false, error: { code } }, { status });
+/* The store routes' limiter (`rateLimitRoute`, apps/api/src/auth/
+   rate-limit.ts) answers 429 in the envelope (D3, FR-027) */
+export const tooMany = () => fail("TOO_MANY_REQUESTS", 429);
 
 /* Better Auth endpoints have no envelope (constitution III's exemption) */
 export const baOk = () => HttpResponse.json({});
 export const baFail = (code: string, status: number) => HttpResponse.json({ code }, { status });
+export const baStatus = (body: Record<string, unknown>) => HttpResponse.json(body);
+/* Better Auth's limiter answers 429 with its own body (D3, FR-027) */
+export const baTooMany = () => HttpResponse.json({ message: "Too many requests. Please try again later." }, { status: 429 });
 
 type Reply = Response | Promise<Response>;
+type Body = Record<string, unknown>;
+const bodyOf = async (request: Request) => (await request.json()) as Body;
 
 export const handlers = {
   session: (r: () => Reply) => http.get("/auth/me", () => r()),
@@ -131,15 +152,28 @@ export const handlers = {
   /* T080 */
   handovers: (r: (url: URL) => Reply) => http.get("/store/handovers", ({ request }) => r(new URL(request.url))),
   invitation: (r: (token: string) => Reply) => http.get("/store/invitations/:token", ({ params }) => r(String(params.token))),
-  accept: (r: (body: unknown) => Reply) =>
-    http.post("/store/invitations/:token/accept", async ({ request }) => r(await request.json())),
-  signIn: (r: (body: unknown) => Reply) => http.post("/auth/sign-in/username", async ({ request }) => r(await request.json())),
+  /* passwordless-access D10: the four store routes. Each hands over the
+     body it received, so a test reads what the screen sent. */
+  invitationCode: (r: (body: Body, token: string) => Reply = () => ok(invitationCodeSent())) =>
+    http.post("/store/invitations/:token/code", async ({ request, params }) => r(await bodyOf(request), String(params.token))),
+  accept: (r: (body: Body, token: string) => Reply = () => ok(invitationAccepted, 201)) =>
+    http.post("/store/invitations/:token/accept", async ({ request, params }) => r(await bodyOf(request), String(params.token))),
+  signInCode: (r: (body: Body) => Reply = () => ok(signInCodeSent)) =>
+    http.post("/store/sign-in/code", async ({ request }) => r(await bodyOf(request))),
+  signIn: (r: (body: Body) => Reply = () => ok(signedIn)) => http.post("/store/sign-in", async ({ request }) => r(await bodyOf(request))),
   signOut: () => http.post("/auth/sign-out", () => baOk()),
-  sendCode: (r: (body: unknown) => Reply) =>
-    http.post("/auth/email-otp/send-verification-otp", async ({ request }) => r(await request.json())),
-  verifyEmail: (r: (body: unknown) => Reply) => http.post("/auth/email-otp/verify-email", async ({ request }) => r(await request.json())),
-  resetPassword: (r: (body: unknown) => Reply) =>
-    http.post("/auth/email-otp/reset-password", async ({ request }) => r(await request.json())),
+  /* D8, D11: Better Auth's own endpoints Caja's card reaches, in Better
+     Auth's own shapes (envelope-exempt, as `baPost` expects) */
+  stepUpCode: (r: (body: Body) => Reply = () => baStatus({ success: true })) =>
+    http.post("/auth/email-otp/send-verification-otp", async ({ request }) => r(await bodyOf(request))),
+  stepUpSignIn: (r: (body: Body) => Reply = () => baStatus({ token: "test-session-token", user: { id: "user-1" } })) =>
+    http.post("/auth/sign-in/email-otp", async ({ request }) => r(await bodyOf(request))),
+  passkeyList: (r: () => Reply) => http.get("/auth/passkey/list-user-passkeys", () => r()),
+  passkeyDelete: (r: (body: Body) => Reply) => http.post("/auth/passkey/delete-passkey", async ({ request }) => r(await bodyOf(request))),
+  revokeOtherSessions: (r: () => Reply = () => baStatus({ status: true })) => http.post("/auth/revoke-other-sessions", () => r()),
 };
 
-export const server = setupServer();
+/* passwordless-access FR-036: Caja's card lists the keys on every device, so
+   every screen that shows Caja asks for the list. A store with none is the
+   ambient answer; a test about the card replaces it. */
+export const server = setupServer(http.get("/auth/passkey/list-user-passkeys", () => HttpResponse.json([])));

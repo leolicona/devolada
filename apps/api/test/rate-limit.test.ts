@@ -12,7 +12,9 @@ import { app, json } from "./helpers";
    for one keeps the email-OTP plugin's 3 per 60 s — what stops a script
    from filling an inbox; typing one gets 5 per 60 s, so a person who
    mistyped twice can still paste it. The password door's cases left with
-   the door (D4). */
+   the door (D4), and the store's verification code check (`verify-email`)
+   with its own in passwordless-access US6 — the store routes' limits are
+   proven in passwordless-store.test.ts. */
 
 const armed = () => {
   const { AUTH_RATE_LIMIT: _off, ...rest } = env as unknown as Record<string, unknown>;
@@ -39,13 +41,6 @@ describe("passwordless-access US2 — the código doors are limited, and the cou
   it("typing a código gets five tries a minute: the sixth answers 429", async () => {
     for (let i = 0; i < 5; i++) expect((await enter(armed())).status).not.toBe(429);
     expect((await enter(armed())).status).toBe(429);
-  });
-
-  it("the code check of the store's verification keeps its own rule: the sixth verify-email in a minute answers 429", async () => {
-    const attempt = async () =>
-      (await app()).request("/auth/email-otp/verify-email", json({ email: "nadie@business.mx", otp: "000000" }), armed());
-    for (let i = 0; i < 5; i++) expect((await attempt()).status).not.toBe(429);
-    expect((await attempt()).status).toBe(429);
   });
 
   it("the suite's pin disarms both doors under AUTH_RATE_LIMIT=off", async () => {

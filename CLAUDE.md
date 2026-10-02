@@ -153,8 +153,11 @@ apps/red      the shopkeeper's app, phone-first, no offline work (assets
               (cash-at-stores D32): Cobrar (search → debt → record → folio and the
               WhatsApp receipt), Caja and Movimientos (the store's cash
               book, the hand-over). Its own session kind, the store actor
-              (`requireStore`); the cash book is `store_ledger`, written
-              only by `src/store-ledger/` (cash-at-stores D19)
+              (`requireStore`); no account holds a password: the
+              shopkeeper's código is asked by phone and goes to the
+              store's email (passwordless-access D10); the cash book is
+              `store_ledger`, written only by `src/store-ledger/`
+              (cash-at-stores D19)
 packages/ui   design tokens + the atoms every surface renders
 ```
 

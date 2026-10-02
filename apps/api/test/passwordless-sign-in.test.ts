@@ -3,9 +3,7 @@ import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { and, eq } from "drizzle-orm";
 import { account, passkey, session as sessionTable, user as userTable } from "../src/db/schema";
-import { makeAuth } from "../src/auth/better";
-import type { Bindings } from "../src/env";
-import { app, json, seedBusiness, seedSession, sentCode, sessionCookieHeader, sessionOf } from "./helpers";
+import { app, json, seedBusiness, seedLegacyUser, seedSession, sentCode, sessionCookieHeader, sessionOf } from "./helpers";
 
 /* passwordless-access US2 (contracts/panel-access.md): the sign-in is the
    same door as the registration (D1) — a código for any address, the same
@@ -55,10 +53,7 @@ describe("passwordless-access US2 — the código opens an existing account (D1,
 
 describe("passwordless-access US2 — the password door is closed (D4, FR-010)", () => {
   it("POST /auth/sign-in/email answers 404, even with a password that once worked", async () => {
-    await makeAuth(env as unknown as Bindings).api.signUpEmail({
-      body: { name: "Ana", email: "ana@negocio.mx", password: "una-clave-123" },
-    });
-    await db().update(userTable).set({ emailVerified: true }).where(eq(userTable.email, "ana@negocio.mx"));
+    await seedLegacyUser("Ana", "ana@negocio.mx", { emailVerified: true });
     const res = await call("/auth/sign-in/email", json({ email: "ana@negocio.mx", password: "una-clave-123" }));
     expect(res.status).toBe(404);
     expect(res.headers.get("set-cookie")).toBeNull();
@@ -67,9 +62,7 @@ describe("passwordless-access US2 — the password door is closed (D4, FR-010)",
 
 describe("passwordless-access US2 — a legacy unverified account, proven by its código (D1, D5)", () => {
   it("ends verified, and the password and the session it held before the proof are gone", async () => {
-    await makeAuth(env as unknown as Bindings).api.signUpEmail({
-      body: { name: "Legado", email: "legado@negocio.mx", password: "puesta-por-otro" },
-    });
+    await seedLegacyUser("Legado", "legado@negocio.mx");
     const legacy = await userOf("legado@negocio.mx");
     expect(legacy.emailVerified).toBe(false);
     await seedSession(legacy.id, "legado@negocio.mx");

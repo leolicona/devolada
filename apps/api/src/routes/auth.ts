@@ -7,6 +7,7 @@ import { makeAuth } from "../auth/better";
 import { requireAnyActor } from "../auth/middleware";
 import { channelBusiness } from "../store-channel";
 import { creditSummary } from "../credit";
+import type { StoreMeResponse } from "./store/schema";
 
 /* Auth routes (better-auth.spec.md D6): our thin envelope routes first,
    then everything else under /auth/* falls through to the Better Auth
@@ -27,14 +28,20 @@ auth.get("/me", requireAnyActor, async (c) => {
   const db = drizzle(c.env.DB);
   /* cash-at-stores D2: a shopkeeper's session answers the store branch —
      the store, and the one business its counter serves (null while no
-     business has the channel on, FR-015) */
+     business has the channel on, FR-015). passwordless-access D8: and the
+     store account's own email, where Caja's step-up sends its código —
+     shown only to the store's own session, so it reveals nothing. */
   const store = c.get("store");
   if (store) {
     const business = await channelBusiness(db);
-    return c.json({
-      success: true,
-      data: { type: "store" as const, storeId: store.storeId, name: store.name, businessName: business?.name ?? null },
-    });
+    const data: StoreMeResponse = {
+      type: "store",
+      storeId: store.storeId,
+      name: store.name,
+      businessName: business?.name ?? null,
+      email: store.email,
+    };
+    return c.json({ success: true, data });
   }
   const actor = c.get("actor");
   const [business] = await db.select().from(businesses).where(eq(businesses.id, actor.id));

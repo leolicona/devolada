@@ -1,0 +1,478 @@
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { env, fetchMock } from "cloudflare:test";
+import { drizzle } from "drizzle-orm/d1";
+import { and, eq } from "drizzle-orm";
+import {
+  account,
+  member,
+  session as sessionTable,
+  storeInvitations,
+  stores,
+  user as userTable,
+  verification,
+} from "../src/db/schema";
+import { makeAuth } from "../src/auth/better";
+import { eraseLegacyCredentials } from "../src/auth/credentials-sweep";
+import type { Bindings } from "../src/env";
+import {
+  acceptStoreInvitationResponse,
+  storeInvitationCodeResponse,
+  storeMeResponse,
+  storeSignInCodeResponse,
+  storeSignInResponse,
+} from "../src/routes/store/schema";
+import { app, cookiesOf, json, mintCode, seedBusiness, seedLegacyUser, sentCode, sessionCookieHeader, sessionOf } from "./helpers";
+import { seedActiveStore, seedStore } from "./store-helpers";
+
+/* passwordless-access US6 (contracts/store-access.md; research D3, D4, D8,
+   D10): the store app loses its password. The invitation is an email and
+   its código — a taken address is named only after a right código
+   (FR-032), and the store becomes active only at the código (FR-031). The
+   sign-in is the store's phone, with the código sent to the store
+   account's email; every phone gets the same answer (FR-033). No store
+   route but the acceptance ever creates an account (FR-034), and the
+   password doors answer 404 (D4). */
+
+beforeAll(() => {
+  fetchMock.activate();
+  fetchMock.disableNetConnect();
+});
+afterEach(() => fetchMock.assertNoPendingInterceptors());
+
+const db = () => drizzle(env.DB);
+const call = async (path: string, init: RequestInit = {}, e: unknown = env) => (await app()).request(path, init, e as typeof env);
+const userOf = async (email: string) => (await db().select().from(userTable).where(eq(userTable.email, email)))[0];
+const sessionsOf = (userId: string) => db().select().from(sessionTable).where(eq(sessionTable.userId, userId));
+const codeRows = (email: string) => db().select().from(verification).where(eq(verification.identifier, `sign-in-otp-${email}`));
+const invitationRow = async () => (await db().select().from(storeInvitations))[0];
+const storeRow = async (id: string) => (await db().select().from(stores).where(eq(stores.id, id)))[0];
+/* Every código the sender logged in this test (setup.ts keeps them) */
+const loggedCodes = () => (globalThis as { [k: symbol]: Map<string, string> })[Symbol.for("devolada.test.sentCodes")];
+
+/* better-auth D11: the suite pins AUTH_RATE_LIMIT=off; these hand the app
+   an env without the pin (rate-limit.test.ts's `armed`) */
+const armed = () => {
+  const { AUTH_RATE_LIMIT: _off, ...rest } = env as unknown as Record<string, unknown>;
+  return rest;
+};
+
+/* The operator's create, as the panel calls it, answering the plaintext
+   link once — the only place a test can learn a token */
+async function invite(phone = "5512345678") {
+  const business = await seedBusiness({ email: "operador@devolada.app" });
+  const opEnv = { ...(env as unknown as Bindings), PLATFORM_OPERATOR_EMAILS: "operador@devolada.app" };
+  const res = await (await app()).request(
+    "/platform/stores",
+    {
+      ...json({ name: "Abarrotes Lupita", address: "Av. Juárez 12, Centro", shopkeeperName: "Lupita Hernández", phone }),
+      headers: { "Content-Type": "application/json", Cookie: await sessionCookieHeader("operador@devolada.app") },
+    },
+    opEnv as unknown as typeof env,
+  );
+  const { data } = await res.json();
+  return { business, store: data.store as { id: string }, token: (data.invitation.url as string).split("/invitacion/")[1] };
+}
+
+const askCode = (token: string, email: string, e: unknown = env) => call(`/store/invitations/${token}/code`, json({ email }), e);
+const acceptWith = (token: string, email: string, otp: string, e: unknown = env) =>
+  call(`/store/invitations/${token}/accept`, json({ email, otp }), e);
+const askPhoneCode = (phone: string, e: unknown = env) => call("/store/sign-in/code", json({ phone }), e);
+const signIn = (phone: string, otp: string, e: unknown = env) => call("/store/sign-in", json({ phone, otp }), e);
+
+describe("passwordless-access US6 — the invitation's código (D10, FR-031, FR-032)", () => {
+  it("goes to every address — a new one, a user's, an operator's — and answers the address typed", async () => {
+    const { token } = await invite();
+    await seedBusiness({ email: "tomado@correo.mx" });
+    const opEnv = { ...(env as unknown as Bindings), PLATFORM_OPERATOR_EMAILS: "jefa@devolada.app" };
+    for (const email of ["lupita@correo.mx", "tomado@correo.mx", "jefa@devolada.app"]) {
+      const res = await askCode(token, ` ${email.toUpperCase()} `, opEnv);
+      expect(res.status, email).toBe(200);
+      expect(storeInvitationCodeResponse.parse((await res.json()).data)).toEqual({ sentTo: email });
+      expect(sentCode(email)).toMatch(/^\d{6}$/);
+    }
+    /* nothing else moved: no user born, the store still invited */
+    expect(await userOf("lupita@correo.mx")).toBeUndefined();
+    expect(await userOf("jefa@devolada.app")).toBeUndefined();
+    expect((await invitationRow()).status).toBe("sent");
+  });
+
+  it("a bad token is INVALID_INVITATION and sends nothing; a malformed address is VALIDATION_ERROR", async () => {
+    const { token } = await invite();
+    const bad = await askCode("no-such-token", "lupita@correo.mx");
+    expect(bad.status).toBe(400);
+    expect((await bad.json()).error.code).toBe("INVALID_INVITATION");
+    expect(loggedCodes().size).toBe(0);
+
+    const malformed = await askCode(token, "no-es-un-correo");
+    expect(malformed.status).toBe(400);
+    expect((await malformed.json()).error.code).toBe("VALIDATION_ERROR");
+  });
+});
+
+describe("passwordless-access US6 — the acceptance, a new address (D10, cash-at-stores T089)", () => {
+  it("births the user verified, named, with the phone as username and no password; the store active, the invitation accepted, the cookie set", async () => {
+    const { store, token } = await invite();
+    await askCode(token, "lupita@correo.mx");
+    const res = await acceptWith(token, "lupita@correo.mx", sentCode("lupita@correo.mx"));
+    expect(res.status).toBe(201);
+    expect(acceptStoreInvitationResponse.parse((await res.json()).data)).toEqual({ storeName: "Abarrotes Lupita" });
+
+    const user = await userOf("lupita@correo.mx");
+    expect(user).toMatchObject({
+      emailVerified: true,
+      name: "Lupita Hernández",
+      username: "5512345678",
+      displayUsername: "5512345678",
+    });
+    expect(await db().select().from(account).where(eq(account.userId, user.id))).toHaveLength(0);
+    expect(await storeRow(store.id)).toMatchObject({ userId: user.id, status: "active" });
+    expect((await invitationRow()).status).toBe("accepted");
+    /* used: it no longer opens */
+    expect((await (await call(`/store/invitations/${token}`)).json()).data.state).toBe("invalid");
+
+    /* the cookie is the store's session, and /auth/me carries its email (D8) */
+    const me = await call("/auth/me", { headers: { Cookie: sessionOf(res) } });
+    expect(me.status).toBe(200);
+    expect(storeMeResponse.parse((await me.json()).data)).toEqual({
+      type: "store",
+      storeId: store.id,
+      name: "Abarrotes Lupita",
+      businessName: null,
+      email: "lupita@correo.mx",
+    });
+  });
+
+  it("a wrong código is INVALID_OTP and writes nothing; three wrong ones kill it (TOO_MANY_ATTEMPTS)", async () => {
+    const { store, token } = await invite();
+    await askCode(token, "lupita@correo.mx");
+    const right = sentCode("lupita@correo.mx");
+    const wrong = right === "000000" ? "111111" : "000000";
+
+    const first = await acceptWith(token, "lupita@correo.mx", wrong);
+    expect(first.status).toBe(400);
+    expect((await first.json()).error.code).toBe("INVALID_OTP");
+    expect(await userOf("lupita@correo.mx")).toBeUndefined();
+    expect((await storeRow(store.id)).status).toBe("invited");
+
+    await acceptWith(token, "lupita@correo.mx", wrong);
+    await acceptWith(token, "lupita@correo.mx", wrong);
+    const dead = await acceptWith(token, "lupita@correo.mx", right);
+    expect(dead.status).toBe(403);
+    expect((await dead.json()).error.code).toBe("TOO_MANY_ATTEMPTS");
+    expect(await userOf("lupita@correo.mx")).toBeUndefined();
+    expect((await invitationRow()).status).toBe("sent");
+  });
+
+  it("a malformed body is VALIDATION_ERROR: a password, or a código that is not six digits", async () => {
+    const { token } = await invite();
+    for (const body of [
+      { email: "lupita@correo.mx", password: "secreta123" },
+      { email: "lupita@correo.mx", otp: "12345" },
+      { email: "lupita@correo.mx", otp: "abcdef" },
+    ]) {
+      const res = await call(`/store/invitations/${token}/accept`, json(body));
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
+    }
+  });
+});
+
+describe("passwordless-access US6 — the acceptance, a taken address (D10, FR-032)", () => {
+  it("a user's address: a wrong código is INVALID_OTP; EMAIL_TAKEN only after a right one, which then opens nothing", async () => {
+    const { store, token } = await invite();
+    await seedBusiness({ email: "tomado@correo.mx" });
+    const owner = await userOf("tomado@correo.mx");
+    await askCode(token, "tomado@correo.mx");
+    const right = sentCode("tomado@correo.mx");
+
+    const wrong = await acceptWith(token, "tomado@correo.mx", right === "000000" ? "111111" : "000000");
+    expect(wrong.status).toBe(400);
+    expect((await wrong.json()).error.code).toBe("INVALID_OTP");
+
+    const taken = await acceptWith(token, "tomado@correo.mx", right);
+    expect(taken.status).toBe(409);
+    expect((await taken.json()).error.code).toBe("EMAIL_TAKEN");
+    expect(cookiesOf(taken).some((c) => c.includes("session_token"))).toBe(false);
+    /* the código that proved the address is gone: it opens nothing after */
+    expect(await codeRows("tomado@correo.mx")).toHaveLength(0);
+    const reuse = await call("/auth/sign-in/email-otp", json({ email: "tomado@correo.mx", otp: right }));
+    expect(reuse.status).toBe(400);
+
+    /* the owner's account is untouched, and the invitation still open */
+    expect(await userOf("tomado@correo.mx")).toMatchObject({ id: owner.id, username: null });
+    expect(await storeRow(store.id)).toMatchObject({ status: "invited", userId: null });
+    expect((await invitationRow()).status).toBe("sent");
+    expect((await (await call(`/store/invitations/${token}`)).json()).data.state).toBe("open");
+  });
+
+  it("an operator's address with no account: EMAIL_TAKEN after a right código, and no account is born", async () => {
+    const { store, token } = await invite();
+    const opEnv = { ...(env as unknown as Bindings), PLATFORM_OPERATOR_EMAILS: "jefa@devolada.app" };
+    await askCode(token, "jefa@devolada.app", opEnv);
+    const right = sentCode("jefa@devolada.app");
+
+    const wrong = await acceptWith(token, "jefa@devolada.app", right === "000000" ? "111111" : "000000", opEnv);
+    expect(wrong.status).toBe(400);
+    expect((await wrong.json()).error.code).toBe("INVALID_OTP");
+
+    const taken = await acceptWith(token, "jefa@devolada.app", right, opEnv);
+    expect(taken.status).toBe(409);
+    expect((await taken.json()).error.code).toBe("EMAIL_TAKEN");
+    expect(await userOf("jefa@devolada.app")).toBeUndefined();
+    expect(await codeRows("jefa@devolada.app")).toHaveLength(0);
+    expect(await storeRow(store.id)).toMatchObject({ status: "invited", userId: null });
+    expect((await invitationRow()).status).toBe("sent");
+  });
+});
+
+/* The race D10 guards: the address gains an account between the taken
+   check and the código's sign-in. The binding the app gets runs the
+   real D1, and the moment the taken check has read "no user", the other
+   request lands — a verified account with a membership. */
+function racingDB(onChecked: () => Promise<void>): D1Database {
+  const real = env.DB;
+  let fired = false;
+  const wrap = (stmt: D1PreparedStatement): D1PreparedStatement =>
+    new Proxy(stmt, {
+      get(target, prop) {
+        if (prop === "bind") return (...values: unknown[]) => wrap(target.bind(...values));
+        if (prop === "all" || prop === "raw" || prop === "first" || prop === "run") {
+          return async (...args: unknown[]) => {
+            const result = await (target[prop] as (...a: unknown[]) => Promise<unknown>)(...args);
+            if (!fired) {
+              fired = true;
+              await onChecked();
+            }
+            return result;
+          };
+        }
+        const value = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  return new Proxy(real, {
+    get(target, prop) {
+      if (prop === "prepare") {
+        return (query: string) => {
+          const stmt = target.prepare(query);
+          /* the handler's taken check, and nothing else */
+          return !fired && /^select "id" from "user" where "user"\."email" = \?/.test(query) ? wrap(stmt) : stmt;
+        };
+      }
+      const value = Reflect.get(target, prop);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+describe("passwordless-access US6 — the race guard (D10)", () => {
+  it("an address that gains a membership between the check and the sign-in is EMAIL_TAKEN, with no session left and no link written", async () => {
+    const { business, store, token } = await invite();
+    await askCode(token, "lupita@correo.mx");
+    let racerId = "";
+    const racing = {
+      ...(env as unknown as Bindings),
+      DB: racingDB(async () => {
+        const racer = await (await makeAuth(env as unknown as Bindings).$context).internalAdapter.createUser({
+          name: "Otra Persona",
+          email: "lupita@correo.mx",
+          emailVerified: true,
+        });
+        racerId = racer.id;
+        await db().insert(member).values({
+          id: crypto.randomUUID(),
+          organizationId: business.orgId,
+          userId: racer.id,
+          role: "operator",
+          createdAt: new Date(),
+        });
+      }),
+    };
+
+    const res = await acceptWith(token, "lupita@correo.mx", sentCode("lupita@correo.mx"), racing);
+    expect(racerId).not.toBe("");
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("EMAIL_TAKEN");
+    expect(cookiesOf(res).some((c) => c.includes("session_token"))).toBe(false);
+
+    expect(await sessionsOf(racerId)).toHaveLength(0);
+    /* the other person's account is theirs, untouched */
+    expect(await userOf("lupita@correo.mx")).toMatchObject({ id: racerId, name: "Otra Persona", username: null });
+    expect(await storeRow(store.id)).toMatchObject({ status: "invited", userId: null });
+    expect((await invitationRow()).status).toBe("sent");
+  });
+});
+
+describe("passwordless-access US6 — leaving before the código (FR-031, analysis G3)", () => {
+  it("the código alone activates nothing; a second attempt with a new código accepts", async () => {
+    const { store, token } = await invite();
+    await askCode(token, "lupita@correo.mx");
+    const first = sentCode("lupita@correo.mx");
+    /* the person left here */
+    expect(await storeRow(store.id)).toMatchObject({ status: "invited", userId: null });
+    expect((await invitationRow()).status).toBe("sent");
+    expect(await userOf("lupita@correo.mx")).toBeUndefined();
+
+    /* later, back through the same invitation: a new código ends the old one (D2) */
+    await askCode(token, "lupita@correo.mx");
+    const second = sentCode("lupita@correo.mx");
+    if (second !== first) {
+      const stale = await acceptWith(token, "lupita@correo.mx", first);
+      expect(stale.status).toBe(400);
+      expect((await stale.json()).error.code).toBe("INVALID_OTP");
+    }
+    const res = await acceptWith(token, "lupita@correo.mx", second);
+    expect(res.status).toBe(201);
+    expect((await storeRow(store.id)).status).toBe("active");
+    expect((await invitationRow()).status).toBe("accepted");
+  });
+});
+
+describe("passwordless-access US6 — the phone door (D10, FR-033, FR-034)", () => {
+  it("sends the código to the store's email, and the código signs in — the cookie is the store's", async () => {
+    const { store, email, userId } = await seedActiveStore({ phone: "5512345678" });
+    const asked = await askPhoneCode("55 1234 5678");
+    expect(asked.status).toBe(200);
+    expect(storeSignInCodeResponse.parse((await asked.json()).data)).toEqual({ sent: true });
+    expect([...loggedCodes().keys()]).toEqual([email]);
+
+    const res = await signIn("+52 55 1234 5678", sentCode(email));
+    expect(res.status).toBe(200);
+    expect(storeSignInResponse.parse((await res.json()).data)).toEqual({ storeName: store.name });
+    const me = await call("/auth/me", { headers: { Cookie: sessionOf(res) } });
+    expect(storeMeResponse.parse((await me.json()).data)).toMatchObject({ type: "store", storeId: store.id, email });
+    /* the seeded session and the código's */
+    expect(await sessionsOf(userId)).toHaveLength(2);
+  });
+
+  it("a stranger's phone gets the same answer and no código; with any código it is INVALID_OTP, as a wrong código is", async () => {
+    const { email } = await seedActiveStore({ phone: "5512345678" });
+    const stranger = await askPhoneCode("5599999999");
+    expect(stranger.status).toBe(200);
+    expect((await stranger.json()).data).toEqual({ sent: true });
+    expect(loggedCodes().size).toBe(0);
+
+    const strangerTry = await signIn("5599999999", "123456");
+    expect(strangerTry.status).toBe(400);
+    expect((await strangerTry.json()).error.code).toBe("INVALID_OTP");
+
+    await askPhoneCode("5512345678");
+    const right = sentCode(email);
+    const wrong = await signIn("5512345678", right === "000000" ? "111111" : "000000");
+    expect(wrong.status).toBe(400);
+    expect((await wrong.json()).error.code).toBe("INVALID_OTP");
+    expect(cookiesOf(wrong).some((c) => c.includes("session_token"))).toBe(false);
+  });
+
+  it("a phone that is not ten national digits is VALIDATION_ERROR on both calls", async () => {
+    for (const res of [await askPhoneCode("12345"), await signIn("12345", "123456")]) {
+      expect(res.status).toBe(400);
+      expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("an invited store's phone, with no shopkeeper yet, signs nobody in", async () => {
+    await seedStore({ status: "invited", phone: "5512345678" });
+    expect((await (await askPhoneCode("5512345678")).json()).data).toEqual({ sent: true });
+    expect(loggedCodes().size).toBe(0);
+    expect((await (await signIn("5512345678", "123456")).json()).error.code).toBe("INVALID_OTP");
+  });
+
+  it("a suspended store is STORE_SUSPENDED after a right código, with no session row left", async () => {
+    const { store, email, userId } = await seedActiveStore({ phone: "5512345678" });
+    await db().update(stores).set({ status: "suspended" }).where(eq(stores.id, store.id));
+    await db().delete(sessionTable).where(eq(sessionTable.userId, userId));
+
+    await askPhoneCode("5512345678");
+    const res = await signIn("5512345678", sentCode(email));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.code).toBe("STORE_SUSPENDED");
+    expect(cookiesOf(res).some((c) => c.includes("session_token"))).toBe(false);
+    expect(await sessionsOf(userId)).toHaveLength(0);
+  });
+});
+
+describe("passwordless-access US6 — a legacy shopkeeper (analysis G1, D5)", () => {
+  it("who accepted with a password and never typed the código gets in by phone, verified, and keeps no password", async () => {
+    /* as cash-at-stores' acceptance left them before the release */
+    const store = await seedStore({ status: "invited", phone: "5512345678" });
+    const userId = await seedLegacyUser("Lupita Hernández", "lupita@correo.mx");
+    await db().update(userTable).set({ username: "5512345678", displayUsername: "5512345678" }).where(eq(userTable.id, userId));
+    await db().update(stores).set({ userId, status: "active" }).where(eq(stores.id, store.id));
+    await db().update(storeInvitations).set({ status: "accepted" });
+
+    await askPhoneCode("5512345678");
+    const res = await signIn("5512345678", sentCode("lupita@correo.mx"));
+    expect(res.status).toBe(200);
+    expect(await userOf("lupita@correo.mx")).toMatchObject({ id: userId, emailVerified: true, username: "5512345678" });
+    const me = await call("/auth/me", { headers: { Cookie: sessionOf(res) } });
+    expect(me.status).toBe(200);
+    expect((await me.json()).data).toMatchObject({ type: "store", storeId: store.id, email: "lupita@correo.mx" });
+
+    /* and the sweep, past its grace, leaves them no password (T064) */
+    await eraseLegacyCredentials(env as unknown as Bindings, new Date(Date.now() + 60 * 60_000));
+    expect(
+      await db().select().from(account).where(and(eq(account.userId, userId), eq(account.providerId, "credential"))),
+    ).toHaveLength(0);
+    expect(await userOf("lupita@correo.mx")).toBeDefined();
+  });
+});
+
+describe("passwordless-access US6 — no account from the store app but the acceptance (FR-034)", () => {
+  it("asking for códigos and trying them, at the invitation and the phone, creates no user", async () => {
+    const { token } = await invite();
+    const before = (await db().select().from(userTable)).length;
+
+    await askCode(token, "nueva@correo.mx");
+    await askPhoneCode("5599999999");
+    await signIn("5599999999", "123456");
+    /* the phone door never reaches the plugin with an address of its own:
+       even the address's right código, typed with a stranger's phone, opens nothing */
+    await signIn("5599999999", sentCode("nueva@correo.mx"));
+    expect((await db().select().from(userTable)).length).toBe(before);
+
+    /* the acceptance is the one door that births one */
+    expect((await acceptWith(token, "nueva@correo.mx", sentCode("nueva@correo.mx"))).status).toBe(201);
+    expect((await db().select().from(userTable)).length).toBe(before + 1);
+  });
+});
+
+describe("passwordless-access US6 — the retired doors answer 404 (D4)", () => {
+  it("the phone and password, the recovery, the old verification and the HTTP código check", async () => {
+    const { email } = await seedActiveStore({ phone: "5512345678" });
+    const otp = await mintCode(email);
+    const doors: [string, unknown][] = [
+      ["/auth/sign-in/username", { username: "5512345678", password: "devolada123" }],
+      ["/auth/email-otp/reset-password", { email, otp, password: "nueva-clave-1" }],
+      ["/auth/email-otp/request-password-reset", { email }],
+      ["/auth/forget-password/email-otp", { email }],
+      ["/auth/email-otp/verify-email", { email, otp }],
+      ["/auth/email-otp/check-verification-otp", { email, type: "sign-in", otp }],
+    ];
+    for (const [path, body] of doors) {
+      const res = await call(path, json(body));
+      expect(res.status, path).toBe(404);
+      expect(res.headers.get("set-cookie"), path).toBeNull();
+    }
+    /* none of them spent the código: it still opens the account */
+    expect((await call("/auth/sign-in/email-otp", json({ email, otp }))).status).toBe(200);
+  });
+});
+
+describe("passwordless-access US6 — the store routes' limits (D3)", () => {
+  it("the fourth /store/sign-in/code and the sixth /store/sign-in within 60 s answer 429", async () => {
+    for (let i = 0; i < 3; i++) expect((await askPhoneCode("5599999999", armed())).status).toBe(200);
+    const fourth = await askPhoneCode("5599999999", armed());
+    expect(fourth.status).toBe(429);
+    expect(fourth.headers.get("x-retry-after")).toBeTruthy();
+
+    for (let i = 0; i < 5; i++) expect((await signIn("5599999999", "123456", armed())).status).toBe(400);
+    expect((await signIn("5599999999", "123456", armed())).status).toBe(429);
+  });
+
+  it("the fourth invitation código within 60 s answers 429", async () => {
+    const { token } = await invite();
+    for (let i = 0; i < 3; i++) expect((await askCode(token, "lupita@correo.mx", armed())).status).toBe(200);
+    expect((await askCode(token, "lupita@correo.mx", armed())).status).toBe(429);
+  });
+});

@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { businesses, paymentLinks, payments, stores, user as userTable } from "../src/db/schema";
 import { makeAuth } from "../src/auth/better";
 import type { Bindings } from "../src/env";
-import { PASSWORD, seedSession, sessionCookieHeader } from "./helpers";
+import { seedSession, sessionCookieHeader } from "./helpers";
 import { WISPHUB, type FakeCustomer } from "./payer-helpers";
 
 /* cash-at-stores T013 — what the store suites share: a store and its
@@ -21,11 +21,12 @@ let seq = 0;
 let phoneSeq = 0;
 const unique = () => `${++seq}-${crypto.randomUUID().slice(0, 6)}`;
 
-/* A user created through the server's door, verified, with no business */
+/* A user born verified, with no business and no password — a `user` row
+   and no `account` row, written through Better Auth's own adapter, as every
+   door of the product births one now (passwordless-access D14, PR 2) */
 async function seedPlainUser(email: string, name = "Persona") {
-  const { response } = await auth().api.signUpEmail({ body: { name, email, password: PASSWORD }, returnHeaders: true });
-  await db().update(userTable).set({ emailVerified: true }).where(eq(userTable.id, response.user.id));
-  return response.user.id;
+  const user = await (await auth().$context).internalAdapter.createUser({ name, email, emailVerified: true });
+  return user.id;
 }
 
 /* A store row as the operator's create writes it (D6). `invited` by

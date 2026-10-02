@@ -11,23 +11,17 @@ import type { Bindings } from "../env";
    server must not say which is happening (FR-005). The digits ride the
    subject so a phone's notification shows them, and the email carries no
    `<a>` and no URL (FR-024). The log line below is a contract too: the API
-   suite's `sentCode` reads it (D14). */
+   suite's `sentCode` reads it (D14).
+
+   PR 2 (D4, D13): the email-verification and password-recovery templates
+   left with their doors. Any other kind the plugin still names gets the
+   one template — a código never goes out in words nobody chose. */
 
 const templates = {
-  "email-verification": {
-    subject: (otp: string) => `${otp} es tu código para confirmar tu correo — Devolada`,
-    body: (otp: string) =>
-      `<p>Escribe este código en Devolada para confirmar tu correo:</p><p style="font-size:24px;font-weight:bold;letter-spacing:4px">${otp}</p><p>Si no fuiste tú, ignora este mensaje.</p>`,
-  },
   "sign-in": {
     subject: (otp: string) => `${otp} es tu código para entrar — Devolada`,
     body: (otp: string) =>
       `<p>Escribe este código en Devolada para entrar:</p><p style="font-size:32px;font-weight:bold;letter-spacing:8px">${otp}</p><p>Vence en 10 minutos.</p><p>Si no fuiste tú, ignora este mensaje.</p>`,
-  },
-  "forget-password": {
-    subject: (otp: string) => `${otp} es tu código para recuperar tu acceso — Devolada`,
-    body: (otp: string) =>
-      `<p>Escribe este código en Devolada para crear una nueva contraseña:</p><p style="font-size:24px;font-weight:bold;letter-spacing:4px">${otp}</p><p>Si no fuiste tú, ignora este mensaje.</p>`,
   },
 } as const;
 
@@ -39,7 +33,7 @@ export async function sendAuthCode(
   to: string,
   otp: string,
 ): Promise<void> {
-  const template = templates[kind as AuthCodeKind] ?? templates["email-verification"];
+  const template = templates[kind as AuthCodeKind] ?? templates["sign-in"];
   if (!env.RESEND_API_KEY) {
     console.log(`[código:${kind}] ${to} → ${otp}`);
     return;

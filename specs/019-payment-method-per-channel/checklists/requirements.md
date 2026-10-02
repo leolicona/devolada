@@ -1,7 +1,7 @@
 # Specification Quality Checklist: payment-method-per-channel
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-10-01 · **Re-validated**: 2026-10-01, after the rewrite to payment methods
+**Created**: 2026-10-01 · **Re-validated**: 2026-10-02, after Devolada took over the naming of the methods
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -35,19 +35,29 @@
   methods, and its directory renamed from `019-devolada-as-collector` to
   `019-payment-method-per-channel`, so code comments cite a slug that
   says what the feature does. The branch keeps its name.
-- The four decisions were taken by the creator through questions before
-  the rewrite, so no marker was needed. One choice went against the
-  recommendation (one method per store, not one for all stores); the spec
-  records the accepted cost in Clarifications and Assumptions.
-- The fallback rule was asked for a deleted method. The spec extends it to
-  a store without a method in a business that set up its stores, and
-  keeps any part the business never set up unmarked (FR-003, FR-007). This
-  is an informed default, recorded in Clarifications.
+- Revised on 2026-10-02 from the creator's note: Devolada names the methods
+  (`SPEI - LINK DEVOLADAPAGO`, `EFECTIVO - RED DEVOLADAPAGO`), one for the
+  whole store network, and the increment lives in the adapter. This
+  removed the choice screen, the per-store methods, the per-payment mark in
+  Pagos and the new entity. The Clarifications keep both sessions, and
+  mark what the second one replaced.
+- The method names appear in the spec because they are product copy the
+  business types into its own system, and the creator fixed them. FR-011
+  places them in the adapter, so the core never carries them.
+- Two readings were informed defaults, recorded in Assumptions: one method
+  for the network (from the creator's example "EFECTIVO - RED
+  DEVOLADAPAGO"), and "descripción" as the method's own description in the
+  business's system, if it has one (M4), never part of the match.
+- US4 (the screen says whether each method exists) is added so a typo in
+  the name does not send every payment back to cash in silence
+  (constitution VIII). It lives on the integration's own screen, which the
+  adapter already owns.
 - "What was measured" (R1–R7) and "What must be measured before the plan"
-  (M1–M3) name provider facts, not implementation. They follow the house
-  style of spec 014's "What the provider answers (measured)". M1–M3 are
-  product dependencies the plan answers on the demo tenant before any
-  code; they are not clarifications for the creator.
-- FR-013 and the Dependencies section keep the feature inside constitution
-  IX: the choice is offered by capability, and the plan declares the two
-  new capabilities instead of adding a direct call to the adapter.
+  (M1–M4) name provider facts, not implementation. They follow the house
+  style of spec 014's "What the provider answers (measured)". M1 and M4
+  are measured by API on the demo tenant; M2 and M3 in the provider's
+  panel by the creator. They are product dependencies, not clarifications.
+- The Dependencies section corrects the first draft: the action half of
+  the debt `core-reads-provider-directly` was already paid by spec 018 D9,
+  so recording a payment is already a declared capability. This feature
+  only widens what the core hands it.

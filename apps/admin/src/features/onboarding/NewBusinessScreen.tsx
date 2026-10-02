@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { AccessLayout } from "../auth/AccessLayout";
 import { SignOutLink } from "../auth/SignOutLink";
 import { createBusiness, useUser } from "../auth/session";
+import { PendingInvitations } from "../invitations/PendingInvitations";
 
 /* The onboarding wizard (business-and-memberships D5, US-B01). Since
    2026-09-02 the business is born with its name alone: registering on
@@ -67,6 +68,11 @@ export function NewBusinessScreen() {
         done ? "Falta un paso para cobrar: la CLABE donde recibes el dinero." : "Ponle nombre. Cómo cobras se configura después."
       }
     >
+      {/* bug: invitee-lands-own-business — someone invited who signed up on
+          their own (the email had not arrived) lands here with no business:
+          the invitation is offered before a business of their own is made.
+          Nothing renders when there is none. */}
+      {!done && <PendingInvitations stacked className="mb-4" />}
       {!done ? (
         <form
           className="space-y-4"

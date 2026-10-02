@@ -73,6 +73,22 @@ export const acceptInvitationNewRequest = z.object({
   password: z.string().min(8),
 });
 
+/* bug: invitee-lands-own-business — the invitations addressed to the
+   person behind the session, so the panel can name them wherever that
+   person signs in: the email stops being the only door. Pending and
+   alive only. The id is the invitation page's key (D14), handed to the
+   one person its email was sent to. */
+export const myInvitation = z.object({
+  id: z.string(),
+  businessName: z.string(),
+  role,
+  expiresAt: z.number().int(),
+});
+
+export const myInvitationsResponse = z.object({
+  invitations: z.array(myInvitation),
+});
+
 export type CreateBusinessRequest = z.infer<typeof createBusinessRequest>;
 export type InviteMemberRequest = z.infer<typeof inviteMemberRequest>;
 export type UpdateMemberRoleRequest = z.infer<typeof updateMemberRoleRequest>;
@@ -80,3 +96,5 @@ export type MembersResponse = z.infer<typeof membersResponse>;
 export type PendingInvitation = z.infer<typeof pendingInvitation>;
 export type InvitationPreviewResponse = z.infer<typeof invitationPreviewResponse>;
 export type AcceptInvitationNewRequest = z.infer<typeof acceptInvitationNewRequest>;
+export type MyInvitation = z.infer<typeof myInvitation>;
+export type MyInvitationsResponse = z.infer<typeof myInvitationsResponse>;

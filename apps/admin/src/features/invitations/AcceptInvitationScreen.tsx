@@ -231,7 +231,17 @@ export function AcceptInvitationScreen() {
         </Pending>
         {inv.hasAccount && (
           <p className="text-center text-sm">
-            <Link to="/recover" className="text-link hover:underline">
+            {/* bug: invitee-lands-own-business — the recovery brings the
+                person back here, with the invited address already filled in.
+                Without `next` it landed them in their own business, and the
+                invitation was never accepted (measured 2026-10-01 on
+                production: a recovery code an hour after the invitation, the
+                invitation expired pending). */}
+            <Link
+              to="/recover"
+              search={{ next: here, email: inv.email ?? undefined }}
+              className="text-link hover:underline"
+            >
               Olvidé mi contraseña
             </Link>
           </p>

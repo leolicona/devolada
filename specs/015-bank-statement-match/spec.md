@@ -122,6 +122,19 @@ with no profile can only be matched by its clave.
   before planning.
 - Q: The defaults User Story 4 added while specifying (checklist)? → A:
   **Confirmed** ("Sí, continúa").
+- Q: A same-bank payment the business confirms is registered in its
+  system with which method? Spec 019 kept `SPEI - LINK.DEVOLADAPAGO` for
+  payments Banxico confirmed. → A: **The SPEI method.** In the creator's
+  words: *"Dentro de SPEI - LINK.DEVOLADAPAGO, ya que es un pago que
+  también se registra a través de LINK."* Spec 019 carries the amendment.
+- Q: Does a same-bank payment the business confirms cost the validation
+  fee? → A: **Yes, when it is confirmed**, like any confirmed payment and
+  like cash at a store. One that ends "no llegó" never costs it, like a
+  payment that expires today.
+- Q: When the collection account is a card or a phone at the payer's bank,
+  is it a same-bank payment too? → A: **Yes, like a CLABE.** It never
+  reaches SPEI either. The line that left card and phone out of scope is
+  withdrawn.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -276,7 +289,7 @@ the provisional release, the operator's confirmation and "no llegó") is
 delivered first, before any bank file can be read (Session 2026-10-02);
 its statement scenarios (4 and 6) arrive with User Story 1.
 
-**Independent Test**: for a business whose collection CLABE is at BBVA,
+**Independent Test**: for a business whose collection account is at BBVA,
 with the provisional release on, confirm a $350 payment from BBVA. See no
 search spent, the payer's page reading as any payment being validated,
 the service restored and the invoice still unpaid; wait past the time a
@@ -289,7 +302,8 @@ it.
 
 **Acceptance Scenarios**:
 
-1. **Given** a business whose collection CLABE is at a bank, **When** a
+1. **Given** a business whose collection account (CLABE, card or phone) is
+   at a bank, **When** a
    payer confirms a payment naming that same bank as theirs, **Then** no
    search is spent and the payment is recorded as a same-bank payment with
    the amount, reference and day confirmed.
@@ -363,7 +377,7 @@ it.
   its export). It is refused like an unsupported bank, with the reason,
   and nothing is imported.
 - **The operator uploads the statement of another account.** When the
-  file names its account and it is not the business's collection CLABE,
+  file names its account and it is not the business's collection account,
   the file is refused with that reason and nothing is imported.
 
 **Same-bank payments** (User Story 4)
@@ -394,7 +408,7 @@ it.
   CLABE is at a bank whose export Devolada does not read still gets
   same-bank payments recognized and waiting; only its operators confirm
   them or mark them "no llegó", from "Por confirmar en tu banco".
-- **The business changes its collection CLABE** while a same-bank payment
+- **The business changes its collection account** while a same-bank payment
   waits. The payment stays what it was when the payer confirmed it.
 - **A same-bank payment never reaches spec 016's Banxico queue**: Banxico
   has no record of it to give.
@@ -471,7 +485,8 @@ it.
 **Same-bank payments**
 
 - **FR-016**: When a payer confirms a payment (spec 012 FR-007) naming as
-  their bank the bank of the business's collection CLABE, Devolada MUST
+  their bank the bank of the business's collection account — its CLABE,
+  card or phone, whichever payers are shown — Devolada MUST
   recognize it as a same-bank payment and MUST NOT spend a search on it.
   The payment is recorded with the amount, reference and day the payer
   confirmed.
@@ -583,9 +598,9 @@ it.
   if BBVA drops the reference on a same-bank credit, those credits can
   only be confirmed by an operator (FR-022) or assigned by hand (FR-012).
 - A same-bank transfer is told apart by the two banks: the one the payer
-  names and the one the business's collection CLABE belongs to. A
-  transfer to the business's card or phone is not covered here; it stays
-  out of scope as receipt-triage left it.
+  names and the one the business's collection account belongs to,
+  whether that account is a CLABE, a card or a phone (Session
+  2026-10-02). None of them reaches SPEI when both banks are the same.
 - An operator who confirms or marks a same-bank payment by hand speaks
   for the business's own money, like an uploaded statement, and who did it
   is recorded.
@@ -597,4 +612,4 @@ it.
   the payment's statuses before choosing a word.
 - Out of scope: bank APIs and automated feeds (per-company enterprise
   contracts); any query to Banxico (spec 016); matching by the sender's
-  name; transfers to the business's card or phone.
+  name.

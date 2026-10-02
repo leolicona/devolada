@@ -63,7 +63,9 @@
   - "No llegó" counts against the payer's history only when the service
     had been restored for it, which is today's rule for a release whose
     money never came.
-  - Transfers to the business's card or phone stay out of scope.
+  - Transfers to the business's card or phone stayed out of scope; the
+    creator withdrew this on 2026-10-02: a card or phone at the payer's
+    bank is a same-bank payment like a CLABE.
 - BBVA Net Cash and Banxico appear as the measured facts the feature
   rests on, not as implementation choices.
 - The payer reads a same-bank payment's state in spec 017's words, never

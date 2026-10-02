@@ -194,6 +194,12 @@ cannot show the reference as a column, so its download does not carry it
   business's account, never runs through SPEI: Devolada cannot confirm it
   today, so it never records it. The description names the apps so the
   business's staff reads them as SPEI.
+  *Amended 2026-10-02 by spec 015 (bank-statement-match, Session
+  2026-10-02): a transfer within one bank that the business confirms —
+  by hand, or with its bank statement — is recorded with this same SPEI
+  method. In the creator's words: "Dentro de SPEI - LINK.DEVOLADAPAGO, ya
+  que es un pago que también se registra a través de LINK." A cash
+  deposit is still never recorded.*
 - Q: Devolada keeps the list of a business's methods for up to ten
   minutes, in each place it runs, so a method just created may be ignored
   for that long, and those payments stay as cash (FR-006). Accept the
@@ -595,6 +601,13 @@ on the integration: when Devolada last saw the business's methods
   scope), so they are never recorded. If Devolada ever confirms such a
   payment another way, it gets a method of its own, decided in its own
   spec, and is never recorded as SPEI.
+  *Amended 2026-10-02 by spec 015: the creator chose the SPEI method for
+  the one such payment Devolada now confirms another way — a transfer
+  within one bank, confirmed by the business by hand or with its bank
+  statement — because it is also paid through the link. No method of its
+  own is created; the channel stays `spei`, so FR-001 already records it
+  and nothing in this spec's design changes. A cash deposit stays
+  unrecorded.*
 - **The reference is written once**, at recording. A store renamed later
   does not change payments already recorded (FR-006).
 - **Store names are told apart by the operator, not by the system**

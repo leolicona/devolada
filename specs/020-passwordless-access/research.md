@@ -536,8 +536,10 @@ FR-033 asks that no answer tells a store's phone from a stranger's. Built:
 runs the same statements for every phone (a stranger's against an address
 nobody could predict), folds every refusal into `INVALID_OTP`, and answers
 no sooner than a floor scaled with the store lookup's own round trip; and
-Better Auth's public `/auth/sign-in/email-otp` folds its refusals the same
-way, because the phone door's código lives under the store's email.
+every door that checks a código — Better Auth's public
+`/auth/sign-in/email-otp`, the store acceptance, `accept-new` — folds its
+refusals the same way (`auth/otp-refusal.ts`), because the phone door's
+código lives under the store's email.
 **Residual, for the creator to weigh**: that public door has no floor. A
 person who already guesses a shop's email can ask a código by its phone and
 time one wrong try at the public door with that email — a live código costs

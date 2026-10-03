@@ -12,10 +12,13 @@ Every answer wears the one envelope, with `UPPER_SNAKE` codes. A rejected
 body is `VALIDATION_ERROR`, the store area's word since cash-at-stores
 (written `VALIDATION` here until 2026-10-02, when the implementation kept
 the area's word). These routes
-are browser-facing: no `message`, no `retryable` (constitution III). The
-códigos' error codes are the plugin's own, carried through the envelope:
-`INVALID_OTP`, `OTP_EXPIRED`, `TOO_MANY_ATTEMPTS` — except on
-`POST /store/sign-in`, which folds them into `INVALID_OTP` (below).
+are browser-facing: no `message`, no `retryable` (constitution III). Every
+refusal of a código — wrong, expired, or past its three tries — answers
+**400 `INVALID_OTP`** on every route (adversarial review, 2026-10-03): the
+plugin's `OTP_EXPIRED` and `TOO_MANY_ATTEMPTS` exist only for an address
+that holds a live código, and the phone door writes one only under the
+email of the store the phone names, so passing them through anywhere let a
+guessed email tell a store's phone from a stranger's (FR-033).
 
 None of these routes ever creates an account except the invitation's
 acceptance (FR-034).
@@ -61,7 +64,7 @@ six digits.
   `shopkeeperName`. The phone becomes its username. The store becomes
   `active` and the invitation `accepted`, in one batch (D10,
   cash-at-stores T089).
-- **400** `INVALID_OTP`, `OTP_EXPIRED`; **403** `TOO_MANY_ATTEMPTS`.
+- **400** `INVALID_OTP`: a wrong, expired or spent código, alike.
 - **409** `EMAIL_TAKEN`: the address has an account, or is a platform
   operator's, **and the código was right** (FR-032). The invitation stays
   `sent`. Also when another request takes the address between the plugin's

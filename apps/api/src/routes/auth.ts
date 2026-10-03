@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../env";
 import { businesses } from "../db/schema";
 import { makeAuth } from "../auth/better";
+import { foldCodeRefusal } from "../auth/otp-refusal";
 import { requireAnyActor } from "../auth/middleware";
 import { channelBusiness } from "../store-channel";
 import { creditSummary } from "../credit";
@@ -52,7 +53,27 @@ auth.get("/me", requireAnyActor, async (c) => {
   });
 });
 
+/* passwordless-access FR-033, SC-006 (adversarial review, 2026-10-03):
+   Better Auth's one HTTP door that checks a código — its
+   `check-verification-otp` and `verify-email` are in `disabledPaths`
+   (auth/better.ts). Our own doors check through `auth.api` and never pass
+   here: `POST /store/sign-in` folds in its handler; the store acceptance
+   and accept-new keep the plugin's three words (D9, D10). Better Auth
+   routes on the URL's own pathname and answers 404 to a trailing slash or
+   a doubled one (better-call 1.4.0's router.mjs, as better-auth 1.6.29
+   pins it; `skipTrailingSlashes` unset), so this exact path is every
+   request that reaches it. */
+const CODE_DOOR = "/auth/sign-in/email-otp";
+
 /* Everything else — email-otp/*, sign-in/email-otp,
    passkey/*, sign-out, get-session — is Better Auth's, exempt from the
-   envelope (spec D6). Registered last so our routes above win. */
-auth.on(["GET", "POST"], "/*", (c) => makeAuth(c.env).handler(c.req.raw));
+   envelope (spec D6). Registered last so our routes above win. Its código
+   door folds OTP_EXPIRED and TOO_MANY_ATTEMPTS into INVALID_OTP
+   (`foldCodeRefusal`): those two exist only for an address holding a
+   live código, which is what a store's phone writes. */
+auth.on(["GET", "POST"], "/*", async (c) => {
+  const betterAuth = makeAuth(c.env);
+  const res = await betterAuth.handler(c.req.raw);
+  if (c.req.method !== "POST" || new URL(c.req.url).pathname !== CODE_DOOR) return res;
+  return foldCodeRefusal(res, betterAuth.$ERROR_CODES.INVALID_OTP);
+});

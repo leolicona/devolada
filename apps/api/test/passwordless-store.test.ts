@@ -22,7 +22,18 @@ import {
   storeSignInResponse,
 } from "../src/routes/store/schema";
 import { REFUSAL_ROUND_TRIPS } from "../src/routes/store/handler";
-import { app, cookiesOf, json, mintCode, seedBusiness, seedLegacyUser, sentCode, sessionCookieHeader, sessionOf } from "./helpers";
+import {
+  app,
+  cookiesOf,
+  failingDB,
+  json,
+  mintCode,
+  seedBusiness,
+  seedLegacyUser,
+  sentCode,
+  sessionCookieHeader,
+  sessionOf,
+} from "./helpers";
 import { seedActiveStore, seedStore } from "./store-helpers";
 
 /* passwordless-access US6 (contracts/store-access.md; research D3, D4, D8,
@@ -148,7 +159,7 @@ describe("passwordless-access US6 — the acceptance, a new address (D10, cash-a
     });
   });
 
-  it("a wrong código is INVALID_OTP and writes nothing; three wrong ones kill it (TOO_MANY_ATTEMPTS)", async () => {
+  it("a wrong código is INVALID_OTP and writes nothing; three wrong ones kill it, and its right digits read the same (FR-033)", async () => {
     const { store, token } = await invite();
     await askCode(token, "lupita@correo.mx");
     const right = sentCode("lupita@correo.mx");
@@ -163,19 +174,19 @@ describe("passwordless-access US6 — the acceptance, a new address (D10, cash-a
     await acceptWith(token, "lupita@correo.mx", wrong);
     await acceptWith(token, "lupita@correo.mx", wrong);
     const dead = await acceptWith(token, "lupita@correo.mx", right);
-    expect(dead.status).toBe(403);
-    expect((await dead.json()).error.code).toBe("TOO_MANY_ATTEMPTS");
+    expect(dead.status).toBe(400);
+    expect((await dead.json()).error.code).toBe("INVALID_OTP");
     expect(await userOf("lupita@correo.mx")).toBeUndefined();
     expect((await invitationRow()).status).toBe("sent");
   });
 
-  it("a código past its ten minutes is OTP_EXPIRED, and writes nothing (D2)", async () => {
+  it("a código past its ten minutes reads INVALID_OTP, and writes nothing (D2, FR-033)", async () => {
     const { store, token } = await invite();
     await askCode(token, "lupita@correo.mx");
     await ageCode("lupita@correo.mx");
     const res = await acceptWith(token, "lupita@correo.mx", sentCode("lupita@correo.mx"));
     expect(res.status).toBe(400);
-    expect((await res.json()).error.code).toBe("OTP_EXPIRED");
+    expect((await res.json()).error.code).toBe("INVALID_OTP");
     expect(cookiesOf(res).some((c) => c.includes("session_token"))).toBe(false);
     expect(await userOf("lupita@correo.mx")).toBeUndefined();
     expect(await storeRow(store.id)).toMatchObject({ status: "invited", userId: null });
@@ -243,14 +254,14 @@ describe("passwordless-access US6 — the acceptance, a taken address (D10, FR-0
     expect((await invitationRow()).status).toBe("sent");
   });
 
-  it("a user's address with a código past its ten minutes is OTP_EXPIRED: the address is not named (D2, FR-032)", async () => {
+  it("a user's address with a código past its ten minutes reads INVALID_OTP: the address is not named (D2, FR-032, FR-033)", async () => {
     const { store, token } = await invite();
     await seedBusiness({ email: "tomado@correo.mx" });
     await askCode(token, "tomado@correo.mx");
     await ageCode("tomado@correo.mx");
     const res = await acceptWith(token, "tomado@correo.mx", sentCode("tomado@correo.mx"));
     expect(res.status).toBe(400);
-    expect((await res.json()).error.code).toBe("OTP_EXPIRED");
+    expect((await res.json()).error.code).toBe("INVALID_OTP");
     expect(await storeRow(store.id)).toMatchObject({ status: "invited", userId: null });
     expect((await invitationRow()).status).toBe("sent");
   });
@@ -300,35 +311,9 @@ function racingDB(onChecked: () => Promise<void>, at: RegExp = TAKEN_CHECK): D1D
   });
 }
 
-/* D1 failing the statement `at` names, once, before it runs — a dropped
-   connection on that statement and nothing else. `hits` counts the
-   failures, so a test can see the statement was reached. */
+/* The statements `failingDB` (helpers.ts) drops, inside the plugin */
 const PLUGIN_SESSION_INSERT = /^insert into "session"/;
 const PLUGIN_USER_READ = /^select "id", "name", "email", .* from "user" where "user"\."email" = \?/;
-function failingDB(at: RegExp, hits: { count: number }): D1Database {
-  const real = env.DB;
-  const fail = (stmt: D1PreparedStatement): D1PreparedStatement =>
-    new Proxy(stmt, {
-      get(target, prop) {
-        if (prop === "bind") return (...values: unknown[]) => fail(target.bind(...values));
-        if (prop === "all" || prop === "raw" || prop === "first" || prop === "run") {
-          return async () => {
-            hits.count++;
-            throw new Error("D1_ERROR: Network connection lost.");
-          };
-        }
-        const value = Reflect.get(target, prop);
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    });
-  return new Proxy(real, {
-    get(target, prop) {
-      if (prop === "prepare") return (query: string) => (hits.count === 0 && at.test(query) ? fail(target.prepare(query)) : target.prepare(query));
-      const value = Reflect.get(target, prop);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
-}
 
 describe("passwordless-access US6 — the race guard (D10)", () => {
   it("an address that gains a membership between the check and the sign-in is EMAIL_TAKEN, with no session left and no link written", async () => {
@@ -583,8 +568,14 @@ function gatedDB(at: RegExp, gate: Promise<void>): D1Database {
   });
 }
 
-/* A D1 primary far from the Worker: every statement waits `ms` before it
-   runs. The refusals it times run no batch. */
+/* A D1 primary far from the Worker: every statement answers `ms` after it
+   is sent, whatever the local D1 took inside that window. The refusals
+   it times run no batch. The wait holds on the clock the floor reads: a
+   workerd timer can fire a few ms early, so the clock is read again after
+   it, as `refusalFloor` does. Held before the statement, the store
+   lookup read 34–39 ms when a timer fired early, or 59 when the local D1
+   stalled after it, and the floor — ten of those — moved with it
+   (adversarial review, 2026-10-03). */
 function slowDB(ms: number): D1Database {
   const real = env.DB;
   const slow = (stmt: D1PreparedStatement): D1PreparedStatement =>
@@ -593,8 +584,12 @@ function slowDB(ms: number): D1Database {
         if (prop === "bind") return (...values: unknown[]) => slow(target.bind(...values));
         if (prop === "all" || prop === "raw" || prop === "first" || prop === "run") {
           return async (...args: unknown[]) => {
-            await new Promise((resolve) => setTimeout(resolve, ms));
-            return (target[prop] as (...a: unknown[]) => Promise<unknown>)(...args);
+            const until = Date.now() + ms;
+            const result = await (target[prop] as (...a: unknown[]) => Promise<unknown>)(...args);
+            for (let left = until - Date.now(); left > 0; left = until - Date.now()) {
+              await new Promise((resolve) => setTimeout(resolve, left));
+            }
+            return result;
           };
         }
         const value = Reflect.get(target, prop);
@@ -681,6 +676,60 @@ describe("passwordless-access US6 — the phone door (D10, FR-033, FR-034)", () 
     expect(cookiesOf(res).some((c) => c.includes("session_token"))).toBe(false);
   });
 
+  /* The other door to the same código (adversarial review, 2026-10-03):
+     what /store/sign-in/code writes lives under the store's email, which
+     Better Auth's own HTTP door reads too. Whoever guesses a shop's email
+     tries it there; the plugin's TOO_MANY_ATTEMPTS and OTP_EXPIRED exist
+     only for a live código, so that door folds them as /store/sign-in does
+     (FR-033, SC-006). */
+  const publicTry = async (email: string, otp: string) => {
+    const res = await call("/auth/sign-in/email-otp", json({ email, otp }));
+    expect(cookiesOf(res).some((c) => c.includes("session_token"))).toBe(false);
+    return { status: res.status, statusText: res.statusText, headers: [...res.headers.entries()], body: await res.text() };
+  };
+
+  it("Better Auth's own código door cannot tell a store's phone either: four wrong tries with the store's email answer alike (FR-033, SC-006; adversarial review, 2026-10-03)", async () => {
+    const { email } = await seedActiveStore({ phone: "5512345678" });
+
+    /* a store's phone: the código goes to the store's email */
+    await askPhoneCode("5512345678");
+    const right = sentCode(email);
+    const wrong = right === "000000" ? "111111" : "000000";
+    const afterStore = [];
+    for (let i = 0; i < 4; i++) afterStore.push(await publicTry(email, wrong));
+    /* the código died with its third try: its own right digits open nothing */
+    afterStore.push(await publicTry(email, right));
+
+    /* a stranger's phone: no código anywhere */
+    await askPhoneCode("5599999999");
+    expect([...loggedCodes().keys()]).toEqual([email]);
+    const afterStranger = [];
+    for (let i = 0; i < 4; i++) afterStranger.push(await publicTry(email, wrong));
+    afterStranger.push(await publicTry(email, right));
+
+    expect(afterStore).toEqual(afterStranger);
+    for (const answer of afterStore) {
+      expect(answer.status).toBe(400);
+      expect(JSON.parse(answer.body)).toMatchObject({ code: "INVALID_OTP" });
+    }
+  });
+
+  it("and the other way round: a código asked for the guessed email, three tries spent through a phone, then one public try (FR-033, SC-006; adversarial review, 2026-10-03)", async () => {
+    const { email } = await seedActiveStore({ phone: "5512345678" });
+    const probe = async (phone: string) => {
+      await call("/auth/email-otp/send-verification-otp", json({ email, type: "sign-in" }));
+      const right = sentCode(email);
+      const wrong = right === "000000" ? "111111" : "000000";
+      for (let i = 0; i < 3; i++) expect((await signIn(phone, wrong)).status).toBe(400);
+      return publicTry(email, wrong);
+    };
+    /* the store's phone spent the email's tries; a stranger's spent none */
+    const viaStore = await probe("5512345678");
+    const viaStranger = await probe("5599999999");
+    expect(viaStore).toEqual(viaStranger);
+    expect(JSON.parse(viaStore.body)).toMatchObject({ code: "INVALID_OTP" });
+  });
+
   it("a stranger's phone does the same work as a store's: both reach the plugin's código check (FR-033; adversarial review, 2026-10-02)", async () => {
     await seedActiveStore({ phone: "5512345678" });
     const stranger: string[] = [];
@@ -718,28 +767,46 @@ describe("passwordless-access US6 — the phone door (D10, FR-033, FR-034)", () 
     expect(signedIn.ms).toBeLessThan(FLOOR);
   });
 
-  it("a far D1 primary raises the floor to ten of the store lookup's round trips, for a stranger's phone and a live código alike (FR-033; adversarial review, 2026-10-03)", async () => {
+  it("a far D1 primary raises the floor to ten of the store lookup's round trips, and a stranger's phone and a live código answer as fast (FR-033; adversarial review, 2026-10-03)", async () => {
     const { email } = await seedActiveStore({ phone: "5512345678" });
     /* a base far under the work, and every statement held 40 ms: a live
-       código's wrong guess then works ~320 ms and a stranger's ~200 ms */
+       código's wrong guess then works ~320 ms and a stranger's ~200 ms,
+       both under a floor of ten round trips (~400 ms). A floor that did
+       not scale would leave the three statements between them, 120 ms,
+       on the stopwatch. */
     const STATEMENT_MS = 40;
     const far = { ...env, STORE_SIGN_IN_FLOOR_MS: "50", DB: slowDB(STATEMENT_MS) };
     const timed = async (phone: string, otp: string) => {
       const started = Date.now();
       const res = await signIn(phone, otp, far);
-      return { status: res.status, ms: Date.now() - started };
+      expect(res.status).toBe(400);
+      return Date.now() - started;
     };
 
-    const stranger = await timed("5599999999", "123456");
-    expect(stranger.status).toBe(400);
-    expect(stranger.ms).toBeGreaterThanOrEqual(REFUSAL_ROUND_TRIPS * STATEMENT_MS);
-
+    /* timed on a warm Worker: a cold first request runs 10–40 ms slower,
+       whichever phone it carries (measured 2026-10-03) */
+    await timed("5599999999", "123456");
     await askPhoneCode("5512345678");
     const right = sentCode(email);
-    const wrong = await timed("5512345678", right === "000000" ? "111111" : "000000");
-    expect(wrong.status).toBe(400);
-    expect(wrong.ms).toBeGreaterThanOrEqual(REFUSAL_ROUND_TRIPS * STATEMENT_MS);
-  });
+    const wrong = right === "000000" ? "111111" : "000000";
+
+    /* A stopwatch reads the fastest of several tries: noise only adds
+       time. The floor is ten times the lookup, so it multiplies the few ms
+       of CPU around the lookup too, and now and then one stall (one run in
+       ~40, measured 2026-10-03). Three tries each, taken in turn, compare
+       what an attacker would — and a live código's three wrong tries are
+       all it has before it dies (D2). */
+    const stranger: number[] = [];
+    const live: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      stranger.push(await timed("5599999999", "123456"));
+      live.push(await timed("5512345678", wrong));
+    }
+    for (const ms of [...stranger, ...live]) expect(ms).toBeGreaterThanOrEqual(REFUSAL_ROUND_TRIPS * STATEMENT_MS);
+    /* the property itself: closer than one statement, where a floor that
+       did not scale shows three */
+    expect(Math.abs(Math.min(...live) - Math.min(...stranger))).toBeLessThan(STATEMENT_MS);
+  }, 20_000);
 
   it("a wrong guess on a live código runs fewer statements than the floor counts round trips, so the floor still covers it (FR-033; adversarial review, 2026-10-03)", async () => {
     const { email } = await seedActiveStore({ phone: "5512345678" });

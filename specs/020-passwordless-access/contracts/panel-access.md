@@ -51,7 +51,8 @@ account does not exist yet (D1).
   confirm which phone belongs to which store (FR-033, SC-006). The screens
   already showed one message for the three: "El código no es válido o ya
   venció. Reenvíalo e intenta otra vez." (better-auth's UI contract).
-  Server calls (`accept-new`, the store acceptance) keep the plugin's words.
+  Our routes that check a código on the server (`accept-new`, the store
+  routes) fold the same three the same way.
 - **429**: 5 per 60 s per address (D3).
 
 ### `POST /auth/update-user`
@@ -132,8 +133,8 @@ The server (D9):
 5. forwards the session cookies.
 
 - **201** the business actor (as today), with the session cookie.
-- **400** `INVALID_OTP`, `OTP_EXPIRED`; **403** `TOO_MANY_ATTEMPTS` — the
-  plugin's words, as on the store acceptance. Nothing is born.
+- **400** `INVALID_OTP`: a wrong, expired or spent código, alike, as on
+  every door (FR-033; adversarial review, 2026-10-03). Nothing is born.
 - **404** `INVITATION_NOT_FOUND` (gone, accepted or expired). When the
   invitation dies between steps 1 and 4 (the plugin's own
   `INVITATION_NOT_FOUND`), the account the código proved stays, with its
@@ -282,7 +283,8 @@ The states the page has today stay. The changes:
 | Signed in with the invited address | accepts on sight (unchanged) |
 | Signed in with another address, including after a key of another account | "Entraste como {email}, y esta invitación fue enviada a otro correo." + "Entrar con el correo invitado" (unchanged, FR-018) |
 | Expired, gone | unchanged |
-| An acceptance that fails for another reason (any branch) | "No pudimos aceptar la invitación. Intenta de nuevo." with "Intentar de nuevo" and "Ir al panel" (or "Ir a iniciar sesión" without a session); a 429 says "Demasiados intentos. Espera un momento e intenta de nuevo."; "ya no es válida" is said only for `INVITATION_NOT_FOUND`. The page is never left on a disabled "Entrando…" (adversarial review, 2026-10-02) |
+| The invitation could not be read (first load: no answer, a 5xx) | "No pudimos cargar la invitación." with «Reintentar» (48 px) and «Ir a iniciar sesión». "Ya no existe" is said only when the preview answers `gone`. A re-read that fails keeps the last good invitation on screen; the preview is read at load and on `EMAIL_TAKEN`'s re-read only, never on a window refocus or a returning signal (adversarial review, 2026-10-03) |
+| An acceptance that fails for another reason (any branch) | "No pudimos aceptar la invitación. Intenta de nuevo." with "Intentar de nuevo" (which, with a session, accepts on sight) and "Ir al panel" (or "Ir a iniciar sesión" without a session); a 429 says "Demasiados intentos. Espera un momento e intenta de nuevo.". In the new-person branch this covers every failure past the código's check (a 500, a lost answer); only a refused código, a 429 or `VALIDATION` stays on the código step. Before saying "ya no es válida" to a person with a session, the page checks whether the invitation's business is already theirs (a lost answer whose acceptance went through), and if so goes on through `/welcome?next=/`; "ya no es válida" is said only for `INVITATION_NOT_FOUND`. The page is never left on a disabled "Entrando…" (adversarial review, 2026-10-02) |
 
 ### `/settings/security` (Cuenta → Seguridad)
 

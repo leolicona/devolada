@@ -10,6 +10,7 @@ import {
   Reveal,
   CodeInput,
   KeysCard,
+  ListError,
   PasskeyOffer,
   type KeysCardKey,
   type KeysCardProps,
@@ -487,6 +488,17 @@ export function Showcase() {
 
       <Section title="Espera y desenlace">
         <FeedbackDemo />
+      </Section>
+
+      {/* The failed read's two declared sizes (adversarial review,
+          2026-10-03): the panel's lists at 40 px, an access page — /welcome
+          after a código — at a thumb's 48 px. The retry here waits on a
+          scripted beat, so its breath can be seen. */}
+      <Section title="Error de carga — 40px en el panel, 48px en las páginas de acceso">
+        <div className="space-y-4">
+          <ListError what="los cobros" onRetry={() => new Promise((done) => setTimeout(done, 1500))} />
+          <ListError what="tu sesión" size="standard" onRetry={() => new Promise((done) => setTimeout(done, 1500))} />
+        </div>
       </Section>
 
       <Section title="Código — seis dígitos, uno por uno">

@@ -1,9 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { account, invitation, member, session as sessionTable, user as userTable, verification } from "../src/db/schema";
-import { app, cookiesOf, json, seedBusiness, sentCode, sessionCookieHeader, sessionOf } from "./helpers";
+import { app, cookiesOf, failingDB, json, seedBusiness, sentCode, sessionCookieHeader, sessionOf } from "./helpers";
 
 /* passwordless-access US4 (contracts/panel-access.md § accept-new; D9 as
    amended 2026-10-03, spec Clarifications Q5): an invitee without an
@@ -135,20 +135,20 @@ describe("passwordless-access US4 — the código sent to the invited address bi
   });
 });
 
-describe("passwordless-access US4 — the plugin's refusals pass through the envelope, and nothing is born (D9, D2)", () => {
-  it("a código past its ten minutes is OTP_EXPIRED", async () => {
+describe("passwordless-access US4 — every refusal of the código reads INVALID_OTP, and nothing is born (D9, D2; FR-033)", () => {
+  it("a código past its ten minutes reads INVALID_OTP, as a wrong one does", async () => {
     const { id } = await invite("ana@wifiplus.mx");
     const otp = await askCode("ana@wifiplus.mx");
     await ageCode("ana@wifiplus.mx");
 
     const res = await acceptNew(id, { name: "Ana Ruiz", otp });
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ success: false, error: { code: "OTP_EXPIRED" } });
+    expect(await res.json()).toEqual({ success: false, error: { code: "INVALID_OTP" } });
     expect(hasSessionCookie(res)).toBe(false);
     expect(await userOf("ana@wifiplus.mx")).toBeUndefined();
   });
 
-  it("three wrong tries kill the código: its own right digits then read TOO_MANY_ATTEMPTS (403)", async () => {
+  it("three wrong tries kill the código: its own right digits then read INVALID_OTP, and open nothing", async () => {
     const { id } = await invite("ana@wifiplus.mx");
     const right = await askCode("ana@wifiplus.mx");
     for (let i = 0; i < 3; i++) {
@@ -158,8 +158,8 @@ describe("passwordless-access US4 — the plugin's refusals pass through the env
     }
 
     const dead = await acceptNew(id, { name: "Ana Ruiz", otp: right });
-    expect(dead.status).toBe(403);
-    expect(await dead.json()).toEqual({ success: false, error: { code: "TOO_MANY_ATTEMPTS" } });
+    expect(dead.status).toBe(400);
+    expect(await dead.json()).toEqual({ success: false, error: { code: "INVALID_OTP" } });
     expect(hasSessionCookie(dead)).toBe(false);
     expect(await userOf("ana@wifiplus.mx")).toBeUndefined();
     const [row] = await db().select().from(invitation).where(eq(invitation.id, id));
@@ -306,4 +306,58 @@ describe("passwordless-access US4 — an invitation that dies after the check ke
     expect((await me.json()).error.code).toBe("NO_BUSINESS");
     expect(await db().select().from(sessionTable).where(eq(sessionTable.userId, ana.id))).toHaveLength(1);
   });
+});
+
+/* Any other failure of step 4 (D9 as amended 2026-10-03,
+   contracts/panel-access.md § accept-new): only the plugin's own
+   INVITATION_NOT_FOUND reads as "the invitation died"; anything else is a
+   500, and the account the código proved is kept, with no undo (the
+   store acceptance has one, D10): whoever typed the código holds the inbox.
+   The cookie went out before step 4, so the 500 carries it (adversarial
+   review, 2026-10-03). D1 drops the connection on one statement of the
+   step: the acceptance's own write of the membership, or the
+   activation's membership check, which only setActiveOrganization reads.
+   What each leaves is what the page meets on a retry (measured
+   2026-10-03, better-auth 1.6.29): a failed acceptance leaves the
+   invitation pending, for the session's own acceptance to take; a failed
+   activation leaves the membership written and the invitation accepted. */
+const STEP_4_FAILURES = [
+  { step: "the acceptance", at: /^insert into "member"/, memberships: 0, invitationStatus: "pending" },
+  {
+    step: "the activation",
+    at: /^select "id", "organization_id", "user_id", "role", "created_at" from "member" where \("member"\."user_id" = \? and "member"\."organization_id" = \?\)/,
+    memberships: 1,
+    invitationStatus: "accepted",
+  },
+];
+
+describe("passwordless-access US4 — a step-4 failure that is not the invitation dying keeps the proved account (D9)", () => {
+  for (const { step, at, memberships, invitationStatus } of STEP_4_FAILURES) {
+    it(`${step} failing: 500 with the session cookie, and the account kept, verified and named`, async () => {
+      const { id } = await invite("ana@wifiplus.mx");
+      const otp = await askCode("ana@wifiplus.mx");
+      const hits = { count: 0 };
+      const failing = { ...(env as unknown as Record<string, unknown>), DB: failingDB(at, hits) };
+
+      const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+      const res = await acceptNew(id, { name: "Ana Ruiz", otp }, failing);
+      quiet.mockRestore();
+      expect(hits.count).toBe(1);
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ success: false, error: { code: "INTERNAL_SERVER_ERROR" } });
+
+      /* kept: one account, verified and named, and the código spent on it */
+      const ana = await userOf("ana@wifiplus.mx");
+      expect(ana).toMatchObject({ emailVerified: true, name: "Ana Ruiz" });
+      expect(await db().select().from(userTable).where(eq(userTable.email, "ana@wifiplus.mx"))).toHaveLength(1);
+      expect(await codeRows("ana@wifiplus.mx")).toEqual([]);
+      /* the step failed where it was made to, and left what it left */
+      expect(await db().select().from(member).where(eq(member.userId, ana.id))).toHaveLength(memberships);
+      expect((await db().select().from(invitation).where(eq(invitation.id, id)))[0].status).toBe(invitationStatus);
+
+      /* the cookie on the 500 is a live session of that account */
+      const session = await (await app()).request("/auth/get-session", { headers: { Cookie: sessionOf(res) } }, env);
+      expect(((await session.json()) as { user: { id: string } }).user.id).toBe(ana.id);
+    });
+  }
 });

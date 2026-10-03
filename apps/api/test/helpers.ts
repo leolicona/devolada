@@ -333,3 +333,33 @@ export const json = (body: unknown): RequestInit => ({
   headers: { "Content-Type": "application/json", Origin: "http://localhost:5174" },
   body: JSON.stringify(body),
 });
+
+/* D1 failing the statement `at` names, once, before it runs — a dropped
+   connection on that statement and nothing else. `hits` counts the
+   failures, so a test can see the statement was reached. Shared by the
+   store acceptance's rollback (passwordless-store.test.ts) and accept-new's
+   kept account (passwordless-invitation.test.ts). */
+export function failingDB(at: RegExp, hits: { count: number }): D1Database {
+  const real = env.DB;
+  const fail = (stmt: D1PreparedStatement): D1PreparedStatement =>
+    new Proxy(stmt, {
+      get(target, prop) {
+        if (prop === "bind") return (...values: unknown[]) => fail(target.bind(...values));
+        if (prop === "all" || prop === "raw" || prop === "first" || prop === "run") {
+          return async () => {
+            hits.count++;
+            throw new Error("D1_ERROR: Network connection lost.");
+          };
+        }
+        const value = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  return new Proxy(real, {
+    get(target, prop) {
+      if (prop === "prepare") return (query: string) => (hits.count === 0 && at.test(query) ? fail(target.prepare(query)) : target.prepare(query));
+      const value = Reflect.get(target, prop);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}

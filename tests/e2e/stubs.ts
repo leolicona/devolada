@@ -1140,6 +1140,20 @@ export async function stubAccessApi(
   await stubAcceptAsNew(page);
 }
 
+/* A read that gets no answer: a server error, in the envelope. Registered
+   after the stub it overrides — Playwright runs the last matching route
+   first. */
+async function failRoute(page: Page, pattern: string, status = 503): Promise<void> {
+  await page.route(pattern, (route) => {
+    if (route.request().resourceType() === "document") return route.fallback();
+    return route.fulfill({
+      status,
+      contentType: "application/json",
+      body: JSON.stringify({ success: false, error: { code: "INTERNAL_ERROR" } }),
+    });
+  });
+}
+
 /* The new person, inside the business the invitation names: the business
    actor accept-new answers with, as /auth/me's */
 export const inviteeActor = {
@@ -1222,6 +1236,20 @@ export const accessScreens = (ADMIN: string): AccessScreen[] => [
     url: `${ADMIN}/welcome?next=/`,
     stub: (p) => stubAccessApi(p, { user: accessUser }),
     ready: "Activar huella o rostro",
+    touch: true,
+  },
+  /* A read that got no answer is said with a retry, never decided on
+     (adversarial review, 2026-10-02) — and that retry is an access page's
+     48 px control, measured here, not the back office's 40 (contracts/
+     panel-access.md § UI; adversarial review, 2026-10-03) */
+  {
+    name: "Bienvenida · sesión sin leer",
+    url: `${ADMIN}/welcome?next=/`,
+    stub: async (p) => {
+      await stubAccessApi(p, { user: accessUser });
+      await failRoute(p, "**/auth/me");
+    },
+    ready: "Reintentar",
     touch: true,
   },
   { name: "Invitación · cuenta", url: `${ADMIN}/invitaciones/inv-1`, stub: (p) => stubAccessApi(p), ready: "Enviarme un código", touch: true },

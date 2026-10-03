@@ -249,6 +249,55 @@ describe("passwordless-access US5 — an old session confirms with a código bef
     expect(steps).toEqual(["ceremony", "código", "business org_business-2", "ceremony"]);
   });
 
+  /* PasskeyCard.confirm()'s promise: a switch that fails leaves only the
+     business to pick again, it never costs the person the key — so the
+     step-up closes and the ceremony runs whatever set-active answered
+     (adversarial review, 2026-10-03) */
+  it("a business switch that fails after the código still runs the ceremony: «Listo…» shows and no step-up is left open (passwordless-access US5; adversarial review, 2026-10-03)", async () => {
+    const twoBusinesses = {
+      ...businessActor,
+      id: "business-2",
+      orgId: "org_business-2",
+      name: "Fibra Norte",
+      businesses: [...businessActor.businesses, { id: "business-2", orgId: "org_business-2", name: "Fibra Norte", role: "owner" }],
+    };
+    const steps: string[] = [];
+    device.addPasskey.mockImplementation(async () => {
+      steps.push("ceremony");
+      return steps.length === 1
+        ? { data: null, error: { code: "SESSION_NOT_FRESH", status: 403 } }
+        : { data: {}, error: null };
+    });
+    server.use(
+      /* first: the earliest handler in one `use` wins */
+      handlers.session(() => ok(twoBusinesses)),
+      ...security(),
+      handlers.requestCode(),
+      handlers.signInCode(() => {
+        steps.push("código");
+        return baSignedIn();
+      }),
+      handlers.setActive((body) => {
+        steps.push(`business ${(body as { organizationId: string }).organizationId}`);
+        return baFail("INTERNAL_SERVER_ERROR", 500);
+      }),
+    );
+    renderApp("/settings/security");
+
+    await userEvent.click(await screen.findByRole("button", { name: "Activar en este dispositivo" }));
+    await userEvent.type(await screen.findByLabelText("Código"), "482913");
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    expect(await screen.findByText(/Listo\. Este dispositivo ya puede entrar con huella o rostro\./)).toBeInTheDocument();
+    /* the switch was asked, it failed, and the ceremony ran after it */
+    expect(steps).toEqual(["ceremony", "código", "business org_business-2", "ceremony"]);
+    expect(device.addPasskey).toHaveBeenCalledTimes(2);
+    /* no step-up left open: neither its line, its field nor its buttons */
+    expect(screen.queryByText(/Confirma que eres tú/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Código")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Confirmar|Confirmando/ })).not.toBeInTheDocument();
+  });
+
   it("while the step-up's código is on its way the button says so, not that the device is asked: the ceremony is over (adversarial review, 2026-10-02)", async () => {
     device.addPasskey.mockResolvedValue({ data: null, error: { code: "SESSION_NOT_FRESH", status: 403 } });
     let release!: () => void;

@@ -3,7 +3,7 @@ import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { account, user as userTable, verification } from "../src/db/schema";
-import { app, json, seedBusiness, sentCode, sessionOf } from "./helpers";
+import { app, cookiesOf, json, seedBusiness, sentCode, sessionOf } from "./helpers";
 
 /* passwordless-access US1 (contracts/panel-access.md): registration is the
    email-OTP plugin's sign-in door (D1). A código goes out for any address;
@@ -77,27 +77,65 @@ describe("passwordless-access US1 — the registration (D1, FR-001–FR-005)", (
   });
 });
 
+/* The whole answer, as a stranger reads it off the wire */
+const wire = async (res: Response) => ({
+  status: res.status,
+  statusText: res.statusText,
+  headers: [...res.headers.entries()],
+  body: await res.text(),
+});
+
 describe("passwordless-access US1 — the código's terms (D2, FR-003, FR-025)", () => {
-  it("a código past its ten minutes answers OTP_EXPIRED", async () => {
+  /* Over HTTP the door folds OTP_EXPIRED and TOO_MANY_ATTEMPTS into the
+     plugin's own INVALID_OTP (FR-033, SC-006; adversarial review,
+     2026-10-03): a dead código reads as a wrong one, so these prove the
+     código died by its own right digits being refused, byte for byte as
+     a wrong guess is. */
+  it("a código past its ten minutes is refused: its right digits answer exactly as a wrong código does", async () => {
     await requestCode("ana@negocio.mx");
     const [row] = await db().select().from(verification).where(eq(verification.identifier, "sign-in-otp-ana@negocio.mx"));
     /* ten minutes, written (D2): not the plugin's five */
     expect(row.expiresAt.getTime() - Date.now()).toBeGreaterThan(9 * 60_000);
-    await db().update(verification).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(verification.id, row.id));
-    const res = await enter("ana@negocio.mx", sentCode("ana@negocio.mx"), "Ana López");
+    const right = sentCode("ana@negocio.mx");
+    const wrongAnswer = await wire(await enter("ana@negocio.mx", right === "000000" ? "111111" : "000000", "Ana López"));
+    /* the wrong try wrote the row again, with one more try: aged by its address */
+    await db()
+      .update(verification)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(verification.identifier, "sign-in-otp-ana@negocio.mx"));
+
+    const res = await enter("ana@negocio.mx", right, "Ana López");
     expect(res.status).toBe(400);
-    expect(await codeOf(res)).toBe("OTP_EXPIRED");
+    expect(await wire(res)).toEqual(wrongAnswer);
+    expect(JSON.parse(wrongAnswer.body)).toMatchObject({ code: "INVALID_OTP" });
+    expect(await userOf("ana@negocio.mx")).toBeUndefined();
   });
 
-  it("three wrong tries kill the código: then even the right one answers TOO_MANY_ATTEMPTS", async () => {
+  it("three wrong tries kill the código: the fourth try, its right digits, is refused exactly as a wrong one", async () => {
     await requestCode("ana@negocio.mx");
     const right = sentCode("ana@negocio.mx");
     const wrong = right === "000000" ? "111111" : "000000";
-    for (let i = 0; i < 3; i++) expect((await enter("ana@negocio.mx", wrong, "Ana López")).status).toBe(400);
+    const wrongAnswers = [];
+    for (let i = 0; i < 3; i++) wrongAnswers.push(await wire(await enter("ana@negocio.mx", wrong, "Ana López")));
     const res = await enter("ana@negocio.mx", right, "Ana López");
-    expect(res.status).toBe(403);
-    expect(await codeOf(res)).toBe("TOO_MANY_ATTEMPTS");
+    expect(res.status).toBe(400);
+    const dead = await wire(res);
+    for (const answer of wrongAnswers) expect(dead).toEqual(answer);
+    expect(JSON.parse(dead.body)).toMatchObject({ code: "INVALID_OTP" });
+    expect(cookiesOf(res).some((c) => c.includes("session_token"))).toBe(false);
     expect(await userOf("ana@negocio.mx")).toBeUndefined();
+  });
+
+  it("an address holding no código answers the same as one whose código died, after each of its tries (FR-033, SC-006)", async () => {
+    /* the plugin's own answer, from a row that never existed */
+    const nobody = await wire(await enter("nadie@negocio.mx", "123456"));
+    expect(nobody.status).toBe(400);
+
+    await requestCode("ana@negocio.mx");
+    const right = sentCode("ana@negocio.mx");
+    const wrong = right === "000000" ? "111111" : "000000";
+    for (let i = 0; i < 4; i++) expect(await wire(await enter("ana@negocio.mx", wrong))).toEqual(nobody);
+    expect(await wire(await enter("ana@negocio.mx", right))).toEqual(nobody);
   });
 
   it("a new request ends the previous código: refused while the new one lives, and after it is used", async () => {

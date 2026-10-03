@@ -51,10 +51,11 @@ export async function signInWithKey(): Promise<boolean> {
 }
 
 /* passwordless-access FR-027: the limiter's 429 is a wait, not a wrong
-   código. INVALID_OTP, OTP_EXPIRED and TOO_MANY_ATTEMPTS (403, the código's
-   own death after three tries) read alike: a dead código
-   (contracts/store-access.md). A lost signal is said as such, never as a
-   wrong código (cash-at-stores T074). */
+   código. The API folds every refusal of a código into INVALID_OTP
+   (FR-033; adversarial review, 2026-10-03); the plugin's OTP_EXPIRED and
+   TOO_MANY_ATTEMPTS still read as a dead código, should one ever reach the
+   screen (contracts/store-access.md). A lost signal is said as such, never
+   as a wrong código (cash-at-stores T074). */
 export type AccessProblem = "tooMany" | "code" | "offline" | "other";
 export function accessProblem(e: unknown): AccessProblem {
   if (!(e instanceof ApiError)) return "other";

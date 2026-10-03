@@ -411,6 +411,11 @@ describe("passwordless-access US1 — /welcome tells a failed read from no sessi
     expect(await screen.findByText("No pudimos cargar tu sesión.")).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/welcome");
     expect(screen.queryByRole("heading", { name: "Iniciar sesión" })).not.toBeInTheDocument();
+    /* An access page's control is the thumb's 48 px, not the back office's
+       40 (contracts/panel-access.md § UI; adversarial review, 2026-10-03).
+       The class the size names is what happy-dom can read; the browser
+       layer measures the pixels (tests/e2e/stubs.ts accessScreens). */
+    expect(screen.getByRole("button", { name: "Reintentar" })).toHaveClass("h-12");
     await expectNoViolations(document.body);
 
     down = false;

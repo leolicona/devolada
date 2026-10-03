@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
-import { screen, waitFor, within } from "@testing-library/react";
-import { focusManager } from "@tanstack/react-query";
+import { act, screen, waitFor, within } from "@testing-library/react";
+import { focusManager, onlineManager } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { settingsResponse } from "@devolada/api/settings-schema";
 import { baFail, baOk, baSignedIn, baStatus, baTooMany, businessActor, fail, handlers, ok, server, sessionUser } from "./msw";
@@ -315,14 +315,18 @@ describe("D8 + better-auth D14 + passwordless-access US4: the invitation page de
      the invitee without an account gives a name, then types the código
      sent to the invited address — the invitation's id alone births
      nothing. `codes` holds every código asked, `born` every accept-new the
-     page sent; the session opens only where `answer` says so. */
+     page sent; the session opens only where `answer` says so, and the
+     invited business is among the person's only where it says `joined`
+     (the organizations plugin's list: a newborn account has no other). */
+  type Newcomer = { signedIn: boolean; joined: boolean };
   const newcomer = (
-    answer: (s: { signedIn: boolean }) => ReturnType<typeof ok | typeof fail> = (s) => {
+    answer: (s: Newcomer) => ReturnType<typeof ok | typeof fail> | Response = (s) => {
       s.signedIn = true;
+      s.joined = true;
       return ok(asRole("operator"), 201);
     },
   ) => {
-    const state = { signedIn: false, codes: [] as unknown[], born: [] as unknown[] };
+    const state = { signedIn: false, joined: false, codes: [] as unknown[], born: [] as unknown[] };
     return {
       state,
       handlers: [
@@ -336,8 +340,9 @@ describe("D8 + better-auth D14 + passwordless-access US4: the invitation page de
         }),
         handlers.acceptInvitationNew((id, body) => {
           state.born.push([id, body]);
-          return answer(state);
+          return answer(state) as ReturnType<typeof ok | typeof fail>;
         }),
+        handlers.orgList(() => HttpResponse.json(state.joined ? [{ id: "org_wifiplus", name: "WifiPlus" }] : [])),
         handlers.session(() => (state.signedIn ? ok(asRole("operator")) : fail("AUTHENTICATION_ERROR", 401))),
         handlers.feed(emptyFeed),
       ],
@@ -619,6 +624,256 @@ describe("D8 + better-auth D14 + passwordless-access US4: the invitation page de
     expect(state.born).toHaveLength(1);
   });
 
+  /* Adversarial review, 2026-10-03: past the código's check, a failure of
+     accept-new is the acceptance's, never the código's — the proved account
+     is kept, and the 500 carries its session (contracts/panel-access.md
+     § accept-new). The page says the contract's line for "an acceptance
+     that fails for another reason (any branch)", offers the panel through
+     /welcome, and «Intentar de nuevo» accepts on sight with that session:
+     no second código, no second birth. */
+  const ACCEPT_FAILED = "No pudimos aceptar la invitación. Intenta de nuevo.";
+  it("accept-new answering 500 after the código opened the session says the acceptance failed, not the código; «Intentar de nuevo» accepts on sight and lands inside (passwordless-access US4; adversarial review, 2026-10-03)", async () => {
+    const accepted: unknown[] = [];
+    const activated: unknown[] = [];
+    const { state, handlers: api } = newcomer((s) => {
+      /* the account is born and its cookie set; the acceptance then fails */
+      s.signedIn = true;
+      return fail("INTERNAL_SERVER_ERROR", 500);
+    });
+    server.use(...api);
+    server.use(
+      http.post("/auth/organization/accept-invitation", async ({ request }) => {
+        accepted.push(await request.json());
+        return HttpResponse.json({ invitation: { organizationId: "org_wifiplus" } });
+      }),
+      handlers.setActive((body) => {
+        activated.push(body);
+        return baOk();
+      }),
+    );
+    const router = renderApp("/invitaciones/inv-1");
+    await giveName();
+    await typeCode();
+
+    expect(await screen.findByText(ACCEPT_FAILED)).toBeInTheDocument();
+    expect(screen.queryByText("No pudimos revisar el código. Intenta de nuevo.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/ya no es válida/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Creando/ })).not.toBeInTheDocument();
+    /* a session is open: the way on is the panel, through /welcome (D6) */
+    expect(screen.getByRole("link", { name: "Ir al panel" })).toHaveAttribute("href", "/welcome?next=%2F");
+    expect(screen.queryByRole("link", { name: "Ir a iniciar sesión" })).not.toBeInTheDocument();
+    expect(accepted).toEqual([]);
+    await expectNoViolations(document.body);
+
+    await userEvent.click(screen.getByRole("button", { name: "Intentar de nuevo" }));
+    expect(await screen.findByRole("heading", { name: "Pagos" })).toBeInTheDocument();
+    expect(accepted).toEqual([{ invitationId: "inv-1" }]);
+    expect(activated).toEqual([{ organizationId: "org_wifiplus" }]);
+    expect(state.born).toHaveLength(1);
+    expect(state.codes).toHaveLength(1);
+    expect(router.state.location.pathname).toBe("/payments");
+  });
+
+  it("an accept-new whose answer was lost with no session opened offers the sign-in and a retry, which opens the código step again (passwordless-access US4; adversarial review, 2026-10-03)", async () => {
+    let tries = 0;
+    const { state, handlers: api } = newcomer((s) => {
+      if (++tries === 1) return HttpResponse.error();
+      s.signedIn = true;
+      s.joined = true;
+      return ok(asRole("operator"), 201);
+    });
+    server.use(...api);
+    const router = renderApp("/invitaciones/inv-1");
+    await giveName();
+    await typeCode();
+
+    expect(await screen.findByText(ACCEPT_FAILED)).toBeInTheDocument();
+    expect(screen.queryByText("No pudimos revisar el código. Intenta de nuevo.")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ir a iniciar sesión" })).toHaveAttribute("href", "/login");
+    expect(screen.queryByRole("link", { name: "Ir al panel" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Intentar de nuevo" }));
+    expect(await screen.findByText("Te enviamos un código a ana@wifiplus.mx. Vence en 10 minutos.")).toBeInTheDocument();
+    await typeCode();
+    expect(await screen.findByRole("heading", { name: "Pagos" })).toBeInTheDocument();
+    expect(state.born).toHaveLength(2);
+    expect(router.state.location.pathname).toBe("/payments");
+  });
+
+  /* The 500 can come after the plugin accepted (the active business
+     failing): the retry's INVITATION_NOT_FOUND is then the person's own
+     acceptance. "Ya no es válida" would send a member to ask for an
+     invitation they would be refused; the page reads their businesses
+     first, finds the invited one and goes on, with it active. */
+  it("accept-new's 500 after the plugin had accepted: the retry finds the business among the person's and goes on through /welcome, never «ya no es válida» (passwordless-access US4; adversarial review, 2026-10-03)", async () => {
+    device.canVerifyPerson.mockResolvedValue(true);
+    const accepted: unknown[] = [];
+    const activated: unknown[] = [];
+    const { handlers: api } = newcomer((s) => {
+      s.signedIn = true;
+      s.joined = true;
+      return fail("INTERNAL_SERVER_ERROR", 500);
+    });
+    server.use(...api);
+    server.use(
+      handlers.acceptInvitation((body) => {
+        accepted.push(body);
+        return baFail("INVITATION_NOT_FOUND", 400);
+      }),
+      handlers.setActive((body) => {
+        activated.push(body);
+        return baOk();
+      }),
+    );
+    const router = renderApp("/invitaciones/inv-1");
+    await giveName();
+    await typeCode();
+    expect(await screen.findByText(ACCEPT_FAILED)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Intentar de nuevo" }));
+
+    /* through /welcome, like every código's way on (D6) */
+    expect(await screen.findByRole("heading", { name: "Entra la próxima vez con tu huella o rostro" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/welcome");
+    expect(router.state.location.search).toEqual({ next: "/" });
+    expect(accepted).toEqual([{ invitationId: "inv-1" }]);
+    expect(activated).toEqual([{ organizationId: "org_wifiplus" }]);
+    await userEvent.click(screen.getByRole("button", { name: "Ahora no" }));
+    expect(await screen.findByRole("heading", { name: "Pagos" })).toBeInTheDocument();
+  });
+
+  /* Adversarial review, 2026-10-03: "ya no existe" is what the preview
+     said, never a read that failed — the server answers 200 {status:
+     "gone"} for a dead invitation. */
+  it("a first read of the invitation that gets no answer offers a 48 px retry, never «ya no existe»; the retry shows the invitation (passwordless-access US4; adversarial review, 2026-10-03)", async () => {
+    let down = true;
+    server.use(
+      handlers.getSession(() => HttpResponse.json(null)),
+      handlers.invitationPreview(() => (down ? fail("INTERNAL_SERVER_ERROR", 500) : ok(previewOf()))),
+    );
+    renderApp("/invitaciones/inv-1");
+
+    expect(await screen.findByText("No pudimos cargar la invitación.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /ya no existe/i })).not.toBeInTheDocument();
+    /* an access page: the thumb's 48 px (contracts/panel-access.md § UI) */
+    expect(screen.getByRole("button", { name: "Reintentar" })).toHaveClass("h-12");
+    expect(screen.getByRole("link", { name: "Ir a iniciar sesión" })).toHaveAttribute("href", "/login");
+    await expectNoViolations(document.body);
+
+    down = false;
+    await userEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(await screen.findByRole("heading", { name: /te invitaron a wifiplus/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("Tu nombre")).toBeInTheDocument();
+  });
+
+  /* The preview is read at load and on EMAIL_TAKEN's re-read only (that
+     re-read failing keeps the invitation on screen: the EMAIL_TAKEN test
+     below). Neither the inbox trip nor the signal's return reads it. */
+  it("on the código step, neither a window's return nor a returning signal reads the invitation again (passwordless-access US4; adversarial review, 2026-10-03)", async () => {
+    let reads = 0;
+    const { handlers: api } = newcomer();
+    server.use(...api);
+    server.use(handlers.invitationPreview(() => (++reads === 1 ? ok(previewOf()) : fail("INTERNAL_SERVER_ERROR", 500))));
+    try {
+      renderApp("/invitaciones/inv-1");
+      await giveName();
+      expect(await screen.findByLabelText("Código")).toBeInTheDocument();
+
+      /* the person reads the código in their inbox and comes back */
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await act(() => new Promise((settle) => setTimeout(settle, 20)));
+      expect(reads).toBe(1);
+
+      /* the signal drops and comes back */
+      act(() => {
+        onlineManager.setOnline(false);
+        onlineManager.setOnline(true);
+      });
+      await act(() => new Promise((settle) => setTimeout(settle, 20)));
+      expect(reads).toBe(1);
+      expect(screen.queryByRole("heading", { name: /ya no existe/i })).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Código")).toBeInTheDocument();
+      expect(screen.getByText("Te enviamos un código a ana@wifiplus.mx. Vence en 10 minutos.")).toBeInTheDocument();
+    } finally {
+      focusManager.setFocused(undefined);
+      onlineManager.setOnline(true);
+    }
+    /* and the código still works */
+    await typeCode();
+    expect(await screen.findByRole("heading", { name: "Pagos" })).toBeInTheDocument();
+  });
+
+  /* On a phone the lost answer and the returning signal are one event. A
+     re-read then would answer "gone" for the person's own acceptance, and
+     the gone screen would send a member to ask for a new invitation. The
+     failure stays; its retry meets INVITATION_NOT_FOUND, finds the business
+     among the person's and goes in, with it active. */
+  it("an acceptance whose answer was lost, then the signal coming back: the failure stays, and «Intentar de nuevo» finds the business already the person's and goes in (passwordless-access US4; adversarial review, 2026-10-03)", async () => {
+    let used = false;
+    const accepted: unknown[] = [];
+    const activated: unknown[] = [];
+    server.use(
+      handlers.getSession(() => HttpResponse.json({ user: { ...sessionUser, email: "ana@wifiplus.mx" } })),
+      handlers.invitationPreview(() =>
+        ok(used ? previewOf({ status: "gone", businessName: null, role: null, email: null }) : previewOf({ hasAccount: true })),
+      ),
+      handlers.acceptInvitation((body) => {
+        accepted.push(body);
+        if (!used) {
+          /* the server accepted; the answer never came back */
+          used = true;
+          return HttpResponse.error() as ReturnType<typeof baFail>;
+        }
+        return baFail("INVITATION_NOT_FOUND", 400);
+      }),
+      handlers.orgList(() => HttpResponse.json(used ? [{ id: "org_wifiplus", name: "WifiPlus" }] : [])),
+      handlers.setActive((body) => {
+        activated.push(body);
+        return baOk();
+      }),
+      handlers.session(() => ok(asRole("operator"))),
+      handlers.feed(emptyFeed),
+    );
+    const router = renderApp("/invitaciones/inv-1");
+    expect(await screen.findByText(ACCEPT_FAILED)).toBeInTheDocument();
+    try {
+      act(() => {
+        onlineManager.setOnline(false);
+        onlineManager.setOnline(true);
+      });
+      await act(() => new Promise((settle) => setTimeout(settle, 50)));
+      expect(screen.queryByRole("heading", { name: /ya no existe/i })).not.toBeInTheDocument();
+      expect(screen.getByText(ACCEPT_FAILED)).toBeInTheDocument();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+    await userEvent.click(screen.getByRole("button", { name: "Intentar de nuevo" }));
+
+    expect(await screen.findByRole("heading", { name: "Pagos" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/payments");
+    expect(accepted).toEqual([{ invitationId: "inv-1" }, { invitationId: "inv-1" }]);
+    expect(activated).toEqual([{ organizationId: "org_wifiplus" }]);
+  });
+
+  it("EMAIL_TAKEN whose re-read gets no answer still opens the account's door, as the refusal said (passwordless-access US4; adversarial review, 2026-10-03)", async () => {
+    let reads = 0;
+    const { state, handlers: api } = newcomer(() => fail("EMAIL_TAKEN", 409));
+    server.use(...api);
+    server.use(handlers.invitationPreview(() => (++reads === 1 ? ok(previewOf()) : fail("INTERNAL_SERVER_ERROR", 500))));
+    renderApp("/invitaciones/inv-1");
+    await giveName();
+    await typeCode();
+
+    expect(await screen.findByRole("button", { name: "Enviarme un código" })).toBeInTheDocument();
+    expect(reads).toBe(2);
+    expect(screen.queryByRole("heading", { name: /ya no existe/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Tu nombre")).not.toBeInTheDocument();
+    expect(screen.getByText("ana@wifiplus.mx")).toBeInTheDocument();
+    expect(state.signedIn).toBe(false);
+  });
+
   it("a «Continuar» whose código could not leave stays on the name and says why: the limiter's wait, or try again (passwordless-access US4, FR-027)", async () => {
     let asked = 0;
     const { handlers: api } = newcomer();
@@ -706,6 +961,8 @@ describe("D8 + better-auth D14 + passwordless-access US4: the invitation page de
           return baSignedIn({ ...sessionUser, email: "ana@wifiplus.mx" });
         }),
         http.post("/auth/organization/set-active", () => HttpResponse.json({})),
+        /* the account's own business — never the invited one */
+        handlers.orgList(() => HttpResponse.json([{ id: "org_business-1", name: "ISP Demo" }])),
         handlers.session(() => (state.signedIn ? ok(asRole("operator")) : fail("AUTHENTICATION_ERROR", 401))),
         handlers.feed(emptyFeed),
       ],

@@ -129,8 +129,8 @@ export const acceptInvitation = async (invitationId: string) => {
    passwordless-access D9 (amended 2026-10-03, spec Clarifications Q5): it
    carries the name and the código sent to the invited address — the
    invitation's id alone proves no inbox. The answer sets the new session's
-   cookie; a refused código (INVALID_OTP, OTP_EXPIRED, TOO_MANY_ATTEMPTS)
-   comes back in the envelope, and nothing is born. */
+   cookie; a refused código comes back as INVALID_OTP in the envelope —
+   wrong, expired or spent alike (FR-033) — and nothing is born. */
 export const acceptInvitationAsNewUser = (invitationId: string, body: AcceptInvitationNewRequest) =>
   api<BusinessActor>(`/businesses/invitations/${invitationId}/accept-new`, { method: "POST", body: JSON.stringify(body) });
 

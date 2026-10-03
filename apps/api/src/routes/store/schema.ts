@@ -313,11 +313,10 @@ export const STORE_ERROR_CODES = [
   "INVALID_INVITATION",
   "EMAIL_TAKEN",
   "VALIDATION_ERROR",
-  /* passwordless-access D10: the email-OTP plugin's own words for a código,
-     carried through the envelope */
+  /* passwordless-access D10: every refusal of a código, folded into one
+     word so no answer tells a store's phone from a stranger's (FR-033;
+     auth/otp-refusal.ts) */
   "INVALID_OTP",
-  "OTP_EXPIRED",
-  "TOO_MANY_ATTEMPTS",
 ] as const;
 export type StoreErrorCode = (typeof STORE_ERROR_CODES)[number];
 

@@ -417,10 +417,12 @@ export function WelcomePage() {
 
   if (suspended) return <SuspendedScreen />;
 
+  /* An access page: its retry is the thumb's 48 px, not the back office's
+     40 (contracts/panel-access.md § UI; adversarial review, 2026-10-03) */
   if (phase === "deciding" && unread) {
     return (
       <AccessLayout>
-        <ListError what="tu sesión" onRetry={() => Promise.all([user.refetch(), actor.refetch()])} />
+        <ListError what="tu sesión" size="standard" onRetry={() => Promise.all([user.refetch(), actor.refetch()])} />
       </AccessLayout>
     );
   }

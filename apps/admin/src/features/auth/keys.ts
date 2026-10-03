@@ -47,8 +47,10 @@ export async function signInWithKey(): Promise<boolean> {
 }
 
 /* passwordless-access FR-027: the limiter's 429 is a wait, not a wrong
-   código. TOO_MANY_ATTEMPTS (403) is the código's own death after three
-   tries, and reads like any dead código (contracts/panel-access.md). */
+   código. The API folds every refusal of a código into INVALID_OTP
+   (FR-033; adversarial review, 2026-10-03); the plugin's OTP_EXPIRED and
+   TOO_MANY_ATTEMPTS are still read as a dead código, should one ever reach
+   the screen (contracts/panel-access.md). */
 export type AccessProblem = "tooMany" | "code" | "other";
 export function accessProblem(e: unknown): AccessProblem {
   if (!(e instanceof ApiError)) return "other";

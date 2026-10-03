@@ -59,7 +59,7 @@ pnpm --filter @devolada/ui test -- -t "awaitingBank"
 What the API suite proves, in workerd with a real D1 (constitution IV):
 - recognition with `fetchMock` asserting **no** apiCEP call, for a CLABE,
   a card and a phone collection account;
-- recognition before the provider checks (no `APICEP_TOKEN`);
+- a row already in flight is recognized before the provider checks when `APICEP_TOKEN` goes missing (a new payment is refused, as today);
 - the wait survives the sweep past every D7 slot;
 - the release is evaluated once, with evidence `human` and today's promise
   date (WispHub intercepted at its pinned origin);
@@ -68,16 +68,25 @@ What the API suite proves, in workerd with a real D1 (constitution IV):
 - `bank-check` not received (`expired` + `NOT_RECEIVED`, no fee, a burned
   ride only when released);
 - `409 NOT_AWAITING_BANK` on a second decision, `404` across businesses,
-  `503 INTEGRATION_UNAVAILABLE` leaving the row waiting;
+  `503 INTEGRATION_UNAVAILABLE` leaving the row waiting, and a claim
+  whose decision never finished reclaimed by the sweep;
+- after "no llegó", the same confirmation makes a new waiting payment and
+  the ended one offers no retry;
 - `awaiting=bank` filtered by business.
 
 ## Phase B — the statement's core
 
 With synthetic credits (no bank reader yet), the core's tests cover
 identity and dedupe (R13), the match order (R14), "no llegó" by a
-statement covering the day, "abonos sin cliente" and assignment, and the
+statement covering the day, "abonos sin cliente" and assignment (none
+offered to a business whose integration cannot search customers), and the
 import report. They cite `bank-statement-match US1`, `US2`, `US3` and
 `US4`.
+
+**SC-001 by hand**: the volume test imports a synthetic month (1,000
+customers, about 3,000 lines) and logs how long it took. CI checks the
+result, not the clock; read the logged time and compare it with the two
+minutes of SC-001.
 
 ## Phase C — a bank's reader
 

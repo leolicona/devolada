@@ -136,6 +136,26 @@ with no profile can only be matched by its clave.
   reaches SPEI either. The line that left card and phone out of scope is
   withdrawn.
 
+### Session 2026-10-03
+
+From `/speckit-analyze` of 2026-10-02 (findings C3, F2, C4); the creator
+chose the recommended option each time.
+
+- Q: The business marked a payment "no llegó" and the payer confirms the
+  same payment again. What happens? → A: **A new payment that waits for
+  the business**, like the first: the payer may have said "ya pagué"
+  before paying. A payment that ended "no llegó" never offers the payer a
+  retry, and a release that ended "no llegó" blocks the next one for 90
+  days, as today (FR-024).
+- Q: Is the payer asked their bank only on a receipt read clearly, as the
+  receipt's other questions are? → A: **Yes, only on a clear reading**
+  (receipt-triage D16). A blurry receipt is searched once, as today
+  (FR-017).
+- Q: A business on the `/v1` API alone cannot search its customers. What
+  does it do with an "abono sin cliente"? → A: **It sees the list, with no
+  assignment offered** — its integration cannot search customers
+  (constitution IX) (FR-012).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - The business uploads its statement and the payments it was waiting for are confirmed (Priority: P1)
@@ -400,10 +420,11 @@ it.
   customer named, beside the waiting payment, for the operator to assign.
 - **A receipt shows the same bank on both sides.** The reading may be a
   misread (receipt-reader-tuning D5: the destination's bank taken for the
-  sender's), so the reading alone never makes a payment same-bank. Before
-  any search, the payer is asked which bank they paid from; naming the
-  business's bank makes it a same-bank payment, naming another sends the
-  search with that bank.
+  sender's), so the reading alone never makes a payment same-bank. On a
+  clear reading, before any search, the payer is asked which bank they
+  paid from; naming the business's bank makes it a same-bank payment,
+  naming another sends the search with that bank. A blurry reading is
+  searched as today (FR-017).
 - **The business's bank cannot be read yet.** A business whose collection
   CLABE is at a bank whose export Devolada does not read still gets
   same-bank payments recognized and waiting; only its operators confirm
@@ -412,6 +433,10 @@ it.
   waits. The payment stays what it was when the payer confirmed it.
 - **A same-bank payment never reaches spec 016's Banxico queue**: Banxico
   has no record of it to give.
+- **The payer confirms again after "no llegó".** A new payment waits for
+  the business like the first; the ended one offers no retry. If the
+  first had restored the service, the history blocks a second release for
+  90 days (FR-024, FR-023).
 - **The payer sent a different amount** ("Pagué otra cantidad", spec 012
   FR-009). The payment waits for that amount; the statement matches it
   exactly, and the partial and overpayment rules settle it on
@@ -470,7 +495,10 @@ it.
   customer. The assignment MUST confirm a payment for that customer with
   the credit's amount and clave, the source "estado de cuenta, asignado a
   mano" and who assigned it, and the existing partial and overpayment rules
-  MUST apply. A credit MUST NOT be assigned twice.
+  MUST apply. A credit MUST NOT be assigned twice. Where the business's
+  integration cannot search its customers (a business on the `/v1` API
+  alone), the list MUST still be shown and assignment MUST NOT be offered
+  (Session 2026-10-03; constitution IX).
 
 **Across the feature**
 
@@ -491,17 +519,22 @@ it.
   The payment is recorded with the amount, reference and day the payer
   confirmed.
 - **FR-017**: A receipt whose reading shows the same bank on both sides
-  MUST NOT make a payment same-bank by itself: before any search, the
-  payer MUST be asked which bank they paid from, and naming the business's
-  bank makes it same-bank (FR-016).
+  MUST NOT make a payment same-bank by itself. On a reading clear enough
+  to stop a capture (receipt-triage D16), before any search, the payer
+  MUST be asked which bank they paid from, and naming the business's bank
+  makes it same-bank (FR-016). A reading that is not that clear is
+  searched as today (Session 2026-10-03).
 - **FR-018**: A same-bank payment MUST NOT expire by time. It waits,
   visible to the business, until it is confirmed (FR-021, FR-022) or ends
   "no llegó" (FR-023).
-- **FR-019**: What the payer reads about a same-bank payment MUST be
-  what they read about any payment in the same state, in spec 017's words
-  (017 FR-020 – FR-022): its state, never how it is validated. No text the
-  payer reads may say that the banks are the same, name the business's
-  bank or statement, or say that someone confirms the payment by hand.
+- **FR-019**: What the page tells the payer about a same-bank payment —
+  while it waits, once it is confirmed, and when it ends — MUST be what it
+  tells about any payment in the same state, in spec 017's words (017
+  FR-020 – FR-022): its state, never how it is validated. None of those
+  texts may say that the banks are the same, mention the business's
+  statement, or say that someone confirms the payment by hand. The
+  transfer instructions (where to pay: the account and its bank) are not
+  about the payment's state and stay as they are.
 - **FR-020**: Where the business's integration can restore the service
   while a payment is validated and the business has turned that on, a
   same-bank payment MUST count as the payer's own evidence under today's
@@ -529,6 +562,10 @@ it.
   not be confirmed (FR-019). When the service had been restored for it,
   it MUST count against the payer's history like any release whose money
   never came.
+- **FR-024**: A payment that ended "no llegó" MUST NOT offer the payer a
+  retry. When the payer confirms the same payment again, Devolada MUST
+  record a new payment that waits for the business like the first
+  (FR-018), never refuse it as already used (Session 2026-10-03).
 
 ### Key Entities
 

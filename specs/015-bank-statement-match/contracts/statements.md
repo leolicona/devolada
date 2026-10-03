@@ -84,7 +84,9 @@ period, who, when, counts (FR-013).
 `requireArea("payments", "read")`. "Abonos sin cliente": date, amount,
 sender, reference, concept, and `namedCustomer` when a registered
 reference names one (FR-011). Also `fate=held_undecided`: credits listed
-as belonging to an undecided 013 payment.
+as belonging to an undecided 013 payment. The answer carries `canAssign:
+boolean` — false when the business's integration cannot search its
+customers, a business on the `/v1` API alone (D18).
 
 ## `POST /statements/credits/:id/assign`
 
@@ -92,10 +94,11 @@ as belonging to an undecided 013 payment.
 search returns it). Creates and settles the customer's payment from the
 credit (partial and overpayment rules apply), records `assigned_by`, and
 answers the payment. A credit already matched or assigned → `409
-CREDIT_ALREADY_USED` (FR-012).
+CREDIT_ALREADY_USED`; an integration that cannot search customers → `409
+ASSIGNMENT_UNAVAILABLE` (FR-012, D18).
 
 ## The panel screen "Estado de cuenta"
 
 Upload with the supported banks named; the last report; the imports;
 "Abonos sin cliente" with **Asignar** (search a customer, confirm in an
-`AlertDialog`).
+`AlertDialog`) when `canAssign`; without it, the list alone.

@@ -68,9 +68,13 @@ engine runs. Every kind of collection account counts: CLABE, card or phone
 through — the inline submit, the sweep, a correction that supersedes, a
 row released from `queued_for_credit` (`credit/topups.ts:226-267`). One
 check there covers them all. Before the provider checks, because a
-same-bank payment needs no provider: a business without the provider
-credential still gets it recognized (constitution VIII). The engine's own
-guard stays as the backstop; it is never reached from here.
+same-bank payment needs no provider. Without the provider credential no
+new payment enters at all — the pay route's `channelOpen` refuses every
+payment then (`routes/direct-payments/handler.ts:356-363`), and this
+feature leaves that as it is — but a same-bank row already in flight when
+the credential goes missing is recognized and waits, instead of retrying
+on `PROVIDER_NOT_CONFIGURED` until it expires (constitution VIII). The
+engine's own guard stays as the backstop; it is never reached from here.
 
 **Alternatives considered**:
 - *In `submitPayment`.* Misses the sweep, a row released from the credit
@@ -172,6 +176,19 @@ line naming this use and the wrong reading it avoids.
   tracking-key unique index predicate (`db/schema.ts:683-690`) and
   `RELEASED` (`cep-match.ts:27`).
 
+**After "no llegó"** (spec FR-024, creator 2026-10-03). Two paths on
+`main` would treat an ended row wrongly:
+- `identicalAttempt` (`routes/direct-payments/handler.ts:742-769`) answers
+  an identical attempt whose row is no longer open with
+  `TRANSFER_ALREADY_USED`, and the page then says "Ya se usó para tu pago
+  del…" (012 D24). An ended `NOT_RECEIVED` row is skipped by that match,
+  so the payer's same data makes a new row, which R2 recognizes again.
+- `retryAvailable` (`handler.ts:1616-1629`, provisional-release D7) offers
+  one manual retry on an expired row with a clave. It is false for
+  `NOT_RECEIVED`: the business said the money is not there.
+The history keeps the risk bounded: a release that ended "no llegó" is a
+burned ride, so the new row is not released for 90 days.
+
 **Alternatives considered**:
 - *`invalid`.* That word means "your transfer does not exist" by
   Banxico's record (`db/schema.ts:416-420`); it charges the fee and is
@@ -193,9 +210,15 @@ line naming this use and the wrong reading it avoids.
 operator; `auth/role-matrix.ts:31-49`). The handler:
 
 1. Claims the row with one conditional update — `status = 'validating'
-   AND last_error = 'SAME_BANK'` → `last_error = 'BANK_CHECKING'` — scoped
-   by `business_id`. No row changed answers 409 `NOT_AWAITING_BANK`, so two
-   operators, or an operator and a statement, never both settle it.
+   AND last_error = 'SAME_BANK'` → `last_error = 'BANK_CHECKING'` and
+   `next_validation_at = now + 2 min` — scoped by `business_id`. No row
+   changed answers 409 `NOT_AWAITING_BANK`, so two operators, or an
+   operator and a statement, never both settle it. The two minutes are a
+   lease, the sweep's own pattern (`validation.ts:2407-2415`): if the
+   decision never finishes (the Worker dies between claim and write), the
+   sweep picks the row up when the lease ends, and the pre-check (R2) puts
+   it back to `SAME_BANK` with no next attempt. No row stays claimed. A
+   settled or ended row clears `next_validation_at`.
 2. `received: false` writes R5's end with `reviewedBy` / `reviewedAt`.
 3. `received: true` settles with **no CEP** through the settlement the
    verdict uses, exported from `validation.ts` behind one function,
@@ -249,9 +272,11 @@ already renders that as 017's wait: "Seguimos buscando tu transferencia."
 when the service came back (`:851`), the confirmed view when the business
 confirms, and the expired view when it ends "no llegó" (R5). Rows without
 a reference (a typed clave) read "Estamos verificando tu transferencia…"
-(`:1504-1529`). One test asserts it: the page fed a same-bank row's status
-renders only those sentences, and no text names a bank, a statement or a
-hand.
+(`:1504-1529`). One test asserts it: fed a same-bank row's status, the
+page's status views render only those sentences, and none says "mismo
+banco", mentions a statement or a confirmation by hand. The transfer
+instructions (step 1) are not part of it: they name the account's bank, as
+they must (spec FR-019).
 
 **Rationale**: the creator's rule (spec FR-019): the payer learns the
 state, never how. The cheapest way to keep that promise is to add no
@@ -277,8 +302,10 @@ gains:
 - on such a row, in `ChargeRow`: a new `StatusBadge` kind `awaitingBank`
   ("Por confirmar", warning tone, icon + text); the customer, amount,
   reference, the day and bank the payer gave; whether the service was
-  restored for it and, once `promiseDeadline` has passed, that the
-  restoration lapsed; and, for `payments: operate`, two buttons — **Sí,
+  restored for it — reconnected or protected from the cut — and, once
+  `promiseDeadline` has passed, that the restoration lapsed (a new
+  `release` field: the feed carries no release today); and, for
+  `payments: operate`, two buttons — **Sí,
   llegó** and **No llegó** — each behind an `AlertDialog`, the
   confirmation precedent of *Puntos de pago* (`CashPointsScreen.tsx:51`),
   because both are final;
@@ -446,6 +473,14 @@ exported as `@devolada/api/statements-schema`; a panel screen
 **Asignar**). Uploading and assigning are `payments: operate`; reading is
 `payments: read`. The file itself is never stored (FR-002); only credits
 are.
+
+**Assignment by capability** (spec FR-012, creator 2026-10-03):
+**Asignar** needs a customer to assign to, which only an integration that
+can search its customers provides (the links search). Where the
+integration cannot — a business on the `/v1` API alone — the list is shown
+with `canAssign: false` and no button, and the route refuses with 409
+`ASSIGNMENT_UNAVAILABLE` (constitution IX: a feature the integration does
+not offer is not offered).
 
 **Rationale**: a bank's export format is a measured fact about that bank,
 so it lives in one reader file (the spirit of constitution IX), while

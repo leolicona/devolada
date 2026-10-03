@@ -14,8 +14,8 @@ TypeScript-only, as every enum in `db/schema.ts` (no CHECK constraint,
 | Field | Change | Meaning for this feature |
 | --- | --- | --- |
 | `status` | — | A same-bank payment stays `validating` while it waits (R3) and ends `expired` when it did not arrive (R5). No new word. |
-| `next_validation_at` | — | `NULL` while it waits: the sweep never selects it, so it never expires by the clock (R3). |
-| `last_error` | new codes | `SAME_BANK` — waiting for the business; `BANK_CHECKING` — claimed by an operator's decision in flight (R6); `NOT_RECEIVED` — on an `expired` row, ended because the money did not arrive (R5). None is a public payer code. |
+| `next_validation_at` | — | `NULL` while it waits: the sweep never selects it, so it never expires by the clock (R3). Two minutes ahead while an operator's decision holds the row: a lease the sweep reclaims if the decision never finishes (R6). |
+| `last_error` | new codes | `SAME_BANK` — waiting for the business; `BANK_CHECKING` — claimed by an operator's decision in flight, under its two-minute lease (R6); `NOT_RECEIVED` — on an `expired` row, ended because the money did not arrive (R5). None is a public payer code. |
 | `reviewed_by`, `reviewed_at` | comment widens | Who decided the row by hand: receipt-triage's review **or** this feature's bank check (R6). |
 | `provisional_release_at`, `release_evidence`, `release_kind` | — | Written at recognition when the release applies; evidence `human` (R4). |
 | `sender_bank`, `beneficiary` | — | The two banks compared (R2). `beneficiary.bank` is the snapshot of the collection account — CLABE, card or phone. |
@@ -49,8 +49,15 @@ The status comment (`db/schema.ts:414-427`) gains:
 ```
 
 A claim that cannot reach the business's system goes back to `SAME_BANK`
-(R6, step 4). A payer's correction supersedes the row as today and the new
-row is recognized again, or searched if the bank changed.
+(R6, step 4); one whose decision never finishes goes back when the sweep
+reclaims its lease. A payer's correction supersedes the row as today and
+the new row is recognized again, or searched if the bank changed. After
+"no llegó", the payer's same data makes a **new** row that waits again,
+and the ended row offers no retry (D17).
+
+```text
+   pending decision ──lease ends (2 min)──► sweep ► pre-check ► SAME_BANK
+```
 
 ### Copies of the payment vocabulary — untouched
 
@@ -67,9 +74,10 @@ same-bank row from another `validating` or `expired` one.
 - `feedQuery.awaiting`: `"bank"` (optional).
 - `feedCharge.bankCheck`: `{ state: "waiting" | "received" | "not_received",
   by: string | null }` or `null` — derived, never stored.
-- `feedCharge.release`: today's release fields plus `lapsed: boolean`,
-  derived from `promiseDeadline(createdAt)` and today in the business's
-  timezone.
+- `feedCharge.release`: **new** — the feed carries no release today.
+  `{ kind: "reconnect" | "protect", lapsed: boolean }` or null, from
+  `provisionalReleaseAt` / `releaseKind`; `lapsed` from
+  `promiseDeadline(createdAt)` against today in the business's timezone.
 - `bankCheckBody`: `{ received: boolean }`; refusals `NOT_AWAITING_BANK`
   (409) and `INTEGRATION_UNAVAILABLE` (503).
 - `StatusBadge` kinds: `awaitingBank` ("Por confirmar") and
@@ -106,7 +114,7 @@ nothing in it says "same bank" (R7).
 | `operation_date` | text `YYYY-MM-DD` | the day matched (R12) |
 | `amount_cents` | integer, not null | money law |
 | `sender_name`, `sender_account`, `reference`, `concept`, `clave`, `folio` | text, nullable | as printed; `clave` only on SPEI |
-| `fate` | text | `matched` \| `already` \| `unmatched` \| `assigned` \| `held_undecided` |
+| `fate` | text | `matched` \| `already` \| `unmatched` \| `assigned` \| `held_undecided` — the list of `unmatched` answers `canAssign` per business (D18) |
 | `payment_id` | text, nullable | the payment it confirmed or belongs to |
 | `named_customer` | text, nullable | the customer a registered reference names (FR-011) |
 | `assigned_by`, `assigned_at` | nullable | FR-012 |

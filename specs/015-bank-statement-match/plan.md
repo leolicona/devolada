@@ -111,9 +111,9 @@ decisions. The plan adds the ones below; code comments cite them as
 | D3 | The wait: `status` stays `validating`, `next_validation_at` null, `last_error = 'SAME_BANK'`. No status word; no enum copy changes | research R3 |
 | D4 | The release is evaluated once at recognition, through `releasable()`, with evidence `human`; `promiseDeadline` unchanged; no expiry email — the panel shows the lapse | research R4, creator 2026-10-02 |
 | D5 | "No llegó" is `expired` + `NOT_RECEIVED`: 017's words for the payer, no fee, a burned ride only when released. Never `invalid`. The status comment names it | research R5, creator 2026-10-02 |
-| D6 | `POST /payments/:id/bank-check { received }` under `payments: operate`. A conditional claim (`SAME_BANK` → `BANK_CHECKING`) makes one decision win; `received` settles through `settleWithoutCep` (`settlePanelPayment` / `settleApiPayment` with `cep: null`, D14's re-check kept), the payer's claimed amount as received; `reviewedBy`/`reviewedAt` record who; the fee as any confirmed payment; a failed read of the business's system restores the wait and answers 503 | research R6, creator 2026-10-02 |
+| D6 | `POST /payments/:id/bank-check { received }` under `payments: operate`. A conditional claim (`SAME_BANK` → `BANK_CHECKING`, with a two-minute lease on `next_validation_at` that the sweep's pre-check reclaims) makes one decision win; `received` settles through `settleWithoutCep` (`settlePanelPayment` / `settleApiPayment` with `cep: null`, D14's re-check kept), the payer's claimed amount as received; `reviewedBy`/`reviewedAt` record who; the fee as any confirmed payment; a failed read of the business's system restores the wait and answers 503 | research R6, creator 2026-10-02 |
 | D7 | The payer's contract and page change nothing: 017's words already render the wait, the release, the confirmation and the end; one test proves no text says how | research R7, creator 2026-10-02 |
-| D8 | Panel: chip "Por confirmar en tu banco" (`awaiting=bank`), a strip when N > 0, `StatusBadge` kinds `awaitingBank` and `notReceived`, **Sí, llegó** / **No llegó** behind `AlertDialog`s, the release and its lapse on the row, "Confirmado a mano por {nombre}" | research R8 |
+| D8 | Panel: chip "Por confirmar en tu banco" (`awaiting=bank`), a strip when N > 0, `StatusBadge` kinds `awaitingBank` and `notReceived`, **Sí, llegó** / **No llegó** behind `AlertDialog`s, a new `release` field (kind and lapse) shown on the row, "Confirmado a mano por {nombre}" | research R8 |
 | D9 | `askBeforeCredit` — reported by `/read`, enforced by the receipt door — asks the payer's bank on a clear same-bank reading: a new reason `same_bank` when the receipt has a key, `senderBank` added to `no_key`'s fields when it has none. The page asks "¿Desde qué banco pagaste?" with 017's chips; the answer is `transfer.senderBank`. A reading alone never makes a payment same-bank | research R9 |
 | D10 | The method in the business's system is SPEI: the row keeps `channel = 'spei'`; spec 019 carries the amendment | research R10, creator 2026-10-02 |
 | D11 | `/v1` links wait the same way, without a release, and the verdict webhook announces the decision | research R11 |
@@ -122,6 +122,8 @@ decisions. The plan adds the ones below; code comments cite them as
 | D14 | The match order: clave; same-bank; registered payer (waiting or expired unfound); a new payment for an exact amount asked on or before the credit's day; else "sin cliente". Undecided 013 rows are never decided. Same-bank rows inside the file's period without their credit end "no llegó" | research R14 |
 | D15 | `apps/api/src/statements/` (core) with `readers/`; route area `statements`; panel screen **Estado de cuenta**; the file is never stored | research R15 |
 | D16 | No reader before its real file. The monthly PDF as a second format, and what BBVA prints on the receiving side of a same-bank credit, stay open until the files arrive | research R16 |
+| D17 | After "no llegó", the payer's confirmation of the same data is a new payment that waits again (`identicalAttempt` skips rows ended `NOT_RECEIVED`), and an ended row never offers a retry (`retryAvailable` false) | research R5, creator 2026-10-03 |
+| D18 | **Asignar** is offered only where the integration can search customers; elsewhere the list shows with `canAssign: false` and the route answers 409 `ASSIGNMENT_UNAVAILABLE` | research R15, creator 2026-10-03 |
 
 ## Constitution Check
 
@@ -135,14 +137,14 @@ stack, as 018 did.
 | Principle | Gate | Verdict |
 | --- | --- | --- |
 | **Purpose** | "Devolada lets Mexican businesses … collect payments by SPEI and validates every transfer"; cash is the one named exception, confirmed by the store's word. A transfer within one bank never reaches SPEI and is confirmed by the business's own word or its statement — a way the Purpose does not name | ✅ PASS under v1.10.0: the Purpose now says a transfer from an account at the business's own bank is confirmed by the business, by hand or with its bank statement (was ⛔ under v1.9.2) |
-| I. Spec-Driven, Every Decision Cited | Sixteen decisions with where each was made; code cites `bank-statement-match D<n>`; spec 019's amendment is dated and quoted in both specs | PASS |
+| I. Spec-Driven, Every Decision Cited | Eighteen decisions with where each was made; code cites `bank-statement-match D<n>`; spec 019's amendment is dated and quoted in both specs | PASS |
 | II. Money Law | Cents end to end; the received amount is the payer's claim in cents (Phase A) or the credit's, parsed by the core's parsers (Phase B); "today" for the lapse is the business's timezone; matches exact to the cent | PASS |
 | III. One Contract, Pure Routers | `bank-check` joins `routes/payments`; `awaiting` and `bankCheck` in `payments/schema.ts`, exported as today; Phase B is a new area with its own export; routers stay pure; new codes are new meanings, not old ones reused | PASS |
 | IV. Tests Run on the Real Runtime | Lifecycle in workerd on a real D1 with providers at pinned origins, including the assertion that none is called; panel and page on MSW with validated fixtures and axe; layout on the browser layer; Phase C fixtures are real files, anonymized | PASS |
 | V. Tenant Isolation and Authorization by Area | Every query and the claim filter by `business_id`; deciding is `payments: operate`, reading `payments: read`; no cross-business read; statement data never in a payer contract (FR-015) | PASS |
 | VI. Visual Foundations | Two `StatusBadge` kinds with icon + text on existing tones; `AlertDialog` with the one dimming treatment; compact 40px buttons in the desktop panel; the payer's bank question reuses 017's 48px chips and a 64px decisive action; es-MX copy; no new token | PASS |
 | VII. Every Test Cites Its Story | Every new test cites `bank-statement-match US<n>`; tasks carry `[US<n>]` | PASS |
-| VIII. Absent Configuration Degrades | No new binding. Recognition precedes the provider checks, so a business without the provider credential still gets same-bank payments recognized and decided; without WispHub the confirmation settles as the business's mode says | PASS |
+| VIII. Absent Configuration Degrades | No new binding. Without the provider credential the pay route still refuses new payments, as today (`channelOpen`); a same-bank row already in flight is recognized before the provider check, so it waits instead of expiring on `PROVIDER_NOT_CONFIGURED`; without WispHub the confirmation settles as the business's mode says | PASS |
 | IX. The Core Speaks Generic | "Same bank", "collection account", "release", "integration" are core words; the release and the action go through the integration's capabilities as today; no WispHub word in a contract or in the panel's copy; a bank's export format lives in one reader file | PASS |
 | Stack, migrations, one trigger | No dependency; Phase A no migration, Phase B one additive migration; no new trigger — Phase A needs no sweep and Phase B runs in the upload request | PASS |
 
@@ -162,7 +164,7 @@ Re-read on purpose:
 ```text
 specs/015-bank-statement-match/
 ├── plan.md              # This file
-├── spec.md              # four stories, FR-001…FR-023, clarified 2026-09-26 … 2026-10-02
+├── spec.md              # four stories, FR-001…FR-024, clarified 2026-09-26 … 2026-10-03
 ├── research.md          # Phase 0: R1–R16
 ├── data-model.md        # Phase 1: Phase A's codes and states; Phase B's tables
 ├── quickstart.md        # Phase 1: validation per phase, gates
@@ -183,11 +185,12 @@ apps/api/
 │   │                                             #   [B] + statement_imports, statement_credits, payments.statement_credit_id
 │   ├── direct-payments/validation.ts             # ~ same-bank pre-check (D2, D3, D4); + settleWithoutCep (D6)
 │   ├── consta/extraction/ask.ts                  # ~ askBeforeCredit: same_bank; senderBank in no_key (D9)
+│   ├── routes/direct-payments/handler.ts         # ~ identicalAttempt skips NOT_RECEIVED; retryAvailable false (D17)
 │   ├── consta/index.ts                           # ~ the Ask union gains same_bank (D9)
 │   ├── routes/direct-payments/schema.ts          # ~ proofReadingResponse.ask: same_bank (D9)
 │   ├── routes/payments/
 │   │   ├── index.ts                              # + POST /payments/:id/bank-check
-│   │   ├── handler.ts                            # + bankCheck; ~ listPaymentFeed: awaiting=bank, bankCheck, release.lapsed
+│   │   ├── handler.ts                            # + bankCheck; ~ listPaymentFeed: awaiting=bank, bankCheck, release
 │   │   └── schema.ts                             # + awaiting, bankCheck, bankCheckBody (D6, D8)
 │   ├── statements/                               # [B] import.ts, identity.ts, match.ts (D12–D14)
 │   │   └── readers/                              # [C] one file per measured format (D16)

@@ -73,3 +73,9 @@
 - Planning no longer waits for the pilot's file (Session 2026-10-02): the
   real BBVA export is measured before its reader is built. The same-bank
   part without a file is delivered first.
+- Revised 2026-10-03 after `/speckit-analyze` (no CRITICAL; three HIGH and
+  six MEDIUM resolved): FR-019 scoped to the payment's state texts, the
+  transfer instructions kept; FR-017 limited to clear readings and FR-012
+  to integrations that can search customers, both by the creator's choice;
+  FR-024 added (after "no llegó", a new confirmation waits again and no
+  retry is offered). Plan D17–D18; tasks renumbered to T001–T050.

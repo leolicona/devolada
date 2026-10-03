@@ -18,7 +18,14 @@ searched:
 | `provisionalRelease` | as today, when the release applied (D4) |
 
 When it ends: `confirmed` / `partial` / `unapplied` as any settled
-payment; `expired` with `error: null` after "no llegó" (D5).
+payment; `expired` with `error: null` and `retryAvailable: false` after
+"no llegó" (D5, D17).
+
+## `POST /direct-payments/links/:token/pay` — after "no llegó"
+
+The payer's confirmation of the same data is a new payment that waits for
+the business, never `TRANSFER_ALREADY_USED`: `identicalAttempt` skips a
+row ended `NOT_RECEIVED` (D17, spec FR-024).
 
 ## What the page renders (no code change expected)
 
@@ -28,12 +35,14 @@ payment; `expired` with `error: null` after "no llegó" (D5).
 | Waiting, service restored | "Solo falta confirmarla" | :851 |
 | Waiting, no reference (typed clave) | "Estamos verificando tu transferencia…" | :1504-1529 |
 | Confirmed | the confirmed view | :1830-1867 |
-| Ended "no llegó" | "No pudimos confirmar tu transferencia a tiempo…", sent to the business by its name | :1980-2028 |
+| Ended "no llegó" | "No pudimos confirmar tu transferencia a tiempo…", sent to the business by its name; **no retry offered** (`retryAvailable: false`, D17) | :1980-2028 |
 
 **Test** (`apps/pago/test/bank-statement-match.test.tsx`, cites
-`bank-statement-match US4`): fed each status above, the page shows only
-these sentences; no rendered text names a bank, a statement, "mismo
-banco", or a confirmation by hand.
+`bank-statement-match US4`): fed each status above, the page's status views
+show only these sentences, and none says "mismo banco", mentions a
+statement, or a confirmation by hand. The transfer instructions (step 1)
+are outside the scan: they name the account's bank, as they must (spec
+FR-019).
 
 ## The receipt's bank question (D9)
 
@@ -49,8 +58,8 @@ z.object({ reason: z.literal("same_bank") }),
 ```
 
 Decided by `askBeforeCredit` (`consta/extraction/ask.ts`), which the
-receipt door also enforces, on a clear reading whose gate says
-`receiving.sameBank`:
+receipt door also enforces, on a clear reading (receipt-triage D16 — spec
+FR-017, creator 2026-10-03) whose gate says `receiving.sameBank`:
 
 - with a key (clave or a non-generic reference): `{ reason: "same_bank" }`,
   after `wrong_destination`;

@@ -35,9 +35,19 @@ bankCheck: z
   .default(null),
 ```
 
-and, inside the existing release fields, `lapsed: boolean` — true once
-`promiseDeadline(createdAt)` is before today in the business's timezone
-(D4).
+and a **new** release field — the feed carries none today:
+
+```ts
+/* bank-statement-match D4, D8: the provisional release, as the panel shows
+   it beside a waiting same-bank payment. Null when none was made. */
+release: z
+  .object({
+    kind: z.enum(["reconnect", "protect"]),   // from releaseKind
+    lapsed: z.boolean(),                      // promiseDeadline(createdAt) < today, business timezone
+  })
+  .nullable()
+  .default(null),
+```
 
 `state` is derived: `waiting` from `last_error` `SAME_BANK` or
 `BANK_CHECKING`; `received` on a confirmed, partial or unapplied row
@@ -58,11 +68,13 @@ export const bankCheckBody = z.object({ received: z.boolean() });
 | `received: true`, settled | `200 { success: true, data: feedCharge }` — the row as the feed shows it: `confirmed`, `partial` or `unapplied`, with its folio and action state |
 | `received: false` | `200 { success: true, data: feedCharge }` — `expired`, `bankCheck.state = "not_received"` |
 | The row is not this business's, or does not exist | `404 NOT_FOUND` (the route's existing code) |
-| The row is not waiting for the business (already decided, by an operator or a statement, or never same-bank) | `409 NOT_AWAITING_BANK` |
+| The row is not waiting for the business (already decided, by an operator or a statement, or never same-bank), or another decision holds it | `409 NOT_AWAITING_BANK` |
 | The business's system could not be read while settling | `503 INTEGRATION_UNAVAILABLE`; the row is waiting again |
 
 The handler records `reviewed_by = actor.userId`, `reviewed_at = now` on
-both answers (D6).
+both answers (D6). Its claim sets `last_error = 'BANK_CHECKING'` and a
+two-minute lease on `next_validation_at`; the sweep reclaims a lease whose
+decision never finished (D6).
 
 ## The feed screen (`apps/admin/src/features/feed/FeedScreen.tsx`)
 
@@ -78,8 +90,10 @@ both answers (D6).
   - "Desde {banco}, el mismo banco de tu cuenta de cobro. Revisa en tu
     banca si llegó." Then the customer, the amount, the reference and
     the day the payer gave.
-  - When restored: "Reconectado mientras lo confirmas" — or, once
-    `lapsed`, "La reconexión provisional ya venció".
+  - When `release` is set: "Reconectado mientras lo confirmas"
+    (`reconnect`) or "Protegido del corte mientras lo confirmas"
+    (`protect`) — or, once `lapsed`, "La reconexión provisional ya
+    venció".
   - With `payments: operate`: **Sí, llegó** and **No llegó**, each opening
     an `AlertDialog`:
     - **Sí, llegó** → "¿Confirmas que recibiste {monto} de {cliente}?

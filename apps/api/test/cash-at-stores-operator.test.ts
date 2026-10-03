@@ -262,7 +262,7 @@ describe("cash-at-stores US2 — the operator's stores (D4, D6, FR-001–FR-005)
 
     /* the link reads as any bad invitation, and accepting it makes no user */
     expect((await (await callStore(`/store/invitations/${first}`)).json()).data).toEqual({ state: "invalid" });
-    const accept = await callStore(`/store/invitations/${first}/accept`, post({ email: "lupita@correo.mx", password: "secreta123" }));
+    const accept = await callStore(`/store/invitations/${first}/accept`, post({ email: "lupita@correo.mx", otp: "123456" }));
     expect((await accept.json()).error.code).toBe("INVALID_INVITATION");
     expect(await db().select().from(userTable).where(eq(userTable.email, "lupita@correo.mx"))).toHaveLength(0);
 

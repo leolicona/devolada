@@ -28,3 +28,6 @@ playwright.*.local.config.ts
 
 # scripts/apicep-probe.sh output: raw provider answers carry names and accounts
 apicep-probe-*/
+
+# scripts/wisphub-payment-methods-probe.mjs output: customer usuarios are personal data
+wisphub-formas-de-pago-*/

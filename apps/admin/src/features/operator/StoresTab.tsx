@@ -35,7 +35,8 @@ import { useDisplaySettings } from "../auth/session";
    D21): every store with its shopkeeper, its status as icon + text and the
    businesses it collects for; create and edit at the panel's compact size;
    the invitation shown once; suspend and reactivate behind a confirmation;
-   and a store's cash book per business, with *Registrar corrección*. */
+   delete a store nobody accepted (D33); and a store's cash book per
+   business, with *Registrar corrección*. */
 
 const STATUS: Record<StoreRow["status"], Status> = {
   invited: "invited",
@@ -293,6 +294,49 @@ function StatusAction({ store }: { store: StoreRow }) {
   );
 }
 
+/* D33 (FR-005): why a delete was refused. The button shows only on an
+   *Invitada* row, so NOT_INVITED means the shopkeeper accepted meanwhile. */
+const DELETE_ERRORS: Record<string, string> = {
+  NOT_INVITED: "El tendero acaba de aceptar su invitación; la tienda ya no se puede eliminar. Si hace falta, suspéndela.",
+  NOT_FOUND: "La tienda ya no existe en la lista. Actualízala.",
+};
+
+/* D33: a store nobody accepted can go, and its phone with it */
+function DeleteStore({ store }: { store: StoreRow }) {
+  const queryClient = useQueryClient();
+  const remove = useMutation<{ id: string }, ApiError>({
+    mutationFn: () => api<{ id: string }>(`/platform/stores/${store.id}`, { method: "DELETE" }),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["platform-stores"] }),
+  });
+  return (
+    <Pending active={remove.isPending} label="Eliminando la tienda">
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button size="compact" variant="destructive" disabled={remove.isPending}>
+            Eliminar
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogTitle>¿Eliminar {store.name}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            La tienda sale de la lista y su invitación deja de funcionar. Su celular queda libre para otra tienda. No se
+            puede deshacer.
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => remove.mutate()}>Eliminar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {remove.error && (
+        <p role="alert" className="text-sm font-medium text-error">
+          {DELETE_ERRORS[remove.error.code] ?? "No se pudo eliminar la tienda. Intenta de nuevo."}
+        </p>
+      )}
+    </Pending>
+  );
+}
+
 /* T086 (FR-004): why a re-send was refused, in the operator's words */
 const RESEND_ERRORS: Record<string, string> = {
   ALREADY_ACCEPTED: "El tendero ya aceptó su invitación; no hay que reenviarla.",
@@ -492,6 +536,7 @@ function StoreItem({ store }: { store: StoreRow }) {
         <EditStore store={store} />
         {store.status === "invited" && <Resend store={store} />}
         <StatusAction store={store} />
+        {store.status === "invited" && <DeleteStore store={store} />}
       </div>
       {book && (
         <CashBook

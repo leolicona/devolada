@@ -944,6 +944,49 @@ same address. From 1024 px it uses the width:
   be about 220px, narrower than the 360px phone floor. At 1024 px each
   half is about 350px, a phone's width.
 
+## D33 — Deleting a store nobody accepted
+
+*(Added 2026-10-03. The creator's walk (T065) found that a store created
+by mistake could only be suspended; FR-005 is amended to match.)*
+
+FR-005 made removing a store a suspension, to keep its payments, its cash
+book and its hand-overs. A store whose shopkeeper never accepted has none
+of them: only the accepted shopkeeper can sign in, and only a signed-in
+store can collect. Yet a suspended store stays in the list for good and
+keeps its phone, which is unique across every store (D3). So a store
+created by mistake blocks the right one.
+
+**Decision**: a store can be deleted while it is `invited`, and only then.
+
+- **The rule is the status the operator sees.** `invited` means nobody
+  accepted and the store is not suspended. A store suspended before
+  acceptance is reactivated first (it returns to `invited`), then deleted.
+  The creator chose the narrower rule (2026-10-03).
+- **One batch, both statements conditional on the store still being
+  `invited` with no `user_id`**: delete its invitations, then the store.
+  The invitations go first because `store_invitations.store_id` points at
+  the store, and D1 enforces it. The condition is what makes it safe
+  against an acceptance in flight: acceptance links the store in its own
+  conditional batch (D5), and D1 runs batches one at a time. If the
+  acceptance wins, the delete changes nothing and answers 409. If the
+  delete wins, the acceptance links nothing and rolls its user back, as
+  it does for any lost race (`INVALID_INVITATION`).
+- **What goes**: the store row and its invitations. The phone is free
+  again, and the invitation link stops working (it reads as any bad
+  invitation, D4). Nothing else exists to delete.
+- **Answers**: 200 `{ id }`; 404 `NOT_FOUND`; 409 `NOT_INVITED` when the
+  store is active or suspended.
+- **The panel** offers *Eliminar* only on an *Invitada* row, behind a
+  confirmation that says it cannot be undone and that the link stops
+  working.
+
+**Alternatives considered**:
+- **Also delete an accepted store with no movements.** Rejected by the
+  creator: it would delete the shopkeeper's account too, and editing the
+  store (FR-003) already fixes wrong details.
+- **Hide suspended stores from the list.** Rejected: the phone stays
+  taken, which is the half of the problem that blocks work.
+
 ## Measurements to take before code (quickstart §0)
 
 | # | What | Decides |

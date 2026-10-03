@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { and, desc, eq, inArray, like, ne, or, sql, sum } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, like, ne, or, sql, sum } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
 import {
@@ -387,6 +387,28 @@ export async function resendStoreInvitation(c: Ctx, id: string) {
   if (store.userId) return c.json({ success: false, error: { code: "ALREADY_ACCEPTED" } }, 409);
   const invitation = await issueInvitation(c, db, store, new Date());
   return c.json({ success: true, data: { invitation } }, 201);
+}
+
+/* FR-005's one exception (D33): a store nobody accepted has no account,
+   payment, cash book or hand-over, so deleting it loses nothing and frees
+   its phone. One batch, both statements conditional on the store being
+   `invited` with no user — the invitations first, since they point at the
+   store. An acceptance in flight links the store in its own conditional
+   batch (D5): if it won, nothing here matches and the answer is
+   NOT_INVITED; if this won, it links nothing and rolls its user back. */
+export async function deleteStore(c: Ctx, id: string) {
+  const db = drizzle(c.env.DB);
+  const [store] = await db.select({ id: stores.id }).from(stores).where(eq(stores.id, id));
+  if (!store) return c.json({ success: false, error: { code: "NOT_FOUND" } }, 404);
+  const stillInvited = and(eq(stores.id, id), eq(stores.status, "invited"), isNull(stores.userId));
+  const [, deleted] = await db.batch([
+    db
+      .delete(storeInvitations)
+      .where(and(eq(storeInvitations.storeId, id), sql`exists (select 1 from ${stores} where ${stillInvited})`)),
+    db.delete(stores).where(stillInvited).returning({ id: stores.id }),
+  ]);
+  if (deleted.length === 0) return c.json({ success: false, error: { code: "NOT_INVITED" } }, 409);
+  return c.json({ success: true, data: { id } });
 }
 
 const LEDGER_PAGE = 20;

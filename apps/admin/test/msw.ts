@@ -205,6 +205,8 @@ export const handlers = {
     http.patch("/platform/stores/:id", async ({ params, request }) => r(String(params.id), await request.json())),
   resendStoreInvitation: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/platform/stores/:id/invitation", ({ params }) => r(String(params.id))),
+  deleteStore: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
+    http.delete("/platform/stores/:id", ({ params }) => r(String(params.id))),
   storeLedger: (r: (id: string, businessId: string) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/platform/stores/:id/ledger/:businessId", ({ params }) => r(String(params.id), String(params.businessId))),
   storeCorrection: (r: (id: string, businessId: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>

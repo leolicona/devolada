@@ -243,6 +243,58 @@ describe("cash-at-stores US2 — the operator's stores (D4, D6, FR-001–FR-005)
     expect((await (await callStore(`/store/invitations/${token}`)).json()).data.state).toBe("open");
   });
 
+  it("deletes a store nobody accepted: the store and its invitations go, its link stops working, its phone is free (D33)", async () => {
+    await seedBusiness();
+    const created = createStoreResponse.parse((await (await asOperator("/platform/stores", post(NEW_STORE))).json()).data);
+    const first = tokenOf(created.invitation.url);
+    /* a resend leaves a `replaced` row beside the open one: both go */
+    await asOperator(`/platform/stores/${created.store.id}/invitation`, { method: "POST" });
+
+    const res = await asOperator(`/platform/stores/${created.store.id}`, { method: "DELETE" });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ id: created.store.id });
+    expect(await db().select().from(stores)).toHaveLength(0);
+    expect(await db().select().from(storeInvitations)).toHaveLength(0);
+
+    /* the link reads as any bad invitation, and accepting it makes no user */
+    expect((await (await callStore(`/store/invitations/${first}`)).json()).data).toEqual({ state: "invalid" });
+    const accept = await callStore(`/store/invitations/${first}/accept`, post({ email: "lupita@correo.mx", password: "secreta123" }));
+    expect((await accept.json()).error.code).toBe("INVALID_INVITATION");
+    expect(await db().select().from(userTable).where(eq(userTable.email, "lupita@correo.mx"))).toHaveLength(0);
+
+    /* the phone the mistaken store held makes the right one */
+    const again = await asOperator("/platform/stores", post({ ...NEW_STORE, name: "Abarrotes Lupa" }));
+    expect(again.status).toBe(201);
+  });
+
+  it("an active store, or one suspended before acceptance, is NOT_INVITED and stays; an unknown one is NOT_FOUND (D33)", async () => {
+    await seedBusiness();
+    const active = await seedStore({ phone: "5512345678" });
+    await storeSession(active);
+    const refused = await asOperator(`/platform/stores/${active.id}`, { method: "DELETE" });
+    expect(refused.status).toBe(409);
+    expect((await refused.json()).error.code).toBe("NOT_INVITED");
+
+    const created = createStoreResponse.parse((await (await asOperator("/platform/stores", post({ ...NEW_STORE, phone: "5587654321" }))).json()).data);
+    await asOperator(`/platform/stores/${created.store.id}`, patch({ status: "suspended" }));
+    const suspended = await asOperator(`/platform/stores/${created.store.id}`, { method: "DELETE" });
+    expect(suspended.status).toBe(409);
+    expect((await suspended.json()).error.code).toBe("NOT_INVITED");
+
+    /* still `invited`, but a user is linked: an acceptance got there first */
+    const halfway = await seedStore({ phone: "5511112222" });
+    await storeSession(halfway, { activate: false });
+    const raced = await asOperator(`/platform/stores/${halfway.id}`, { method: "DELETE" });
+    expect((await raced.json()).error.code).toBe("NOT_INVITED");
+
+    expect(await db().select().from(stores)).toHaveLength(3);
+    expect(await db().select().from(storeInvitations).where(eq(storeInvitations.storeId, created.store.id))).toHaveLength(1);
+
+    const missing = await asOperator("/platform/stores/nadie", { method: "DELETE" });
+    expect(missing.status).toBe(404);
+    expect((await missing.json()).error.code).toBe("NOT_FOUND");
+  });
+
   it("a non-operator gets NOT_PLATFORM_OPERATOR on every store door", async () => {
     const business = await seedBusiness();
     await seedMember(business, "socio@wifiplus.mx", "owner");
@@ -251,6 +303,7 @@ describe("cash-at-stores US2 — the operator's stores (D4, D6, FR-001–FR-005)
       ["/platform/stores", {}],
       ["/platform/stores", post(NEW_STORE)],
       ["/platform/stores/x", patch({ name: "Nuevo" })],
+      ["/platform/stores/x", { method: "DELETE" }],
       ["/platform/stores/x/invitation", { method: "POST" }],
       ["/platform/stores/x/ledger/y", {}],
       ["/platform/stores/x/ledger/y/corrections", post({ paymentId: "p", cents: 100, reason: "por error" })],

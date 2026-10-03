@@ -616,10 +616,12 @@ cycle: collect, see, hand over, confirm.
   - nothing in code says "cash" where `store` is the word;
   - the receipt says *Cargo por servicio*, never "comisión".
 - [X] T064 Run quickstart §2 in the CI order, locally: spec-lint, gen-banks, contrast-lint, pending-lint, typecheck, every test suite, `pnpm e2e` and `pnpm e2e:passkey`. Fix what fails, with no skip and no quarantine.
-- [ ] T065 After merge to `main` and the dev deploy, walk quickstart §3 on `red.dev.devoladapago.com` with the demo tenant. Record the walk's date and anything that differed in `specs/018-cash-at-stores/quickstart.md`. Time two things, and record them beside SC-001 and SC-002 (/speckit-analyze L5):
+- [X] T065 After merge to `main` and the dev deploy, walk quickstart §3 on `red.dev.devoladapago.com` with the demo tenant. Record the walk's date and anything that differed in `specs/018-cash-at-stores/quickstart.md`. Time two things, and record them beside SC-001 and SC-002 (/speckit-analyze L5):
   - from typing the customer's name to the folio on screen (SC-001: under 60 s);
   - from the folio to the customer active in WispHub (SC-002: under 2 minutes).
-- [ ] T066 Wire red into production:
+
+  Walked by the creator on 2026-10-03; the walk passed. Two findings, recorded in quickstart §3: a store created by mistake cannot be removed (Phase 11), and a second business is refused, as FR-006 means it to be. The two times were not recorded in this walk.
+- [X] T066 Wire red into production (2026-10-03, bug `red-prod-not-deployed`: the prod API was issuing invitations to `red.devoladapago.com`, which had no Worker and no DNS record):
   - **`.github/workflows/deploy-prod.yml`**: a build with `vars.PROD_API_URL`, a deploy logged with `tee`, `red` in the "what landed" loop, and a smoke probe on `PROD_RED_URL`;
   - **`.github/workflows/rollback-prod.yml`**: `red` in the options and in the `case` that maps a Worker to its config;
   - **the GitHub environment**: `PROD_RED_URL` set.

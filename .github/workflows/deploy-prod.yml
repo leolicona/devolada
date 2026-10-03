@@ -319,6 +319,18 @@ jobs:
         working-directory: apps/landing
         shell: bash
         run: pnpm --filter @devolada/api exec wrangler deploy --config ../landing/wrangler.jsonc --env prod 2>&1 | tee "$RUNNER_TEMP/deploy-landing.log"
+      # cash-at-stores D29, T066: the fifth Worker, the store app at
+      # red.devoladapago.com. `custom_domain: true` creates the record on
+      # its first deploy (measured 2026-10-03: no record existed, so every
+      # invitation the prod API issued pointed nowhere — bug
+      # red-prod-not-deployed); the smoke below waits out the certificate race.
+      - name: Build store app (prod API baked in)
+        working-directory: apps/red
+        run: VITE_API_URL="${{ vars.PROD_API_URL }}" pnpm build
+      - name: Deploy prod store app
+        working-directory: apps/red
+        shell: bash
+        run: pnpm --filter @devolada/api exec wrangler deploy --config ../red/wrangler.jsonc --env prod 2>&1 | tee "$RUNNER_TEMP/deploy-red.log"
       # production-launch D12 (FR-009): the one place the creator reads after
       # approving — which version of each service is live and which archive
       # was taken. The ids are what rollback-prod.yml takes as input, which
@@ -332,7 +344,7 @@ jobs:
             echo
             echo "| service | version id |"
             echo "| --- | --- |"
-            for w in api admin pago landing; do
+            for w in api admin pago landing red; do
               id=$(grep -o 'Current Version ID: [0-9a-f-]*' "$RUNNER_TEMP/deploy-$w.log" 2>/dev/null | tail -1 | awk '{print $4}')
               echo "| devolada-$w | ${id:-not deployed in this run} |"
             done
@@ -340,11 +352,11 @@ jobs:
             echo "Archive before migrating: artifact \`d1-backup-${{ github.ref_name }}\` (kept 30 days)."
             echo "Undo: Actions → Rollback Prod with the service and the version id (production-launch D7)."
           } | tee -a "$GITHUB_STEP_SUMMARY"
-      # production-launch D6: four services, their custom domains, as many
+      # production-launch D6: five services, their custom domains, as many
       # certificate races — /health proves only the API. An assets Worker
       # with single-page-application fallback answers / with 200 and the
       # shell, and the landing answers / with its page, so one probe serves
-      # all four. Every URL is tried before the step fails, so one red log
+      # all five. Every URL is tried before the step fails, so one red log
       # names every host that did not answer.
       - name: Smoke test
         run: |
@@ -375,4 +387,8 @@ jobs:
           probe admin "${{ vars.PROD_ADMIN_URL }}" "/"       || failed=1
           probe pago  "${{ vars.PROD_PAGO_URL }}"  "/"       || failed=1
           probe landing "${{ vars.PROD_LANDING_URL }}" "/"   || failed=1
+          # T066: PROD_RED_URL was set with a trailing slash (2026-10-01);
+          # trimmed so the probe asks for /, not //
+          RED="${{ vars.PROD_RED_URL }}"
+          probe red   "${RED%/}"                     "/"       || failed=1
           exit $failed

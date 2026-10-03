@@ -137,6 +137,16 @@ The prerequisites:
 12. **Tiendas.** Suspend the store. On the phone, the next tap shows the
     suspended screen.
 
+**Walked 2026-10-03** by the creator (T065). It passed, with two findings:
+- a store created by mistake could only be suspended. It stayed in the
+  list and kept its phone. FR-005 is amended so a store nobody accepted can
+  be deleted (Phase 11 of tasks.md);
+- switching *Efectivo en tiendas* on for a second business is refused.
+  That is step 2 working as FR-006 means it to: which stores serve which
+  business is still deferred, and the creator kept it deferred.
+
+The times for SC-001 and SC-002 were not taken in this walk.
+
 ## 4. Before the first real collection (outside the code)
 
 - `devolada-red`'s deploy workflows are turned off (research D30).

@@ -68,6 +68,23 @@ Errors:
 - **409 `PHONE_TAKEN`.**
 - **404 `NOT_FOUND`.**
 
+### `DELETE /platform/stores/:id`
+
+*(Added 2026-10-03, D33.)* Deletes a store whose shopkeeper never
+accepted, with its invitations (FR-005). Its link stops working and its
+phone is free.
+
+**200**:
+
+```json
+{ "success": true, "data": { "id": "…" } }
+```
+
+- **409 `NOT_INVITED`** when the store is active or suspended. A store
+  suspended before acceptance is reactivated first; it then reads
+  `invited`.
+- **404 `NOT_FOUND`.**
+
 ### `POST /platform/stores/:id/invitation`
 
 Resends the invitation: it issues a new one and replaces the open one.

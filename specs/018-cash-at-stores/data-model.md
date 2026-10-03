@@ -38,7 +38,14 @@ A platform row: it has **no `business_id`**.
   its seven days. A suspended store's open invitation is not accepted
   (400 `INVALID_INVITATION`).
 
-No transition deletes anything.
+- `invited → deleted`: by the operator (FR-005, D33). One batch, both
+  statements conditional on `status = 'invited'` and no `user_id`: the
+  store's invitations, then the store. An acceptance in flight either
+  wins (the delete changes nothing) or loses (it links nothing and rolls
+  its user back).
+
+No other transition deletes anything. *(Amended 2026-10-03, D33: this
+said that no transition deletes anything.)*
 
 ### `store_invitations`: the shopkeeper's way in (D4)
 

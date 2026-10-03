@@ -12,6 +12,7 @@ import {
 } from "./schema";
 import {
   createStore,
+  deleteStore,
   getStoreLedger,
   listStores,
   patchStore,
@@ -76,6 +77,8 @@ platformRoute.patch("/stores/:id", zValidator("json", patchStoreRequest, (result
   patchStore(c, c.req.param("id"), c.req.valid("json")),
 );
 platformRoute.post("/stores/:id/invitation", (c) => resendStoreInvitation(c, c.req.param("id")));
+/* D33: only a store nobody accepted (FR-005) */
+platformRoute.delete("/stores/:id", (c) => deleteStore(c, c.req.param("id")));
 platformRoute.get("/stores/:id/ledger/:businessId", (c) =>
   getStoreLedger(c, c.req.param("id"), c.req.param("businessId"), c.req.query("cursor")),
 );

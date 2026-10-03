@@ -239,6 +239,46 @@ describe("cash-at-stores US2: the operator's Tiendas tab", () => {
     await waitFor(() => expect(patched).toContainEqual(["s3", { status: "active" }]));
   });
 
+  it("deletes a store nobody accepted, behind a confirmation that says it cannot be undone, and refreshes the list (D33, FR-005, US2/AC13)", async () => {
+    const deleted: string[] = [];
+    let listed = 0;
+    arrange([
+      handlers.deleteStore((id) => {
+        deleted.push(id);
+        return ok({ id });
+      }),
+      handlers.platformStores(() => {
+        listed += 1;
+        return ok(stores);
+      }),
+    ]);
+    await openStores();
+    /* only an *Invitada* row offers it: an active or suspended store has history to keep */
+    expect(within(item("Abarrotes Lupita")).queryByRole("button", { name: "Eliminar" })).not.toBeInTheDocument();
+    expect(within(item("Farmacia Luz")).queryByRole("button", { name: "Eliminar" })).not.toBeInTheDocument();
+
+    await userEvent.click(within(item("Papelería El Sol")).getByRole("button", { name: "Eliminar" }));
+    const confirm = await screen.findByRole("alertdialog");
+    expect(within(confirm).getByRole("heading")).toHaveTextContent("¿Eliminar Papelería El Sol?");
+    expect(within(confirm).getByText(/su invitación deja de funcionar/)).toBeInTheDocument();
+    expect(within(confirm).getByText(/No se puede deshacer/)).toBeInTheDocument();
+    await expectNoViolations(confirm);
+    expect(deleted).toEqual([]);
+
+    const before = listed;
+    await userEvent.click(within(confirm).getByRole("button", { name: "Eliminar" }));
+    await waitFor(() => expect(deleted).toEqual(["s2"]));
+    await waitFor(() => expect(listed).toBeGreaterThan(before));
+  });
+
+  it("a refused delete says why, at the control (D33)", async () => {
+    arrange([handlers.deleteStore(() => fail("NOT_INVITED", 409))]);
+    await openStores();
+    await userEvent.click(within(item("Papelería El Sol")).getByRole("button", { name: "Eliminar" }));
+    await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Eliminar" }));
+    expect(await within(item("Papelería El Sol")).findByRole("alert")).toHaveTextContent("acaba de aceptar su invitación");
+  });
+
   it("records a correction against one payment, with a reason of 3 to 280 letters (D21)", async () => {
     const corrections: unknown[] = [];
     const ledger = platformLedgerResponse.parse({

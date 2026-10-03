@@ -616,10 +616,12 @@ cycle: collect, see, hand over, confirm.
   - nothing in code says "cash" where `store` is the word;
   - the receipt says *Cargo por servicio*, never "comisión".
 - [X] T064 Run quickstart §2 in the CI order, locally: spec-lint, gen-banks, contrast-lint, pending-lint, typecheck, every test suite, `pnpm e2e` and `pnpm e2e:passkey`. Fix what fails, with no skip and no quarantine.
-- [ ] T065 After merge to `main` and the dev deploy, walk quickstart §3 on `red.dev.devoladapago.com` with the demo tenant. Record the walk's date and anything that differed in `specs/018-cash-at-stores/quickstart.md`. Time two things, and record them beside SC-001 and SC-002 (/speckit-analyze L5):
+- [X] T065 After merge to `main` and the dev deploy, walk quickstart §3 on `red.dev.devoladapago.com` with the demo tenant. Record the walk's date and anything that differed in `specs/018-cash-at-stores/quickstart.md`. Time two things, and record them beside SC-001 and SC-002 (/speckit-analyze L5):
   - from typing the customer's name to the folio on screen (SC-001: under 60 s);
   - from the folio to the customer active in WispHub (SC-002: under 2 minutes).
-- [ ] T066 Wire red into production:
+
+  Walked by the creator on 2026-10-03; the walk passed. Two findings, recorded in quickstart §3: a store created by mistake cannot be removed (Phase 11), and a second business is refused, as FR-006 means it to be. The two times were not recorded in this walk.
+- [X] T066 Wire red into production (2026-10-03, bug `red-prod-not-deployed`: the prod API was issuing invitations to `red.devoladapago.com`, which had no Worker and no DNS record):
   - **`.github/workflows/deploy-prod.yml`**: a build with `vars.PROD_API_URL`, a deploy logged with `tee`, `red` in the "what landed" loop, and a smoke probe on `PROD_RED_URL`;
   - **`.github/workflows/rollback-prod.yml`**: `red` in the options and in the `case` that maps a Worker to its config;
   - **the GitHub environment**: `PROD_RED_URL` set.
@@ -912,3 +914,14 @@ D32 records the layout. Nothing changes in the API.
 - [X] T111 [US5] Show *Movimientos* as a table per day from 1024px (*Hora*, *Movimiento*, *Folio*, *Tu cargo*, *Monto*), per D32.
 - [X] T112 [US1] [US5] Prove the desktop composition in `apps/red/test/desktop.test.tsx` at 1280px: the side menu, the two halves of *Cobrar* (the mark, the headings, the emptied search), *Mi caja* with the hand-overs, *Registrar entrega* and the table.
 - [X] T113 [US1] [US5] Measure it in the browser layer: the side menu at 1024 and 1280 and the tabs at 768 (`tests/e2e/responsive.spec.ts`), the two halves side by side, and the desktop screens' contrast in both themes (`tests/e2e/contrast.spec.ts`), with one phone screen kept so the tab bar stays measured.
+
+## Phase 11: Deleting a store nobody accepted
+
+**Purpose**: the creator's walk on dev (T065, 2026-10-03) found that a
+store created by mistake could only be suspended: it stayed in the list
+and kept its phone. FR-005 is amended and research D33 records the rule:
+a store can be deleted while it is *Invitada*, and only then.
+
+- [X] T114 Amend FR-005, US2 (scenario 13), the Store entity and the 2026-10-03 clarifications in `spec.md`; add D33 to `research.md`, the `invited → deleted` transition to `data-model.md`, and `DELETE /platform/stores/:id` to `contracts/platform-stores-api.md`.
+- [X] T115 [US2] Add `DELETE /platform/stores/:id` (`apps/api/src/routes/platform/{index,handler}.ts`), per D33: one batch, both statements conditional on `invited` and no `user_id` — the invitations, then the store; 200 `{ id }`, 404 `NOT_FOUND`, 409 `NOT_INVITED`. Add the cases to `apps/api/test/cash-at-stores-operator.test.ts`, citing `cash-at-stores US2`: the store and its invitations are gone, its link answers `invalid`, its phone creates a new store; an active and a suspended store are refused and untouched; a non-operator is refused.
+- [X] T116 [US2] Offer *Eliminar* on an *Invitada* row of the Tiendas tab (`apps/admin/src/features/operator/StoresTab.tsx`), behind a confirmation that says it cannot be undone and that the link stops working; say a refusal at the control. Add the cases to `apps/admin/test/operator-stores.test.tsx`, citing `cash-at-stores US2`: the button only on *Invitada*, the confirmation, the list refreshed, `NOT_INVITED` said in words.

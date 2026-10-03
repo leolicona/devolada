@@ -9,8 +9,9 @@
 2026-10-01 (a paused credit, a mistaken payment). Revised at planning,
 2026-10-01: FR-027 (research D18). Revised after /speckit-analyze,
 2026-10-01: the receipt's phone and message (FR-026, FR-043; constitution
-v1.9.0). One decision is deferred on purpose: which businesses each store
-collects for (FR-006).
+v1.9.0). Revised after the walk on dev, 2026-10-03: FR-005 (a store
+nobody accepted can be deleted, research D33). One decision is deferred on
+purpose: which businesses each store collects for (FR-006).
 
 **Input**: User description: "Si quisiera asumir el puente con api.devoladapago.com para este scope: 1. Las tiendas las administra (alta, edición, baja) devolada desde el perfil /operator. 2. El ISP lo activa desdes integraciones. 3. Los pagos en efectivo se lista con los pagos SPEI. 4. El frontend red.devoladapago.com es el mismo" — then, after three rounds of questions: "Si, un ISP quiere probarlo."
 
@@ -208,6 +209,23 @@ I):
   system's phone, so the customer dictates it every time (option A); and
   also keeping the number a shopkeeper types (option C).
 
+### Session 2026-10-03
+
+After the walk on dev (T065):
+
+- Q: A store created by mistake can only be suspended. It stays in the
+  list and keeps its phone, so the right store cannot be created with
+  that phone. May the operator delete it? → A: Yes, while it is
+  *Invitada*, and only then. Nobody accepted it, so it has no shopkeeper
+  account, no payments, no cash book and no hand-overs. Deleting it
+  removes the store and its invitation and frees the phone (FR-005,
+  research D33). Rejected: also deleting an accepted store with no
+  movements (it would delete the shopkeeper's account too, and editing
+  the store already fixes wrong details).
+- Q: The switch refuses a second business. Is it time to decide which
+  stores serve which business? → A: Not yet. The channel stays on for one
+  business at a time (FR-006), and the decision stays deferred.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Collect cash at the counter (Priority: P1)
@@ -344,6 +362,11 @@ shopkeeper's access on their next action.
     and saves it, **Then** the next receipt any store sends uses it, and the
     change keeps its author and date. A message without the folio, or with
     a placeholder the system does not know, is refused and says why.
+13. **Given** a store listed as *Invitada*, **When** the operator deletes
+    it and confirms, **Then** it leaves the list, its invitation stops
+    working, and its phone can be used for another store. **Given** an
+    *Activa* or *Suspendida* store, **Then** the panel offers no delete,
+    and the API refuses one. *(Added 2026-10-03, research D33.)*
 
 ---
 
@@ -542,7 +565,12 @@ see the dispute and its note.
 - **FR-005**: Removing a store MUST be a suspension, never a deletion. A
   suspended store MUST lose access on its next action (FR-014). It keeps its
   payments, its cash book and its pending hand-overs, and can be
-  reactivated.
+  reactivated. The one exception is a store still *Invitada*: the operator
+  MAY delete it. Deleting it MUST remove the store and its invitations, so
+  its link stops working and its phone is free. It MUST be refused for
+  any store that is not *Invitada*. *(Amended 2026-10-03 after the walk on
+  dev, research D33: this allowed no deletion at all, so a store created
+  by mistake stayed listed and kept its phone.)*
 - **FR-006**: In this feature, every active store MUST collect for the
   business that has the channel on. The channel MUST be on for at most one
   business at a time. Switching it on for a second business MUST be
@@ -749,8 +777,9 @@ see the dispute and its note.
 
 - **Store**: a place that collects cash for businesses. It has a name, an
   address, a status (invited, active, suspended) and one shopkeeper
-  account. It is created and managed by the platform operator and never
-  deleted.
+  account. It is created and managed by the platform operator. It is
+  never deleted once its shopkeeper has accepted; while it is still
+  invited, the operator may delete it (FR-005).
 - **Shopkeeper**: the person who signs in to the store app. The mobile phone
   is their sign-in name, and they have a verified recovery email and
   optionally a passkey. A shopkeeper is not a member of any business.

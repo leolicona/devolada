@@ -214,10 +214,10 @@ export const integrationsHub = {
   api: { activeCredentials: 1 },
 };
 
-/* automated-collections-api US1: the API card's detail */
-/* payment-method-per-channel D8: the WispHub screen's setup block, both
-   lines created, so the browser measures the card — badges, copy fields,
-   mono names — in both themes and at every width */
+/* payment-method-per-channel D8: the WispHub screen's setup block — the
+   SPEI line created, the network's still to create — so the browser
+   measures the card, both badges (success and info), the copy fields and
+   the mono names, in both themes and at every width */
 export const wisphubPaymentMethods = devoladaMethods.parse({
   checked: true,
   link: {
@@ -233,6 +233,7 @@ export const wisphubPaymentMethods = devoladaMethods.parse({
   },
 });
 
+/* automated-collections-api US1: the API card's detail */
 export const apiIntegration = {
   credentials: [
     {

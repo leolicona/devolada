@@ -64,12 +64,15 @@ function refusedFields(text: string): string[] {
 }
 
 /* payment-method-per-channel D3: one payment method as the provider lists
-   it — an id and a name, nothing else (R8) */
+   it — an id and a name, nothing else (measured 2026-10-02, R8) */
 export type PaymentMethod = { id: number; nombre: string };
 
 /* D3: how far the list is followed. The provider's default page size was
    never measured, so the read asks for 100 a page and follows `next`;
-   the cap only guards a provider that would answer `next` forever. */
+   the cap only guards a provider that would answer `next` forever. Past
+   2,000 methods the list is used as read: a Devolada method beyond it is
+   not found and that channel records as cash (FR-004) — the action never
+   waits, which a throw here would break (SC-005). */
 const PAYMENT_METHOD_PAGES = 20;
 
 export type WispHubCustomer = {
@@ -491,34 +494,39 @@ export class WispHub {
   async listPaymentMethods(): Promise<PaymentMethod[]> {
     const out: PaymentMethod[] = [];
     for (let page = 0, offset = 0; page < PAYMENT_METHOD_PAGES; page++) {
-      const data = await this.get<{ next?: unknown; results?: unknown }>(
+      const data = await this.get<{ next?: unknown; results?: unknown } | null>(
         `/formas-de-pago/?limit=100&offset=${offset}`,
       );
-      if (!Array.isArray(data.results)) {
+      /* D8, FR-009: a body that is not a list — the JSON `null` included —
+         is the provider not answering usefully, so the setup read says
+         "could not check" and the gate 503, never a 500 */
+      const results = data?.results;
+      if (!Array.isArray(results)) {
         throw new WispHubError("WISPHUB_UNAVAILABLE", "payment methods: unreadable body");
       }
-      for (const raw of data.results) {
+      for (const raw of results) {
         const m = raw as { id?: unknown; nombre?: unknown } | null;
         if (typeof m?.id === "number" && Number.isSafeInteger(m.id) && typeof m.nombre === "string") {
           out.push({ id: m.id, nombre: m.nombre });
         }
       }
-      if (typeof data.next !== "string" || data.results.length === 0) break;
-      offset += data.results.length;
+      if (typeof data?.next !== "string" || results.length === 0) break;
+      offset += results.length;
     }
     return out;
   }
 
-  /* Health probes for the connection test (provider-address-per-isp
-     D7), and nothing else. One call each, `limit=1`, no paging: the
-     question is "does this key reach this endpoint on this
-     installation", not "what is in it". The business methods below
-     answer a different question and page up to five times, which is not
-     what an ISP waiting on a Probar conexión button should pay for.
+  /* The invoices health probe of the connection test
+     (provider-address-per-isp D7), and nothing else. One call, `limit=1`,
+     no paging: the question is "does this key reach this endpoint on this
+     installation", not "what is in it", and an empty list is not a
+     failure — a tenant with no invoice yet has a perfectly good
+     permission. Only the provider's own refusal means anything here.
 
-     They deliberately do NOT interpret an empty list as a failure: a
-     tenant with no invoice yet has a perfectly good permission. Only
-     the provider's own refusal means anything here. */
+     The payment-methods probe is no longer one of these: it reads the
+     whole list with `listPaymentMethods`, because the same read tells the
+     business whether Devolada's methods exist (payment-method-per-channel
+     D8). */
   async probeInvoices(): Promise<void> {
     await this.get<{ results: unknown[] }>("/facturas/?limit=1");
   }

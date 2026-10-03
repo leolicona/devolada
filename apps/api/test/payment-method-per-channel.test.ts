@@ -247,14 +247,22 @@ describe("payment-method-per-channel US1: the business downloads what came in by
     const res = await (await app()).request(`/payments/${observed.id}/execute-action`, { method: "POST", headers: await asOwner() }, testEnv);
     expect(res.status).toBe(200);
     expect(sent.map((b) => b.forma_pago)).toEqual([12]);
+    /* D13: dispatchObserved builds its own reference — read at the edge */
+    expect(observed.folio).toMatch(/^DV-[0-9A-Z]{6}$/);
+    expect(sent.map((b) => b.referencia)).toEqual([`${observed.folio} · TRACK001XYZ`]);
   });
 
   it("the sweep records a queued SPEI payment with the SPEI method", async () => {
     expect((await sweptWith([EFECTIVO, SPEI])).map((b) => b.forma_pago)).toEqual([12]);
   });
 
-  it("no Devolada method: the cash method, and the action ends as today", async () => {
-    expect((await sweptWith([EFECTIVO])).map((b) => b.forma_pago)).toEqual([7]);
+  it("no Devolada method: the cash method with its reference, and the action ends as today", async () => {
+    const { row } = await seedQueued({ trackingKey: "TRACK001XYZ" });
+    const sent = mockRecording([EFECTIVO]);
+    await sweepReconnections(env);
+    expect((await reload(row.id)).actionOutcome).toBe("done");
+    /* FR-007: a fallback still ties the record back to Devolada */
+    expect(sent.map((b) => [b.forma_pago, b.referencia])).toEqual([[7, `${row.folio} · TRACK001XYZ`]]);
   });
 
   it("FR-012: with CASH - RED.DEVOLADAPAGO listed before Cash (R11) and no SPEI method, the cash method is Cash", async () => {
@@ -374,6 +382,9 @@ describe("payment-method-per-channel US1: the business downloads what came in by
     );
     expect(res.status).toBe(200);
     expect(sent.map((b) => b.forma_pago)).toEqual([12]);
+    /* D13: the held row knows no clave, so its reference is the folio */
+    expect(held.trackingKey).toBeNull();
+    expect(sent.map((b) => b.referencia)).toEqual([held.folio]);
   });
 });
 
@@ -670,6 +681,15 @@ describe("payment-method-per-channel US4: the business sets up its methods befor
       expect((await res.json()).data).toEqual({ checked: false });
     });
 
+    it("FR-009: a 200 whose body is the JSON null → checked: false, never a 500", async () => {
+      await seedBusiness({ wisphubApiKey: "wh-key-1", actionsEnabled: false });
+      wh().intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") }).reply(...json(null));
+      const res = await setupRead();
+      expect(res.status).toBe(200);
+      expect((await res.json()).data).toEqual({ checked: false });
+      expect((await integrationRow()).paymentMethodsSeenAt).toBeNull();
+    });
+
     it("no key → 409 WISPHUB_NOT_CONFIGURED, and WispHub is not asked", async () => {
       await seedBusiness();
       const res = await setupRead();
@@ -692,8 +712,11 @@ describe("payment-method-per-channel US4: the business sets up its methods befor
       expect((await reload(row.id)).actionOutcome).toBe("done");
 
       /* the business creates the method and opens the screen */
+      expect((await integrationRow()).paymentMethodsSeenAt).toBeNull();
       mockMethods([EFECTIVO, SPEI]);
       expect((await (await setupRead()).json()).data.link.status).toBe("found");
+      /* D16: the read the screen made is the moment Devolada saw them */
+      expect((await integrationRow()).paymentMethodsSeenAt).not.toBeNull();
 
       /* the next payment: the list the screen read, under its new stamp */
       await seedQueued({}, business);
@@ -729,10 +752,18 @@ describe("payment-method-per-channel US4: the business sets up its methods befor
     });
 
     it("D16: a candidate key's test stamps nothing and leaves the cache; the saved connection's test stamps", async () => {
-      await seedBusiness({ wisphubApiKey: "wh-key-1", actionsEnabled: false });
+      const business = await seedBusiness({ wisphubApiKey: "wh-key-1", actionsEnabled: false });
       mockProbes([EFECTIVO, SPEI]);
       await connectionTest({ apiKey: "candidate-key-9" });
       expect((await integrationRow()).paymentMethodsSeenAt).toBeNull();
+
+      /* T017: the candidate's list was not kept for the saved key — the
+         next payment reads WispHub, whose list has no SPEI method */
+      const { row } = await seedQueued({}, business);
+      const sent = mockRecording([EFECTIVO]);
+      await sweepReconnections(env);
+      expect(sent.map((b) => b.forma_pago)).toEqual([7]);
+      expect((await reload(row.id)).actionOutcome).toBe("done");
 
       mockProbes([EFECTIVO, SPEI]);
       await connectionTest();
@@ -778,7 +809,10 @@ describe("payment-method-per-channel US4: the business sets up its methods befor
       const business = await observing();
       await seedStoreChannel(business);
       mockMethods([EFECTIVO, SPEI]);
-      expect((await patch({ actionsEnabled: true })).status).toBe(409);
+      const refused = await patch({ actionsEnabled: true });
+      expect(refused.status).toBe(409);
+      expect((await refused.json()).error.code).toBe("PAYMENT_METHODS_MISSING");
+      expect((await integrationRow()).actionsEnabled).toBe(false);
 
       await db().update(businesses).set({ storeChannelOn: false }).where(eq(businesses.id, business.id));
       mockMethods([EFECTIVO, SPEI]);
@@ -794,6 +828,15 @@ describe("payment-method-per-channel US4: the business sets up its methods befor
     it("WispHub timing out → 503 PAYMENT_METHODS_UNCHECKED, still observing", async () => {
       await observing();
       wh().intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") }).replyWithError(timedOut());
+      const res = await patch({ actionsEnabled: true });
+      expect(res.status).toBe(503);
+      expect((await res.json()).error.code).toBe("PAYMENT_METHODS_UNCHECKED");
+      expect((await integrationRow()).actionsEnabled).toBe(false);
+    });
+
+    it("FR-009: a 200 whose body is the JSON null → 503 PAYMENT_METHODS_UNCHECKED, never a 500", async () => {
+      await observing();
+      wh().intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") }).reply(...json(null));
       const res = await patch({ actionsEnabled: true });
       expect(res.status).toBe(503);
       expect((await res.json()).error.code).toBe("PAYMENT_METHODS_UNCHECKED");
@@ -820,6 +863,19 @@ describe("payment-method-per-channel US4: the business sets up its methods befor
          comes with the save itself */
       mockProbes([EFECTIVO]);
       expect((await patch({ wisphubApiKey: "another-key-1234" })).status).toBe(200);
+      expect((await integrationRow()).paymentMethodsSeenAt).not.toBeNull();
+    });
+
+    it("a saved new installation stamps even when its re-test never reaches the methods probe", async () => {
+      await seedBusiness({ wisphubApiKey: "wh-key-1", actionsEnabled: false });
+      /* the new door refuses the first probe: no list is read at all */
+      fetchMock
+        .get("https://api.wisphub.io")
+        .intercept({ method: "GET", path: (p) => p.startsWith("/api/clientes/?") })
+        .reply(403, "{}");
+      const res = await patch({ installation: "wisphub_io" });
+      expect(res.status).toBe(200);
+      expect((await res.json()).data.wisphubTest.devoladaMethods).toBeNull();
       expect((await integrationRow()).paymentMethodsSeenAt).not.toBeNull();
     });
 

@@ -69,7 +69,13 @@ T046) plus the integration's `payment_methods_seen_at` as its version
 kind of its own, `payment-methods`: one left under the old kind holds a
 single id, and read as a list it would break the first payment after the
 deploy (found implementing T011). The adapter picks
-the channel's method and the cash method from that one read.
+the channel's method and the cash method from that one read. The read
+follows `next` 100 methods a page, at most 20 pages, inside the client's
+operation budget: the cap only guards a provider that would answer `next`
+forever. Past 2,000 methods the list is used as read, so a Devolada
+method beyond it is not found and that channel records as cash (FR-004);
+a cut list never fails the recording, which would queue the action
+(SC-005). Recorded after `/speckit-converge` (2026-10-02, T047).
 
 **Rationale**: One read already happens per recording today; the list is
 the same call without `find()`, paged with `limit` and `offset` while the

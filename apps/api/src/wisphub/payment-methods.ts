@@ -19,11 +19,11 @@ export type MethodChannel = "spei" | "store";
 
 /* D1 + D15: the name to create and the description to type beside it.
    The description is product copy for the business's own staff, given to
-   copy and never checked — the provider's API returns none (R8). The SPEI
-   one names the apps (the creator, 2026-10-02): every one of them is a
-   SPEI participant or travels over SPEI, and Devolada confirms only what
-   Banxico recorded. «No usar en mostrador» repeats FR-008 where the
-   counter staff will read it. */
+   copy and never checked — the provider's API returns none (measured
+   2026-10-02, R8). The SPEI one names the apps (the creator,
+   2026-10-02): every one of them is a SPEI participant or travels over
+   SPEI, and Devolada confirms only what Banxico recorded. «No usar en
+   mostrador» repeats FR-008 where the counter staff will read it. */
 export const DEVOLADA_METHODS: Record<MethodChannel, { name: string; description: string }> = {
   spei: {
     name: "SPEI - LINK.DEVOLADAPAGO",
@@ -37,10 +37,11 @@ export const DEVOLADA_METHODS: Record<MethodChannel, { name: string; description
 };
 
 /* D5: the tolerance is for the person typing the name by hand — the
-   provider keeps a name exactly as typed (R8). Accents off, upper case,
-   runs of spaces collapsed, no space around `-`, `.` or `·`, ends trimmed:
-   `spei-link . devoladapago` is `SPEI - LINK.DEVOLADAPAGO`. Nothing
-   fuzzier: a business's own "SPEI LINK" method must not be taken. */
+   provider keeps a name exactly as typed (measured 2026-10-02, R8).
+   Accents off, upper case, runs of spaces collapsed, no space around
+   `-`, `.` or `·`, ends trimmed: `spei-link . devoladapago` is
+   `SPEI - LINK.DEVOLADAPAGO`. Nothing fuzzier: a business's own
+   "SPEI LINK" method must not be taken. */
 export function normalizeMethodName(text: string): string {
   return text
     .normalize("NFD")
@@ -142,8 +143,8 @@ export async function readDevoladaMethods(
   }
 }
 
-/* D7: WispHub's `referencia` holds at most 200 characters (R7), counted
-   as characters, not bytes */
+/* D7: WispHub's `referencia` holds at most 200 characters (measured
+   2026-10-01, R7), counted as characters, not bytes */
 const REFERENCE_MAX = 200;
 /* D7: measured 2026-10-02 (R10, R12) — the middle dot survives the API,
    the invoice view and its PDF; a `-` would blur into the provider's own

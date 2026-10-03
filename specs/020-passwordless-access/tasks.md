@@ -739,11 +739,29 @@ and their tests pass.
   - `tests/e2e/contrast.spec.ts` and `tests/e2e/responsive.spec.ts` wait on `/entrar` for "Enviar código" instead of "Olvidé mi contraseña";
   - both suites add the código step, the invitation's three steps and Caja's card, in both themes, at 360/768/1280 and the 1024 px layout (cash-at-stores D32).
 - [X] T075 [P] `CLAUDE.md`: the store app's line says no account holds a password, and the shopkeeper's código is asked by phone.
-- [ ] T076 The gate before PR 2 merges, following `specs/020-passwordless-access/quickstart.md`:
+- [X] T076 The gate before PR 2 merges, following `specs/020-passwordless-access/quickstart.md`:
   1. amendment 2 is applied and the notice given (T056);
   2. run quickstart §1 in order;
   3. walk quickstart §3 on a local stack;
   4. fix what fails, and open PR 2.
+
+  *Run 2026-10-03, as the gate of the one PR (Implementation Strategy,
+  amended)*: amendment 2 applied (v1.11.0) and the notice given (T056);
+  quickstart §1 in CI order — spec-lint, gen-banks, contrast-lint and
+  pending-lint pass; every workspace typechecks; API 75 files / 1330 tests,
+  admin 34 / 477, red 4 / 101, `@devolada/ui` 10 / 111, pago 5 / 173,
+  landing 2 / 10; `pnpm e2e` 429 passed; `pnpm e2e:passkey` 3 passed,
+  twice in a row. Quickstart §3 walked on a local wrangler API: the store
+  turns active only at the código; the operator's own address is
+  `EMAIL_TAKEN` only after a right código; a stranger's phone gets no
+  código, and both refusals answer in about 1.0 s against 25 ms for a
+  right código; "Cerrar sesión en los demás dispositivos" ends the other
+  phone's session; `/auth/sign-in/username` and `/auth/sign-in/email`
+  answer 404 and a reset código is refused; the sweep spoke once
+  (`credential erase: {"credentials":6,"users":0}`) and kept the
+  shopkeeper. The member invitation (Q5): the inviter's made-up código is
+  `INVALID_OTP`, no código at all is `VALIDATION`, and the invitee's código
+  from the inbox births a verified, named account inside the business.
 
 ---
 
@@ -809,7 +827,7 @@ shopkeepers (T056), which is given.
   one refusal, and reads the account born verified and named. The código
   refusals of both doors live in `auth/otp-refusal.ts`.
 
-- [ ] T087 The final review of the fixes (2026-10-03, three dimensions, two
+- [X] T087 The final review of the fixes (2026-10-03, three dimensions, two
   skeptics each; eight findings, none above minor): the public código door
   folds its refusals (research D10's residual recorded for the creator); the
   floor's timing test holds on the clock the floor reads; the invitation

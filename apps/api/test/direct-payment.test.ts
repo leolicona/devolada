@@ -102,6 +102,12 @@ function mockPendingInvoices(
    happens — and the response carries `task_id: null` rather than an id. */
 function mockReconnection(verifyEstado = "Activo", invoiceId = 42, verify = true) {
   const captured: { accion?: number; totalCobrado?: number } = {};
+  /* bug: transferred-invoice-paid — the invoice is asked about before any
+     money moves; `estado` as the detail route answers it (measured
+     2026-10-01) */
+  wh()
+    .intercept({ method: "GET", path: `/api/facturas/${invoiceId}/` })
+    .reply(...json({ id_factura: invoiceId, estado: "Pendiente de Pago" }));
   wh()
     .intercept({ method: "PATCH", path: "/api/clientes/6/" })
     .reply(...json({ id_servicio: 6, auto_activar_servicio: true }));

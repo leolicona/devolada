@@ -98,6 +98,11 @@ function mockPendingInvoices(
 }
 
 function mockReconnection(verifyEstado = "Activo", invoiceId = 42, formas = true) {
+  /* bug: transferred-invoice-paid — the invoice is asked about before any
+     money moves (the detail route's measured shape) */
+  wh()
+    .intercept({ method: "GET", path: `/api/facturas/${invoiceId}/` })
+    .reply(...json({ id_factura: invoiceId, estado: "Pendiente de Pago" }));
   wh()
     .intercept({ method: "PATCH", path: "/api/clientes/6/" })
     .reply(...json({ id_servicio: 6, auto_activar_servicio: true }));

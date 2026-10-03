@@ -80,9 +80,17 @@ function mockConsta(cepAmountCents: number) {
     );
 }
 
+/* bug: transferred-invoice-paid — every attempt that has not paid yet asks
+   about its invoice first; here it is still pending (the detail route's
+   measured shape) */
+function mockInvoicePending() {
+  wh().intercept({ method: "GET", path: "/api/facturas/42/" }).reply(...json({ id_factura: 42, estado: "Pendiente de Pago" }));
+}
+
 /* The first attempt: the opt-in and the payment method land, and
    registrar-pago meets an outage before any money moved */
 function mockFirstAttemptOutage() {
+  mockInvoicePending();
   wh()
     .intercept({ method: "PATCH", path: "/api/clientes/6/" })
     .reply(...json({ id_servicio: 6, auto_activar_servicio: true }));
@@ -98,6 +106,7 @@ function mockFirstAttemptOutage() {
    router, and an unmatched request would fail the test. */
 function mockRetry(opts: { formas?: boolean } = {}) {
   const captured: { accion?: number } = {};
+  mockInvoicePending();
   wh()
     .intercept({ method: "PATCH", path: "/api/clientes/6/" })
     .reply(...json({ id_servicio: 6, auto_activar_servicio: true }));

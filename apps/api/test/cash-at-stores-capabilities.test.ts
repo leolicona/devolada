@@ -107,11 +107,18 @@ describe("cash-at-stores US1 — paymentActions speaks the core's words (D9)", (
     reconnect: true,
     now: new Date(),
   });
-  const optIn = () =>
+  /* bug: transferred-invoice-paid — the invoice is asked about first (the
+     detail route's measured shape), then the opt-in */
+  const optIn = () => {
+    fetchMock
+      .get(WISPHUB)
+      .intercept({ method: "GET", path: "/api/facturas/42/" })
+      .reply(...json({ id_factura: 42, estado: "Pendiente de Pago" }));
     fetchMock
       .get(WISPHUB)
       .intercept({ method: "PATCH", path: "/api/clientes/6/" })
       .reply(...json({ auto_activar_servicio: true }));
+  };
 
   it("a refused key (401) is INTEGRATION_AUTH_FAILED, and the attempt stays queued", async () => {
     const { business, caps } = await capabilities();

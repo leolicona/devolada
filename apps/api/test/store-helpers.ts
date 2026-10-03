@@ -224,6 +224,12 @@ export function mockCustomerDebt(
 export function mockAction(opts: { invoiceId?: number; verify?: "Activo" | "Suspendido" | false; formas?: boolean; fail?: number } = {}) {
   const captured: { accion?: number; totalCobrado?: number } = {};
   const invoiceId = opts.invoiceId ?? 42;
+  /* bug: transferred-invoice-paid — the invoice the record chose is asked
+     about before any money moves (the detail route's measured shape) */
+  fetchMock
+    .get(WISPHUB)
+    .intercept({ method: "GET", path: `/api/facturas/${invoiceId}/` })
+    .reply(...json({ id_factura: invoiceId, estado: "Pendiente de Pago" }));
   fetchMock
     .get(WISPHUB)
     .intercept({ method: "PATCH", path: (p) => /^\/api\/clientes\/\d+\/$/.test(p) })

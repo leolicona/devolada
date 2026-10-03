@@ -304,6 +304,12 @@ export function mockPanelSettle(customer: FakeCustomer, total = 3.5, opts: { aga
   const invoiceId = opts.invoiceId ?? 42;
   mockCustomer({ ...customer, estado: "Suspendido" });
   mockPendingInvoices([{ usuario: customer.usuario, total, id: invoiceId }]);
+  /* bug: transferred-invoice-paid — the invoice is asked about before any
+     money moves (the detail route's measured shape) */
+  fetchMock
+    .get(WISPHUB)
+    .intercept({ method: "GET", path: `/api/facturas/${invoiceId}/` })
+    .reply(...json({ id_factura: invoiceId, estado: "Pendiente de Pago" }));
   fetchMock
     .get(WISPHUB)
     .intercept({ method: "PATCH", path: `/api/clientes/${customer.id ?? 6}/` })

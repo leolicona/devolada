@@ -606,7 +606,7 @@ refused by the store app.
 - [X] T056 [US6] The gates before PR 2's code, the second one in `.specify/memory/constitution.md`:
   - **the notice**: the creator confirms the operator has told the pilot's shopkeepers that their password stops working and how they will get in (spec Dependencies);
   - **amendment 2**: the creator runs, or asks for, `/speckit-constitution` with the plan's Complexity Tracking row 2.
-- [ ] T057 [US6] The PR 2 test helpers in `apps/api/test/store-helpers.ts` and `apps/api/test/helpers.ts` (research D14):
+- [X] T057 [US6] The PR 2 test helpers in `apps/api/test/store-helpers.ts` and `apps/api/test/helpers.ts` (research D14):
   - in `apps/api/test/store-helpers.ts`, `seedPlainUser` births the user without a password, as T007 did for `seedAuthUser`;
   - remove `PASSWORD` from `apps/api/test/helpers.ts` (`lastCodeFor` left with T029).
 
@@ -614,7 +614,7 @@ refused by the store app.
 
 ### Tests for User Story 6
 
-- [ ] T058 [P] [US6] API tests in `apps/api/test/passwordless-store.test.ts`, citing `passwordless-access US6`, against `contracts/store-access.md`:
+- [X] T058 [P] [US6] API tests in `apps/api/test/passwordless-store.test.ts`, citing `passwordless-access US6`, against `contracts/store-access.md`:
   - **the invitation's código**: `POST /store/invitations/:token/code` answers `{ sentTo }` for every address, and `sentCode` holds the código;
   - **accept, a new address**:
     - the user is born verified, named `shopkeeperName`, with `username` = the store's phone and no `account` row;
@@ -637,15 +637,15 @@ refused by the store app.
   - **retired doors**: `/auth/sign-in/username`, `/auth/email-otp/reset-password` and `/auth/email-otp/verify-email` answer 404;
   - **`/auth/me`**: the store branch carries `email`;
   - **limits**, with the limiter armed: the fourth `/store/sign-in/code` and the sixth `/store/sign-in` within 60 s answer 429.
-- [ ] T059 [P] [US6] Rewrite `apps/api/test/cash-at-stores-access.test.ts`, adding the citation `passwordless-access US6`:
+- [X] T059 [P] [US6] Rewrite `apps/api/test/cash-at-stores-access.test.ts`, adding the citation `passwordless-access US6`:
   - **keep**:
     - the `username` refusals (`USERNAME_NOT_ALLOWED` on any body);
     - `requireStore`'s gating;
     - `WRONG_ACTOR` for a member;
     - suspension;
   - **remove**: the password acceptance, `sign-in/username`, and the `forget-password` recovery. Their absence is asserted in T058.
-- [ ] T060 [P] [US6] In `apps/api/test/cash-at-stores-operator.test.ts`, the acceptance on a replaced token sends `{ email, otp }` and still answers `INVALID_INVITATION`.
-- [ ] T061 [P] [US6] Component tests in `apps/red/test/access.test.tsx`, citing `passwordless-access US6`, with handlers in `apps/red/test/msw.ts` for the four store routes and Better Auth's step-up endpoints. The password handlers (`signIn`, `resetPassword`, `verifyEmail`) leave. Mock `@/lib/auth-client`. Against `contracts/store-access.md` § UI:
+- [X] T060 [P] [US6] In `apps/api/test/cash-at-stores-operator.test.ts`, the acceptance on a replaced token sends `{ email, otp }` and still answers `INVALID_INVITATION`.
+- [X] T061 [P] [US6] Component tests in `apps/red/test/access.test.tsx`, citing `passwordless-access US6`, with handlers in `apps/red/test/msw.ts` for the four store routes and Better Auth's step-up endpoints. The password handlers (`signIn`, `resetPassword`, `verifyEmail`) leave. Mock `@/lib/auth-client`. Against `contracts/store-access.md` § UI:
   - **`/entrar`**:
     - no line about passwords: nothing on the screen matches `/contraseña/i` (spec Clarifications, Q4);
     - the key button where supported;
@@ -659,7 +659,7 @@ refused by the store app.
   - **too many tries** (FR-027): a 429 on any código request or try shows "Demasiados intentos. Espera un momento e intenta de nuevo.";
   - **Caja's card**: the list, "Quitar", the step-up with `/auth/me`'s email and its "Cancelar", and "Cerrar sesión en los demás dispositivos";
   - axe on each.
-- [ ] T062 [US6] Rewrite `tests/passkey/red.spec.ts` from T077's PR 1 version, citing `passwordless-access US6`:
+- [X] T062 [US6] Rewrite `tests/passkey/red.spec.ts` from T077's PR 1 version, citing `passwordless-access US6`:
   1. the operator, the demo address, gets in by código from `POST /dev/code` and creates a store;
   2. the invitation opens in a fresh context with a virtual authenticator;
   3. the email `tienda-<stamp>@journey.invalid` and its código from `/dev/code` lead to the activation, then the counter;
@@ -668,7 +668,7 @@ refused by the store app.
 
 ### Implementation for User Story 6
 
-- [ ] T063 [US6] PR 2's auth configuration in `apps/api/src/auth/better.ts` (research D4):
+- [X] T063 [US6] PR 2's auth configuration in `apps/api/src/auth/better.ts` (research D4):
   - **turned off**: `emailAndPassword: { enabled: false }`. With it go `requireEmailVerification`, `revokeSessionsOnPasswordReset` and `emailVerification.autoSignInAfterVerification`;
   - **`disabledPaths` gains** `/sign-in/username`, `/email-otp/request-password-reset`, `/email-otp/reset-password`, `/forget-password/email-otp`, `/email-otp/verify-email` and `/email-otp/check-verification-otp`;
   - **removed**: the `customRules` for `verify-email` and `reset-password`;
@@ -676,8 +676,8 @@ refused by the store app.
   - **`username()` stays**.
 
   Comments cite D4. The middleware's unverified-session revocation (better-auth D16's belt) is untouched.
-- [ ] T064 [P] [US6] Drop PR 1's store filter from `apps/api/src/auth/credentials-sweep.ts` (research D5). Every `credential` row is erased. Update T028's store case in `apps/api/test/passwordless-sweep.test.ts` to expect it erased.
-- [ ] T065 [US6] The store routes in `apps/api/src/routes/store/schema.ts`, `handler.ts` and `index.ts` (research D10, D3), per `contracts/store-access.md`:
+- [X] T064 [P] [US6] Drop PR 1's store filter from `apps/api/src/auth/credentials-sweep.ts` (research D5). Every `credential` row is erased. Update T028's store case in `apps/api/test/passwordless-sweep.test.ts` to expect it erased.
+- [X] T065 [US6] The store routes in `apps/api/src/routes/store/schema.ts`, `handler.ts` and `index.ts` (research D10, D3), per `contracts/store-access.md`:
   - **Schemas**:
     - `storeInvitationCodeRequest { email }`;
     - `acceptStoreInvitationRequest { email, otp }`, where `otp` is six digits;
@@ -697,29 +697,29 @@ refused by the store app.
     - `INVALID_OTP` for a phone no store names;
     - `STORE_SUSPENDED` deletes the session it opened.
   - **Comments** cite D10 and D3. The schemas stay exported as `@devolada/api/store-schema`.
-- [ ] T066 [US6] `/auth/me`'s store branch gains `email` in `apps/api/src/routes/auth.ts`, and `StoreMeResponse` gains `email` in `apps/api/src/routes/store/schema.ts`, after T065 (research D8).
-- [ ] T067 [P] [US6] In `apps/api/src/email/sender.ts`, remove the `email-verification` and `forget-password` templates. An unknown kind falls back to `sign-in` (D13).
-- [ ] T068 [P] [US6] `canVerifyPerson()` in `apps/red/src/lib/auth-client.ts`, as T009 (research D7).
-- [ ] T069 [US6] `apps/red/src/features/auth/session.ts`:
+- [X] T066 [US6] `/auth/me`'s store branch gains `email` in `apps/api/src/routes/auth.ts`, and `StoreMeResponse` gains `email` in `apps/api/src/routes/store/schema.ts`, after T065 (research D8).
+- [X] T067 [P] [US6] In `apps/api/src/email/sender.ts`, remove the `email-verification` and `forget-password` templates. An unknown kind falls back to `sign-in` (D13).
+- [X] T068 [P] [US6] `canVerifyPerson()` in `apps/red/src/lib/auth-client.ts`, as T009 (research D7).
+- [X] T069 [US6] `apps/red/src/features/auth/session.ts`:
   - **new**: `sendInvitationCode(token, email)`, `acceptInvitation(token, email, otp)`, `sendSignInCode(phone)`, `signInWithCode(phone, otp)`;
   - **the step-up** through Better Auth's `send-verification-otp` and `sign-in/email-otp`, with `/auth/me`'s email;
   - **new**: `revokeOtherSessions()`;
   - **removed**: `signIn` (username), `sendCode`, `verifyEmail`, `resetPassword`.
-- [ ] T070 [US6] `apps/red/src/features/auth/InvitationScreen.tsx` in three steps (research D10), per `contracts/store-access.md` § `/invitacion/:token`:
+- [X] T070 [US6] `apps/red/src/features/auth/InvitationScreen.tsx` in three steps (research D10), per `contracts/store-access.md` § `/invitacion/:token`:
   1. **the email**;
   2. **the código**: `EMAIL_TAKEN` returns to step 1 with its line; `INVALID_INVITATION` shows the invalid screen;
   3. **`PasskeyOffer`**, where `canVerifyPerson()`: `addPasskey({ name: "Tienda" })` inside the click, with the device word from `useWide()`; then `/`.
 
   In step 2, "Reenviar código" confirms with "Código reenviado", as the panel's (the design canvas). A 429 on either step shows "Demasiados intentos. Espera un momento e intenta de nuevo." (FR-027).
-- [ ] T071 [US6] `apps/red/src/features/auth/LoginScreen.tsx` (research D10), per `contracts/store-access.md` § `/entrar`:
+- [X] T071 [US6] `apps/red/src/features/auth/LoginScreen.tsx` (research D10), per `contracts/store-access.md` § `/entrar`:
   - **step 1**: the key button and its failure line "No se pudo usar tu huella o rostro. Entra con un código." (analysis A4), the separator "o con un código", the phone through `nationalPhone`, and "Enviar código";
   - **step 2**: the same-for-every-phone line, `CodeInput`, the resend (it confirms with "Código reenviado"), and "Usar otro teléfono";
   - **a 429** on either step shows "Demasiados intentos. Espera un momento e intenta de nuevo." (FR-027), in place of today's "Demasiados intentos. Espera un momento.";
   - **step 3**: the activation, then `/`.
 
   Remove `VerifyStep` and every password field.
-- [ ] T072 [US6] In `apps/red/src/router.tsx`, `/recuperar` redirects to `/entrar`. Delete `apps/red/src/features/auth/RecoverScreen.tsx`.
-- [ ] T073 [US6] `apps/red/src/features/auth/PasskeyCard.tsx` becomes a container for `KeysCard` (research D8, D11, D12; FR-036):
+- [X] T072 [US6] In `apps/red/src/router.tsx`, `/recuperar` redirects to `/entrar`. Delete `apps/red/src/features/auth/RecoverScreen.tsx`.
+- [X] T073 [US6] `apps/red/src/features/auth/PasskeyCard.tsx` becomes a container for `KeysCard` (research D8, D11, D12; FR-036):
   - the list (`list-user-passkeys`) and "Quitar" (`delete-passkey`);
   - activation with the step-up on `SESSION_NOT_FRESH`, using `/auth/me`'s email (a 429 shows the wait line, FR-027);
   - "Cerrar sesión en los demás dispositivos";
@@ -734,11 +734,11 @@ and their tests pass.
 
 ## Phase 10: Polish & Cross-Cutting for PR 2
 
-- [ ] T074 [P] The browser layer for the store app, in `tests/e2e/stubs.ts`, `tests/e2e/contrast.spec.ts` and `tests/e2e/responsive.spec.ts`:
+- [X] T074 [P] The browser layer for the store app, in `tests/e2e/stubs.ts`, `tests/e2e/contrast.spec.ts` and `tests/e2e/responsive.spec.ts`:
   - `tests/e2e/stubs.ts` stubs the four store routes;
   - `tests/e2e/contrast.spec.ts` and `tests/e2e/responsive.spec.ts` wait on `/entrar` for "Enviar código" instead of "Olvidé mi contraseña";
   - both suites add the código step, the invitation's three steps and Caja's card, in both themes, at 360/768/1280 and the 1024 px layout (cash-at-stores D32).
-- [ ] T075 [P] `CLAUDE.md`: the store app's line says no account holds a password, and the shopkeeper's código is asked by phone.
+- [X] T075 [P] `CLAUDE.md`: the store app's line says no account holds a password, and the shopkeeper's código is asked by phone.
 - [ ] T076 The gate before PR 2 merges, following `specs/020-passwordless-access/quickstart.md`:
   1. amendment 2 is applied and the notice given (T056);
   2. run quickstart §1 in order;
@@ -756,42 +756,58 @@ wrong. The creator chose, on 2026-10-03, one PR for the whole feature: the
 split into PR 1 and PR 2 only waited on the notice to the pilot's
 shopkeepers (T056), which is given.
 
-- [ ] T078 [US6] `POST /store/sign-in` answers as fast for every phone
+- [X] T078 [US6] `POST /store/sign-in` answers as fast for every phone
   (FR-033, SC-006): a phone no store names still runs the plugin's código
   check against an address nobody could predict, and every refusal waits
   for a floor before it answers. `sendSignInCode` builds the auth instance
   in both branches. Contract updated (`contracts/store-access.md`).
-- [ ] T079 [US6] The store acceptance undoes the user it bore on any error
+  *2026-10-03*: the floor scales with the store lookup's own round trip
+  (`REFUSAL_ROUND_TRIPS = 10`; a live código's wrong guess runs 8
+  statements against a stranger's 5, measured), with a guard test that
+  fails if a Better Auth bump outgrows the multiple; its base is the
+  `STORE_SIGN_IN_FLOOR_MS` knob (CLAUDE.md), pinned to 0 in the suite.
+- [X] T079 [US6] The store acceptance undoes the user it bore on any error
   before the store is linked, not only when the link fails (D10, D5).
-- [ ] T080 The sweep's deletes carry their own predicates, so a user
+  *2026-10-03*: also a failure inside the plugin's own sign-in, after it
+  created the user (`undoBirth`); a unique violation there is another
+  request's user and answers `EMAIL_TAKEN`.
+- [X] T080 The sweep's deletes carry their own predicates, so a user
   verified between its read and its delete keeps everything (D5).
-- [ ] T081 [US4] `accept-new`'s rejected body answers in the envelope
+- [X] T081 [US4] `accept-new`'s rejected body answers in the envelope
   (`VALIDATION`), and its test reads the code.
-- [ ] T082 [US5] [US6] Both apps' step-up: it opens only once the código
+- [X] T082 [US5] [US6] Both apps' step-up: it opens only once the código
   was sent, and says a failed send, a lost signal and an unknown failure
   as such; the panel's keeps the active business; "Quitar" on the key just
   activated brings "Activar" back. `KeysCard` grows those states.
-- [ ] T083 [US6] The store invitation names the fingerprint or face only
+- [X] T083 [US6] The store invitation names the fingerprint or face only
   where the device supports it (FR-015).
-- [ ] T084 [US1] [US2] [US4] The panel's screens: a name over 80
+- [X] T084 [US1] [US2] [US4] The panel's screens: a name over 80
   characters is named on screen; an address the plugin refuses is named;
   `/welcome` does not send a just-named person back to itself, skips the
   offer on a session older than a day or for a store or suspended account,
   and does not read a failed session read as signed out; the invitation
   page is never stuck after a failed acceptance.
-- [ ] T085 The tests the review found vacuous or missing: FR-006 on the
+- [X] T085 The tests the review found vacuous or missing: FR-006 on the
   invitation page, the stored hash's shape, `/dev/code` on a real address
   with `.invalid` inside, the limiters of the two código-checking routes of
   ours, `OTP_EXPIRED` on the store routes, the deferred send, resends that
   must send, the ceremony inside the click, assertions that ran before the
   router rendered, the ui suite's timezone, and the passkey layer's phone
   door racing the deferred send.
-- [ ] T086 [US4] The invitee without an account proves the inbox with a
+- [X] T086 [US4] The invitee without an account proves the inbox with a
   código (spec Clarifications Q5, FR-019; research D9 as amended;
   `contracts/panel-access.md`): `accept-new {name, otp}` signs in through
   `signInEmailOTP` with the typed código; the page asks for the name, sends
   the código to the invited address, and asks for it; the API, component,
-  browser, design and passkey layers follow.
+  browser, design and passkey layers follow. Built 2026-10-03:
+  `routes/businesses/{handler,schema,index}.ts` and 11 cases in
+  `passwordless-invitation.test.ts` (the inviter's made-up código and a
+  código for another address open nothing); `AcceptInvitationScreen.tsx`
+  in two steps, with nine new-person cases in `memberships.test.tsx` and
+  the no-passkey pair; the e2e access list gains "Invitación · persona
+  nueva · código"; the passkey journey types the invitee's código, meets
+  one refusal, and reads the account born verified and named. The código
+  refusals of both doors live in `auth/otp-refusal.ts`.
 
 ---
 

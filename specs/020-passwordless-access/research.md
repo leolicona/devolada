@@ -439,8 +439,15 @@ unchanged: status, business, role, email and `hasAccount`.
      invitation died in between, the account stays — its owner proved the
      inbox, so it is theirs, as a registration's would be — the cookies are
      forwarded, and the answer is `INVITATION_NOT_FOUND`;
-  4. forwards the cookies.
+  4. forwards the cookies (right after step 2, so a 404 from step 3
+     carries them too).
   The page then goes to `/welcome?next=/`, where the name is already set.
+  Only the plugin's own `INVITATION_NOT_FOUND` in step 3 reads as "the
+  invitation died"; any other failure there is a 500, the proved account
+  kept. The page marks itself "accepting" before the request, so a refetch
+  of the user on a window refocus cannot fire a second acceptance, and
+  after an `INVITATION_NOT_FOUND` it reads the user again before it offers
+  the way on ("Ir al panel" with a session, "Ir a iniciar sesión" without).
 
   *Why the amendment*: the first version minted a código on the server
   (`createVerificationOTP`) and consumed it at once, because "the invitation

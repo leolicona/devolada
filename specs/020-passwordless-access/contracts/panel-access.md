@@ -105,7 +105,8 @@ route, its zod input and its rate rule (better-auth D15) leave in PR 1.
 Session-less. The random id finds the invitation, but it is not a proof:
 the inviter and every owner and admin hold it too. The código sent to the
 invited address is the proof (D9 as amended 2026-10-03; spec
-Clarifications Q5). Rate-limited 5 per 60 s per address (unchanged).
+Clarifications Q5). Rate-limited 5 per 60 s per client IP address
+(unchanged; `rateLimitRoute` keys on the caller, not the email).
 
 ```json
 { "name": "Ana López", "otp": "482913" }
@@ -128,9 +129,10 @@ The server (D9):
 - **400** `INVALID_OTP`, `OTP_EXPIRED`; **403** `TOO_MANY_ATTEMPTS` — the
   plugin's words, as on the store acceptance. Nothing is born.
 - **404** `INVITATION_NOT_FOUND` (gone, accepted or expired). When the
-  invitation dies between steps 1 and 4, the account the código proved
-  stays, with its session cookie: it is its owner's, as a registration's
-  would be.
+  invitation dies between steps 1 and 4 (the plugin's own
+  `INVITATION_NOT_FOUND`), the account the código proved stays, with its
+  session cookie: it is its owner's, as a registration's would be. Any
+  other failure of the acceptance is a 500, the proved account kept.
 - **409** `EMAIL_TAKEN` (the address has an account: the page's
   `hasAccount` branch is the right door); **400** `VALIDATION` (in the
   envelope); **429**.
@@ -229,9 +231,11 @@ says "No pudimos cargar tu sesión." with "Reintentar", and never sends a
 person who just typed their código back to `/login`. The screen reads the
 actor as the Shell does: a store's account (`WRONG_ACTOR`) or a suspended
 one (`ACCOUNT_SUSPENDED`) goes straight on to `next`, where the Shell's own
-screens answer, and is never offered a key; `NO_BUSINESS`,
-`NO_ACTIVE_BUSINESS` and `MEMBERSHIP_REVOKED` are offered as usual
-(adversarial review, 2026-10-02). It then decides before it paints:
+screens answer, and is never offered a key — except a suspended business,
+whose session the API ends in that same answer, so "Cuenta suspendida"
+shows on `/welcome` itself; `NO_BUSINESS`, `NO_ACTIVE_BUSINESS` and
+`MEMBERSHIP_REVOKED` are offered as usual (adversarial review,
+2026-10-02). It then decides before it paints:
 
 1. **The user has no name.** "¿Cómo te llamas?", with "Tu nombre" and
    "Continuar" (`update-user`). Then it goes on to 2.
@@ -268,10 +272,11 @@ The states the page has today stay. The changes:
 | State | Shows |
 | --- | --- |
 | No session, the address has an account | "Te invitaron a {negocio}", "Como {rol}.", "Correo: {email}" as text; "Entrar con huella o rostro" (where supported), then "o con un código"; "Enviarme un código" → `CodeInput` + "Entrar"; no password; no "Olvidé mi contraseña" |
-| No session, no account | Step 1: "Correo: {email}" as text, "Tu nombre" + "Continuar", which sends a código to the invited address. Step 2: "Te enviamos un código a {email}. Vence en 10 minutos.", `CodeInput` + "Crear cuenta" → `accept-new {name, otp}` → `/welcome?next=/`; "Reenviar código" (confirms with "Código reenviado"); "Corregir mi nombre" back to step 1 with the name kept. A wrong, expired or exhausted código reads as on every door; `EMAIL_TAKEN` reloads the preview, which then shows the account branch (D9 as amended 2026-10-03) |
+| No session, no account | Step 1: "Correo: {email}" as text, "Tu nombre" + "Continuar", which sends a código to the invited address. Step 2: "Te enviamos un código a {email}. Vence en 10 minutos.", `CodeInput` + "Crear cuenta" → `accept-new {name, otp}` → `/welcome?next=/`; "Reenviar código" (confirms with "Código reenviado"); "Corregir mi nombre" back to step 1 with the name kept. Step 2 keeps the invitation's title above. A failed send keeps step 1 and its name: the 429's "Demasiados intentos. Espera un momento e intenta de nuevo.", else "No pudimos enviar el código. Intenta de nuevo.". A wrong, expired or exhausted código reads as on every door; `EMAIL_TAKEN` reloads the preview, which then shows the account branch; `INVITATION_NOT_FOUND` says "La invitación ya no es válida. Pide una nueva a quien te invitó." with "Ir al panel" (through `/welcome?next=/`) when the código opened a session, or "Ir a iniciar sesión" when nothing was born (D9 as amended 2026-10-03) |
 | Signed in with the invited address | accepts on sight (unchanged) |
 | Signed in with another address, including after a key of another account | "Entraste como {email}, y esta invitación fue enviada a otro correo." + "Entrar con el correo invitado" (unchanged, FR-018) |
 | Expired, gone | unchanged |
+| An acceptance that fails for another reason (any branch) | "No pudimos aceptar la invitación. Intenta de nuevo." with "Intentar de nuevo" and "Ir al panel" (or "Ir a iniciar sesión" without a session); a 429 says "Demasiados intentos. Espera un momento e intenta de nuevo."; "ya no es válida" is said only for `INVITATION_NOT_FOUND`. The page is never left on a disabled "Entrando…" (adversarial review, 2026-10-02) |
 
 ### `/settings/security` (Cuenta → Seguridad)
 

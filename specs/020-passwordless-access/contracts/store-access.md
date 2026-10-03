@@ -64,9 +64,14 @@ six digits.
 - **400** `INVALID_OTP`, `OTP_EXPIRED`; **403** `TOO_MANY_ATTEMPTS`.
 - **409** `EMAIL_TAKEN`: the address has an account, or is a platform
   operator's, **and the código was right** (FR-032). The invitation stays
-  `sent`.
+  `sent`. Also when another request takes the address between the plugin's
+  read and its insert (the race D10 guards, met inside the plugin).
 - **400** `INVALID_INVITATION`: as above, or a race lost to another
   acceptance (T089).
+- Any failure after the account is born and before the store is linked —
+  inside the plugin's own sign-in included — removes that account when it
+  holds nothing else, so the address stays free for the next try (D10, D5;
+  adversarial review, 2026-10-02).
 - **429**.
 
 ---
@@ -108,8 +113,11 @@ Rate-limited 5 per 60 s per address (D3).
   store app reads all three alike anyway. **As fast, too**: a phone no
   store names still runs the plugin's código check, against an address
   nobody could predict (so it can never create an account), and every
-  refusal answers no sooner than a fixed floor after the request began, so
-  timing cannot tell the phones apart either.
+  refusal answers no sooner than a floor after the request began: at least
+  1 s (`STORE_SIGN_IN_FLOOR_MS`), and ten times the store lookup's own round
+  trip when the database is far, so a live código's extra statements (8
+  against a stranger's 5, measured 2026-10-03) cannot be timed either. A
+  right código is not held back.
 - **403** `STORE_SUSPENDED`: a suspended store, as `requireStore` answers
   today. No session is kept.
 - **429**.

@@ -3,7 +3,7 @@ import { http, HttpResponse } from "msw";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { myInvitationsResponse } from "@devolada/api/businesses-schema";
-import { baOk, businessActor, fail, handlers, ok, server, sessionUser } from "./msw";
+import { baSignedIn, baStatus, businessActor, fail, handlers, ok, server, sessionUser } from "./msw";
 import { renderApp } from "./render";
 import { expectNoViolations } from "./a11y";
 
@@ -11,7 +11,11 @@ import { expectNoViolations } from "./a11y";
    business never joined: the recovery door forgot the invitation and
    landed them in their own business, and nothing in the panel ever named
    the invitation again. The API half lives in
-   apps/api/test/invitee-lands-own-business.test.ts. */
+   apps/api/test/invitee-lands-own-business.test.ts.
+
+   passwordless-access US4: no password, so no recovery to forget the
+   invitation in. The código is asked on the invitation page itself, so the
+   invitee never leaves it (D9). */
 
 const ANA = { ...sessionUser, email: "ana@wifiplus.mx" };
 
@@ -39,19 +43,18 @@ const invitations = (list: { id: string; businessName: string; role: string }[])
 
 const emptyFeed = () => ok({ payments: [], nextCursor: null, today: { count: 0, totalCents: 0, startedAtMs: 0 } });
 
-describe("bug: invitee-lands-own-business — recovery comes back to the invitation", () => {
-  it("from the invitation page, a forgotten password returns to it, which accepts and lands inside the inviting business", async () => {
+describe("bug: invitee-lands-own-business — the código keeps the invitee on the invitation (passwordless-access US4)", () => {
+  it("the código on the invitation page signs in, accepts, and lands inside the inviting business", async () => {
     let signedIn = false;
     const accepted: unknown[] = [];
     const activated: unknown[] = [];
     server.use(
       handlers.getSession(() => HttpResponse.json(signedIn ? { user: ANA } : null)),
       handlers.invitationPreview(() => ok(previewOf())),
-      handlers.requestReset(() => baOk()),
-      handlers.resetPassword(() => baOk()),
-      handlers.login(() => {
+      handlers.requestCode(() => baStatus({ success: true })),
+      handlers.signInCode(() => {
         signedIn = true;
-        return baOk();
+        return baSignedIn(ANA);
       }),
       http.post("/auth/organization/accept-invitation", async ({ request }) => {
         accepted.push(await request.json());
@@ -66,27 +69,13 @@ describe("bug: invitee-lands-own-business — recovery comes back to the invitat
     );
     const router = renderApp("/invitaciones/inv-1");
 
-    expect(await screen.findByText(/como operador\. entra con tu contraseña/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("link", { name: /olvidé mi contraseña/i }));
+    await userEvent.click(await screen.findByRole("button", { name: "Enviarme un código" }));
+    /* still on the invitation: the código step opens in place */
+    expect(router.state.location.pathname).toBe("/invitaciones/inv-1");
+    await userEvent.type(await screen.findByLabelText("Código"), "482913");
+    await userEvent.click(screen.getByRole("button", { name: "Entrar" }));
 
-    /* The invitation rides along, and its address is already there (D14) */
-    expect(await screen.findByRole("heading", { name: /recuperar contraseña/i })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/recover");
-    expect(router.state.location.search).toEqual({ next: "/invitaciones/inv-1", email: "ana@wifiplus.mx" });
-    expect(screen.getByLabelText("Correo")).toHaveValue("ana@wifiplus.mx");
-    expect(screen.getByRole("link", { name: /volver a iniciar sesión/i })).toHaveAttribute(
-      "href",
-      expect.stringContaining("next=%2Finvitaciones%2Finv-1"),
-    );
-
-    await userEvent.click(screen.getByRole("button", { name: /enviar código/i }));
-    await userEvent.type(await screen.findByLabelText("Código"), "123456");
-    await userEvent.type(screen.getByLabelText("Nueva contraseña"), "devolada123");
-    await userEvent.type(screen.getByLabelText("Repite la contraseña"), "devolada123");
-    await userEvent.click(screen.getByRole("button", { name: /guardar contraseña/i }));
-
-    /* Back on the invitation, signed in with the invited address: it
-       accepts and activates the business that invited — not "/" of the
+    /* It accepts and activates the business that invited — not "/" of the
        person's own business */
     await screen.findByRole("heading", { name: "Pagos" });
     expect(accepted).toEqual([{ invitationId: "inv-1" }]);
@@ -95,39 +84,13 @@ describe("bug: invitee-lands-own-business — recovery comes back to the invitat
     expect(screen.getAllByText("WifiPlus Norte").length).toBeGreaterThan(0);
   });
 
-  it("the login page's recovery keeps where the person was going", async () => {
+  it("the login page has no recovery link, and keeps where the person was going", async () => {
     server.use(handlers.getSession(() => HttpResponse.json(null)));
     const router = renderApp("/login?next=%2Finvitaciones%2Finv-1");
-
-    await userEvent.click(await screen.findByRole("link", { name: /olvidé mi contraseña/i }));
-    expect(await screen.findByRole("heading", { name: /recuperar contraseña/i })).toBeInTheDocument();
+    await screen.findByLabelText("Correo");
+    expect(screen.queryByRole("link", { name: /olvidé/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Crear cuenta" })).toHaveAttribute("href", expect.stringContaining("next=%2Finvitaciones%2Finv-1"));
     expect(router.state.location.search).toEqual({ next: "/invitaciones/inv-1" });
-  });
-
-  it("a plain recovery, with nowhere to go back to, still lands on the panel", async () => {
-    let signedIn = false;
-    server.use(
-      handlers.getSession(() => HttpResponse.json(signedIn ? { user: sessionUser } : null)),
-      handlers.requestReset(() => baOk()),
-      handlers.resetPassword(() => baOk()),
-      handlers.login(() => {
-        signedIn = true;
-        return baOk();
-      }),
-      handlers.session(() => (signedIn ? ok(asRole("owner")) : fail("AUTHENTICATION_ERROR", 401))),
-      handlers.feed(emptyFeed),
-    );
-    const router = renderApp("/recover");
-
-    await userEvent.type(await screen.findByLabelText("Correo"), "demo@devolada.app");
-    await userEvent.click(screen.getByRole("button", { name: /enviar código/i }));
-    await userEvent.type(await screen.findByLabelText("Código"), "123456");
-    await userEvent.type(screen.getByLabelText("Nueva contraseña"), "devolada123");
-    await userEvent.type(screen.getByLabelText("Repite la contraseña"), "devolada123");
-    await userEvent.click(screen.getByRole("button", { name: /guardar contraseña/i }));
-
-    await screen.findByRole("heading", { name: "Pagos" });
-    expect(router.state.location.pathname).toBe("/payments");
   });
 });
 

@@ -1,13 +1,15 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@devolada/ui";
 import type { ReactNode } from "react";
 
-/* Shared frame for every access page (login, signup, verify, recover). */
+/* Shared frame for every access page (login, signup, welcome, the
+   invitation). passwordless-access D6: `/welcome`'s offer brings its own
+   heading (PasskeyOffer), so the title is optional. */
 export function AccessLayout({
   title,
   description,
   children,
 }: {
-  title: string;
+  title?: string;
   description?: string;
   children: ReactNode;
 }) {
@@ -19,11 +21,13 @@ export function AccessLayout({
             own sidebar never said it. */}
         <p className="mb-6 text-center text-2xl font-semibold tracking-tight">Devolada</p>
         <Card>
-          <CardHeader>
-            <CardTitle>{title}</CardTitle>
-            {description && <CardDescription>{description}</CardDescription>}
-          </CardHeader>
-          <CardContent>{children}</CardContent>
+          {title && (
+            <CardHeader>
+              <CardTitle>{title}</CardTitle>
+              {description && <CardDescription>{description}</CardDescription>}
+            </CardHeader>
+          )}
+          <CardContent className={title ? undefined : "pt-6"}>{children}</CardContent>
         </Card>
       </div>
     </main>

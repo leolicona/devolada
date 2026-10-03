@@ -4,6 +4,7 @@ import { cleanup, configure } from "@testing-library/react";
 import { server } from "./msw";
 import { queryClient } from "../src/lib/query";
 import { atWidth } from "./viewport";
+import * as authClient from "../src/lib/auth-client";
 
 /* Same ceiling as the other apps: parallel test files race for the CPU
    on their first render. */
@@ -20,6 +21,14 @@ afterEach(() => {
   /* A test starts from empty (constitution IV). The query cache lives on
      the module, not on the tree, so unmounting does not empty it. */
   queryClient.clear();
+  /* passwordless-access D7: the platform check is asked once per page load.
+     A file that mocks the client has no such memory to forget (and vitest
+     throws on an export its mock does not define). */
+  try {
+    authClient.resetCanVerifyPerson();
+  } catch {
+    /* mocked in this file */
+  }
   try {
     sessionStorage.clear();
     localStorage.clear();

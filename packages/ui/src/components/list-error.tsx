@@ -22,10 +22,18 @@ export interface ListErrorProps {
   /* Return the retry's promise and this component waits on it
      (feedback-vocabulary-rollout D10). */
   onRetry: () => void | Promise<unknown>;
+  /* The retry's declared size (feedback-vocabulary-rollout D11: a screen
+     names a size, never a height). `compact` (40 px) is the back office's,
+     where a pointer aims — every list this atom was made for. `standard`
+     (48 px) is for an access page, where a thumb does: /welcome's failed
+     read is the first screen after a código, very often on a phone
+     (passwordless-access contracts/panel-access.md § UI: 48 px standard
+     controls on access pages; adversarial review, 2026-10-03). */
+  size?: "compact" | "standard";
   className?: string;
 }
 
-export function ListError({ what, onRetry, className }: ListErrorProps) {
+export function ListError({ what, onRetry, size = "compact", className }: ListErrorProps) {
   /* The waiting state is derived from the CLICK, not passed in
      (feedback-vocabulary-rollout D10).
 
@@ -86,8 +94,9 @@ export function ListError({ what, onRetry, className }: ListErrorProps) {
           /* A screen names a size; it never states a height
              (feedback-vocabulary-rollout D11). This read `h-10 px-4 text-sm`,
              which is `compact` spelled out in literals — the same defect as a
-             component inventing its own size name, one level down. */
-          size="compact"
+             component inventing its own size name, one level down. The
+             screen's own size, declared above. */
+          size={size}
           onClick={() => void retry()}
           disabled={retrying}
           className="shrink-0"

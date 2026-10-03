@@ -66,26 +66,40 @@ export function useDisplaySettings(): { timezone: string; timeFormat: "12h" | "2
   };
 }
 
-/* Daily login keeps the password (better-auth.spec.md D2);
-   registration and recovery prove the email with a code (D4). */
-
-export const login = (email: string, password: string) =>
-  baPost("/auth/sign-in/email", { email, password });
-
-export const signup = (name: string, email: string, password: string) =>
-  api("/auth/business/signup", { method: "POST", body: JSON.stringify({ name, email, password }) });
 
 export const logout = () => baPost("/auth/sign-out");
 
+/* passwordless-access D1: one door for registration and sign-in — the
+   email-OTP plugin's. A código goes out for any well-formed address, and
+   the account is born, verified and named, only when it is typed (FR-004,
+   FR-005, FR-013). `name` rides only from the registration screen. */
+export const sendCode = (email: string) =>
+  baPost("/auth/email-otp/send-verification-otp", { email, type: "sign-in" });
+
+export const signInWithCode = (email: string, otp: string, name?: string) =>
+  baPostJson<{ user: SessionUser }>("/auth/sign-in/email-otp", { email, otp, ...(name ? { name } : {}) });
+
+/* D1, D6: a person born through the sign-in door has no name yet; /welcome asks */
+export const updateName = (name: string) => baPost("/auth/update-user", { name });
+
+/* D11: better-auth D17's guarantee without a password — every other session ends */
+export const revokeOtherSessions = () => baPost("/auth/revoke-other-sessions");
+
 /* The user behind the session, business or not — the wizard and the
-   invitation page need it before any membership exists (US-B01/B02). */
-export type SessionUser = { id: string; name: string; email: string; emailVerified: boolean };
+   invitation page need it before any membership exists (US-B01/B02).
+   `sessionBornAt` (ms) is when the session itself began: /welcome reads it
+   before offering a key, which the plugin registers only on a session
+   younger than a day (passwordless-access D8; adversarial review,
+   2026-10-02). Absent when the answer does not say. */
+export type SessionUser = { id: string; name: string; email: string; emailVerified: boolean; sessionBornAt?: number };
 export function useUser() {
   return useQuery<SessionUser | null, ApiError>({
     queryKey: ["user"],
     queryFn: async () => {
-      const s = await baGet<{ user: SessionUser } | null>("/auth/get-session");
-      return s?.user ?? null;
+      const s = await baGet<{ user: SessionUser; session?: { createdAt?: string } } | null>("/auth/get-session");
+      if (!s?.user) return null;
+      const bornAt = s.session?.createdAt ? Date.parse(s.session.createdAt) : Number.NaN;
+      return Number.isNaN(bornAt) ? s.user : { ...s.user, sessionBornAt: bornAt };
     },
     retry: false,
   });
@@ -111,7 +125,12 @@ export const acceptInvitation = async (invitationId: string) => {
   return { organizationId: res.invitation.organizationId };
 };
 
-/* better-auth D14: the session-less door for an invitee without an account */
+/* better-auth D14: the session-less door for an invitee without an account.
+   passwordless-access D9 (amended 2026-10-03, spec Clarifications Q5): it
+   carries the name and the código sent to the invited address — the
+   invitation's id alone proves no inbox. The answer sets the new session's
+   cookie; a refused código comes back as INVALID_OTP in the envelope —
+   wrong, expired or spent alike (FR-033) — and nothing is born. */
 export const acceptInvitationAsNewUser = (invitationId: string, body: AcceptInvitationNewRequest) =>
   api<BusinessActor>(`/businesses/invitations/${invitationId}/accept-new`, { method: "POST", body: JSON.stringify(body) });
 
@@ -122,15 +141,3 @@ export const cancelInvitation = (invitationId: string) =>
   api(`/businesses/invitations/${invitationId}`, { method: "DELETE" });
 export const updateMemberRole = (memberId: string, role: string) =>
   api(`/businesses/members/${memberId}`, { method: "PATCH", body: JSON.stringify({ role }) });
-
-export const sendVerificationCode = (email: string) =>
-  baPost("/auth/email-otp/send-verification-otp", { email, type: "email-verification" });
-
-export const verifyEmailCode = (email: string, otp: string) =>
-  baPost("/auth/email-otp/verify-email", { email, otp });
-
-export const requestPasswordReset = (email: string) =>
-  baPost("/auth/email-otp/request-password-reset", { email });
-
-export const resetPasswordWithCode = (email: string, otp: string, password: string) =>
-  baPost("/auth/email-otp/reset-password", { email, otp, password });

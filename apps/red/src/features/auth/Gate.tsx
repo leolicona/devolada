@@ -39,8 +39,11 @@ export function WrongAccountScreen() {
   );
 }
 
-/* FR-005, FR-014: the store was suspended; its session is already gone */
-export function SuspendedScreen() {
+/* FR-005, FR-014: the store was suspended; its session is already gone.
+   `onBack` is for the sign-in's own código step, which shows this screen
+   at /entrar already (passwordless-access D10: the API keeps no session for
+   a suspended store) — there, "Volver a entrar" goes back to its first step. */
+export function SuspendedScreen({ onBack }: { onBack?: () => void } = {}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   return (
@@ -56,7 +59,8 @@ export function SuspendedScreen() {
           className="w-full"
           onClick={() => {
             queryClient.clear();
-            void navigate({ to: "/entrar" });
+            if (onBack) onBack();
+            else void navigate({ to: "/entrar" });
           }}
         >
           Volver a entrar

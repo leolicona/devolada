@@ -64,6 +64,13 @@ export default defineWorkersConfig(async () => {
                  times from one address; the limiter's own test hands the
                  app an env without this pin. */
               AUTH_RATE_LIMIT: "off",
+              /* passwordless-access D10 (adversarial review, 2026-10-02):
+                 every refusal of POST /store/sign-in waits out a floor of
+                 at least 1 s; the suite types many wrong códigos there, so
+                 it pins none (0 turns the floor off, the scaling with D1's
+                 round trip included), and the floor's own tests hand the
+                 app a value. */
+              STORE_SIGN_IN_FLOOR_MS: "0",
               /* landing-page D6: the landing's address, so the request
                  door's redirect answer can be asserted. A test that wants
                  the unset behaviour — the envelope for a plain form post —

@@ -70,6 +70,16 @@ describe("US-A05 scenario 2: the hub's rows follow the role — business first, 
     expect(screen.getByRole("button", { name: /cerrar sesión/i })).toBeInTheDocument();
   });
 
+  it("passwordless-access US5: the identity card and the keys row promise no password (FR-030)", async () => {
+    server.use(handlers.session(() => ok(businessActor)));
+    renderApp("/settings");
+    await screen.findByRole("heading", { name: "Cuenta" });
+    expect(screen.getByText("Para cambiar tu nombre, escríbenos. Pronto podrás hacerlo desde aquí.")).toBeInTheDocument();
+    const cuenta = screen.getByRole("region", { name: "Tu cuenta" });
+    expect(within(cuenta).getByRole("link", { name: /entrar con huella o rostro/i })).toHaveTextContent("Tus llaves y sesiones");
+    expect(screen.queryByText(/contraseña|passkey/i)).not.toBeInTheDocument();
+  });
+
   it("a viewer's hub holds no Negocio group at all", async () => {
     server.use(handlers.session(() => ok({ ...businessActor, role: "viewer" })));
     renderApp("/settings");

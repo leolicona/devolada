@@ -21,7 +21,9 @@ import { app, seedBusiness, seedMember, sessionCookieHeader } from "./helpers";
 
 /* cash-at-stores US2 — the operator's side of the network: the fee and
    the receipt's message as platform rules (T023, D22, D31), then the
-   stores, the invitation, the switch and the corrections (T034). */
+   stores, the invitation, the switch and the corrections (T034).
+   passwordless-access US6 (T060): the acceptance a replaced token refuses
+   carries an email and its código. */
 
 beforeAll(() => {
   fetchMock.activate();
@@ -203,7 +205,9 @@ describe("cash-at-stores US2 — the operator's stores (D4, D6, FR-001–FR-005)
     const second = tokenOf((await resend.json()).data.invitation.url);
 
     expect((await (await callStore(`/store/invitations/${first}`)).json()).data).toEqual({ state: "invalid" });
-    const accept = await callStore(`/store/invitations/${first}/accept`, post({ email: "lupita@correo.mx", password: "secreta123" }));
+    /* passwordless-access US6 (T060): the acceptance is an email and its
+       código now, and a replaced token still opens nothing */
+    const accept = await callStore(`/store/invitations/${first}/accept`, post({ email: "lupita@correo.mx", otp: "123456" }));
     expect(accept.status).toBe(400);
     expect((await accept.json()).error.code).toBe("INVALID_INVITATION");
     expect((await (await callStore(`/store/invitations/${second}`)).json()).data).toMatchObject({ state: "open", phoneTail: "5678" });

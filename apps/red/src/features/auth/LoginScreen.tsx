@@ -1,163 +1,153 @@
 import { useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Fingerprint, TriangleAlert } from "lucide-react";
+import { Fingerprint, MailCheck } from "lucide-react";
 import { Alert, Button, Field, Input, Pending } from "@devolada/ui";
 import { ApiError } from "@/lib/api";
-import { authClient, passkeysSupported } from "@/lib/auth-client";
+import { canVerifyPerson, passkeysSupported } from "@/lib/auth-client";
 import { nationalPhone } from "@/lib/phone";
-import { AccessLayout, EMAIL_SHAPE, FieldError } from "./AccessLayout";
-import { sendCode, signIn, verifyEmail } from "./session";
+import { useWide } from "@/lib/wide";
+import { AccessLayout, FieldError } from "./AccessLayout";
+import { CodeStep, OrWithCode } from "./CodeStep";
+import { SuspendedScreen } from "./Gate";
+import { sendProblemLine, signInWithKey } from "./keys";
+import { OfferStep } from "./OfferStep";
+import { sendSignInCode, signInWithCode } from "./session";
 
-/* cash-at-stores FR-010, D3: the shopkeeper's phone and password, or the
-   phone's *huella o rostro*. A sign-in of a shopkeeper who left the
-   invitation before the código answers EMAIL_NOT_VERIFIED, and the screen
-   offers the código again (D5). */
-
-function VerifyStep({ onDone }: { onDone: () => void }) {
-  const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
-  const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <div className="space-y-3">
-      <Alert variant="warning" layout="icon">
-        <TriangleAlert aria-hidden />
-        Falta verificar tu correo. Escribe el correo que diste al aceptar la invitación y te enviamos un código.
-      </Alert>
-      <Field label="Correo de recuperación">
-        <Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-      </Field>
-      {sent && (
-        <Field label="Código">
-          <Input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
-        </Field>
-      )}
-      <FieldError id="verify-error">{error}</FieldError>
-      <Pending active={busy} label={sent ? "Verificando el código" : "Enviando el código"}>
-        <Button
-          className="w-full"
-          disabled={busy || !EMAIL_SHAPE.test(email.trim()) || (sent && code.length !== 6)}
-          onClick={async () => {
-            setBusy(true);
-            setError(null);
-            try {
-              if (!sent) {
-                await sendCode(email.trim(), "email-verification");
-                setSent(true);
-              } else {
-                await verifyEmail(email.trim(), code);
-                onDone();
-              }
-            } catch {
-              setError(sent ? "El código no es válido o ya venció. Pide uno nuevo." : "No pudimos enviar el código. Intenta de nuevo.");
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          {sent ? "Verificar y entrar" : "Enviar código"}
-        </Button>
-      </Pending>
-    </div>
-  );
-}
-
+/* cash-at-stores FR-010, D3; passwordless-access D7, D10 (contracts/
+   store-access.md § /entrar): the phone's *huella o rostro* first, where
+   the browser supports passkeys, then the store's phone and a código. The
+   network knows the shopkeeper by the phone, so the phone is what is
+   typed; the código goes to the store account's email, and the screen
+   says the same for every phone (FR-033) — naming the address would tell
+   a stranger whose phone it is. No line mentions a password: the screen
+   reads as if it had always been this way (spec Clarifications, Q4). A
+   key goes to `/`; a código goes through the activation (D7). */
 export function LoginScreen() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [step, setStep] = useState<"start" | "code" | "offer" | "suspended">("start");
   const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
+  const [phoneProblem, setPhoneProblem] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [unverified, setUnverified] = useState(false);
-  const [passkeyError, setPasskeyError] = useState(false);
-
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [keyFailed, setKeyFailed] = useState(false);
+  /* cash-at-stores D32: on a computer at the counter the device is not a phone */
+  const noun = useWide() ? "computadora" : "teléfono";
+  const withKey = passkeysSupported();
   const digits = nationalPhone(phone);
-  const landed = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["session"] });
-    void navigate({ to: "/" });
+
+  /* A new session: whatever the cache knew of the last one is stale */
+  const landed = () => {
+    queryClient.removeQueries({ queryKey: ["session"] });
+    void navigate({ to: "/", replace: true });
   };
 
-  if (unverified) {
+  if (step === "offer") return <OfferStep onDone={landed} />;
+
+  /* FR-014: a suspended store's código opens nothing (the API keeps no
+     session), and the screen says why rather than "wrong código" */
+  if (step === "suspended") return <SuspendedScreen onBack={() => setStep("start")} />;
+
+  if (step === "code" && digits) {
     return (
-      <AccessLayout title="Verifica tu correo">
-        <VerifyStep onDone={landed} />
+      <AccessLayout title="Escribe el código">
+        <Alert layout="icon">
+          <MailCheck aria-hidden />
+          Si ese teléfono es de una tienda, te enviamos un código al correo de la tienda. Vence en 10 minutos.
+        </Alert>
+        <CodeStep
+          onSubmit={async (otp) => {
+            try {
+              await signInWithCode(digits, otp);
+            } catch (e) {
+              if (e instanceof ApiError && e.code === "STORE_SUSPENDED") return setStep("suspended");
+              throw e;
+            }
+            queryClient.removeQueries({ queryKey: ["session"] });
+            if (await canVerifyPerson()) setStep("offer");
+            else landed();
+          }}
+          onResend={() => sendSignInCode(digits)}
+          other={{ label: "Usar otro teléfono", onClick: () => setStep("start") }}
+        />
       </AccessLayout>
     );
   }
 
   return (
     <AccessLayout title="Entrar">
+      {withKey && (
+        <>
+          <div className="space-y-2">
+            <Pending active={keyBusy} label={`Esperando a tu ${noun}`}>
+              <Button
+                className="w-full"
+                disabled={keyBusy}
+                /* D7: the device's window opens inside this click */
+                onClick={async () => {
+                  setKeyBusy(true);
+                  setKeyFailed(false);
+                  const opened = await signInWithKey();
+                  setKeyBusy(false);
+                  /* FR-012: one line, and the código right below it */
+                  if (!opened) setKeyFailed(true);
+                  else landed();
+                }}
+              >
+                <Fingerprint className="size-5" aria-hidden />
+                Entrar con huella o rostro
+              </Button>
+            </Pending>
+            <FieldError id="key-error">{keyFailed ? "No se pudo usar tu huella o rostro. Entra con un código." : null}</FieldError>
+          </div>
+          <OrWithCode />
+        </>
+      )}
       <form
         className="space-y-4"
+        noValidate
         onSubmit={async (e) => {
           e.preventDefault();
+          if (busy) return;
           if (!digits) {
-            setError("Escribe los 10 dígitos de tu teléfono.");
+            setPhoneProblem(true);
             return;
           }
+          setPhoneProblem(false);
           setBusy(true);
           setError(null);
           try {
-            await signIn(digits, password);
-            await landed();
+            await sendSignInCode(digits);
+            setStep("code");
           } catch (err) {
-            const code = err instanceof ApiError ? err.code : "";
-            if (code === "EMAIL_NOT_VERIFIED") setUnverified(true);
-            else if (err instanceof ApiError && err.status === 429) setError("Demasiados intentos. Espera un momento.");
-            /* T074: a lost signal is never "wrong password" */
-            else if (code === "NETWORK_ERROR") setError("Sin conexión. Revisa tu internet e intenta de nuevo.");
-            else if (err instanceof ApiError && err.status >= 500) setError("No pudimos entrar ahora. Intenta en unos minutos.");
-            /* never which half was wrong */
-            else setError("Teléfono o contraseña incorrectos.");
+            setError(sendProblemLine(err));
           } finally {
             setBusy(false);
           }
         }}
       >
-        <Field label="Teléfono">
-          <Input type="tel" inputMode="tel" autoComplete="username" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="55 1234 5678" />
+        <Field label="Tu teléfono">
+          <Input
+            type="tel"
+            inputMode="tel"
+            autoComplete="username"
+            placeholder="55 1234 5678"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            aria-invalid={phoneProblem || undefined}
+          />
         </Field>
-        <Field label="Contraseña">
-          <Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </Field>
+        <FieldError id="phone-error">{phoneProblem ? "Escribe los 10 dígitos de tu teléfono." : null}</FieldError>
         <FieldError id="login-error">{error}</FieldError>
-        <Pending active={busy} label="Entrando">
-          <Button type="submit" className="w-full" disabled={busy || !phone || !password}>
-            Entrar
+        <Pending active={busy} label="Enviando el código">
+          {/* Without the key, the código is the way in and its button the primary */}
+          <Button type="submit" variant={withKey ? "secondary" : "primary"} className="w-full" disabled={busy || !phone.trim()}>
+            Enviar código
           </Button>
         </Pending>
       </form>
-
-      {passkeysSupported() && (
-        <div className="space-y-2">
-          <Button
-            variant="secondary"
-            className="w-full"
-            onClick={async () => {
-              setPasskeyError(false);
-              const result = await authClient.signIn.passkey().catch(() => ({ error: true }));
-              if (result && "error" in result && result.error) setPasskeyError(true);
-              else await landed();
-            }}
-          >
-            <Fingerprint className="size-5" aria-hidden />
-            Entrar con huella o rostro
-          </Button>
-          {passkeyError && (
-            <p role="alert" className="text-sm font-medium text-error">
-              No se pudo usar tu huella o rostro. Entra con tu teléfono y contraseña.
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* T083 (constitution VI): a 48px target, like every control here */}
-      <Link to="/recuperar" className="flex min-h-12 items-center justify-center text-sm font-medium text-link">
-        Olvidé mi contraseña
-      </Link>
     </AccessLayout>
   );
 }

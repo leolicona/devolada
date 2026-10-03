@@ -1,13 +1,15 @@
 import type { ReactNode } from "react";
 import { Card } from "@devolada/ui";
 
-/* The access screens' frame: centred on a phone, the product's name above */
-export function AccessLayout({ title, children }: { title: string; children: ReactNode }) {
+/* The access screens' frame: centred on a phone, the product's name above.
+   Without a `title` the card holds a body that brings its own h1 — the
+   activation step's `PasskeyOffer` (passwordless-access D12). */
+export function AccessLayout({ title, children }: { title?: string; children: ReactNode }) {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center px-4 py-6">
       <p className="mb-4 text-center text-sm font-semibold text-ink-soft">Devolada · Tienda</p>
       <Card className="space-y-4 p-6">
-        <h1 className="text-xl font-semibold">{title}</h1>
+        {title && <h1 className="text-xl font-semibold">{title}</h1>}
         {children}
       </Card>
     </main>

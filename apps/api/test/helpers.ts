@@ -8,7 +8,6 @@ import {
   paymentLinks,
   payments,
   session as sessionTable,
-  user as userTable,
   verification,
 } from "../src/db/schema";
 import type { Role } from "../src/auth/roles";
@@ -20,8 +19,6 @@ import type { Bindings } from "../src/env";
    `sessionCookieHeader` stays stateless (any test may build it, even at
    module top level): it signs a deterministic token, and the seed
    functions insert the matching session row. */
-
-export const PASSWORD = "devolada123";
 
 /* In-memory R2 for the proof bucket: real R2 writes trip
    vitest-pool-workers' isolated storage (its snapshotter rejects the
@@ -124,22 +121,45 @@ export async function seedSession(
     });
 }
 
+/* passwordless-access D14: a panel person is born without a password —
+   a `user` row and no `account` row, written through Better Auth's own
+   adapter, as every door of the product now births one. `emailVerified:
+   false` stays possible for the legacy rows the sweep and the session gate
+   are proven against (D5, better-auth D16). */
 async function seedAuthUser(
   name: string,
   email: string,
   opts: { emailVerified?: boolean } = {},
 ) {
-  const { response } = await auth().api.signUpEmail({
-    body: { name, email, password: PASSWORD },
-    returnHeaders: true,
+  const user = await (await auth().$context).internalAdapter.createUser({
+    name,
+    email,
+    emailVerified: opts.emailVerified !== false,
   });
-  if (opts.emailVerified !== false) {
-    await drizzle(env.DB)
-      .update(userTable)
-      .set({ emailVerified: true })
-      .where(eq(userTable.id, response.user.id));
-  }
-  return response.user.id;
+  return user.id;
+}
+
+/* passwordless-access D14 (PR 2): a user as the retired password doors
+   left one — a `user` row and a `credential` account holding a password
+   hash — for the cases the sweep and the código are proven against (D5,
+   analysis G1). `signUpEmail` cannot write one any more: `emailAndPassword`
+   is off (D4). Unverified by default, as the old sign-up left a person
+   before their first código. */
+export async function seedLegacyUser(
+  name: string,
+  email: string,
+  opts: { emailVerified?: boolean } = {},
+) {
+  const ctx = await auth().$context;
+  const user = await ctx.internalAdapter.createUser({ name, email, emailVerified: opts.emailVerified === true });
+  await ctx.internalAdapter.linkAccount({
+    userId: user.id,
+    providerId: "credential",
+    accountId: user.id,
+    /* Never checked by anything now: no door reads a password */
+    password: "legacy-salt:legacy-hash",
+  });
+  return user.id;
 }
 
 /* A business with its auth twin and one owner (business-and-memberships
@@ -284,15 +304,26 @@ export function sessionOf(res: Response): string {
   return cookie.split(";")[0];
 }
 
-/* The last code "emailed" to an address (spec D4): Better Auth keeps it
-   in the verification table until redeemed. */
-export async function lastCodeFor(email: string): Promise<string> {
-  const rows = await drizzle(env.DB).select().from(verification);
-  const row = rows.filter((r) => r.identifier.includes(email)).at(-1);
-  if (!row) throw new Error(`no code stored for ${email}`);
-  const match = /\d{6}/.exec(row.value);
-  if (!match) throw new Error(`no 6-digit code in: ${row.value}`);
-  return match[0];
+/* passwordless-access D14: the last código the sender logged for an
+   address (setup.ts keeps them). Flow tests use it — the registration, the
+   sign-in — because they must prove the código reached the address. */
+export function sentCode(email: string): string {
+  const codes = (globalThis as { [k: symbol]: Map<string, string> | undefined })[Symbol.for("devolada.test.sentCodes")];
+  const code = codes?.get(email.toLowerCase());
+  if (!code) throw new Error(`sentCode: no código was logged for ${email} in this test`);
+  return code;
+}
+
+/* passwordless-access D14: a fresh código for an address, through the
+   plugin's own server-only door (the one /dev/code uses). The address's
+   live sign-in código goes first, as T005's hook does for a request, so
+   the minted código is the only one. For tests whose subject is not the
+   email — never for the invitation page, whose proof is that the código
+   reached the invited inbox (D9 as amended, spec Clarifications Q5): those
+   tests ask through `send-verification-otp` and read `sentCode`. */
+export async function mintCode(email: string): Promise<string> {
+  await drizzle(env.DB).delete(verification).where(eq(verification.identifier, `sign-in-otp-${email.toLowerCase()}`));
+  return auth().api.createVerificationOTP({ body: { email, type: "sign-in" } });
 }
 
 /* A browser always sends Origin on POST; Better Auth's CSRF check
@@ -302,3 +333,33 @@ export const json = (body: unknown): RequestInit => ({
   headers: { "Content-Type": "application/json", Origin: "http://localhost:5174" },
   body: JSON.stringify(body),
 });
+
+/* D1 failing the statement `at` names, once, before it runs — a dropped
+   connection on that statement and nothing else. `hits` counts the
+   failures, so a test can see the statement was reached. Shared by the
+   store acceptance's rollback (passwordless-store.test.ts) and accept-new's
+   kept account (passwordless-invitation.test.ts). */
+export function failingDB(at: RegExp, hits: { count: number }): D1Database {
+  const real = env.DB;
+  const fail = (stmt: D1PreparedStatement): D1PreparedStatement =>
+    new Proxy(stmt, {
+      get(target, prop) {
+        if (prop === "bind") return (...values: unknown[]) => fail(target.bind(...values));
+        if (prop === "all" || prop === "raw" || prop === "first" || prop === "run") {
+          return async () => {
+            hits.count++;
+            throw new Error("D1_ERROR: Network connection lost.");
+          };
+        }
+        const value = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  return new Proxy(real, {
+    get(target, prop) {
+      if (prop === "prepare") return (query: string) => (hits.count === 0 && at.test(query) ? fail(target.prepare(query)) : target.prepare(query));
+      const value = Reflect.get(target, prop);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}

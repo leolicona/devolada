@@ -103,3 +103,26 @@ describe("feedback-vocabulary-rollout US3: the retry waits on the click", () => 
     d.resolve();
   });
 });
+
+/* passwordless-access US1 (contracts/panel-access.md § UI: 48 px standard
+   controls on access pages; adversarial review, 2026-10-03): the retry's
+   size is declared by the screen. The lists of the back office keep the
+   40 px they were made with; /welcome's failed read, the first screen after
+   a código and very often a phone's, asks for the thumb's 48 px. happy-dom
+   cannot measure a box, so the class the size names is what is read here —
+   the browser layer measures the pixels (tests/e2e/stubs.ts accessScreens). */
+describe("passwordless-access US1: the retry's size is the screen's to declare", () => {
+  it("is compact (40 px) where nothing is declared: every list it was made for", () => {
+    render(<ListError what="los cobros" onRetry={() => {}} />);
+    const button = screen.getByRole("button", { name: /reintentar/i });
+    expect(button).toHaveClass("h-10");
+    expect(button).not.toHaveClass("h-12");
+  });
+
+  it("is standard (48 px) on an access page", () => {
+    render(<ListError what="tu sesión" size="standard" onRetry={() => {}} />);
+    const button = screen.getByRole("button", { name: /reintentar/i });
+    expect(button).toHaveClass("h-12");
+    expect(button).not.toHaveClass("h-10");
+  });
+});

@@ -6,7 +6,7 @@ import {
   Outlet,
 } from "@tanstack/react-router";
 import { Shell } from "./features/shell/Shell";
-import { LoginPage, RecoverPage, SignupPage, VerifyEmailPage } from "./features/auth/pages";
+import { LoginPage, SignupPage, WelcomePage } from "./features/auth/pages";
 import { FeedScreen } from "./features/feed/FeedScreen";
 import { LinksScreen } from "./features/links/LinksScreen";
 import {
@@ -37,17 +37,27 @@ export const nextSearch = (s: Record<string, unknown>): { next?: string } => ({
      the raw search, so a bare `{}` would keep the rejected value alive. */
   next: typeof s.next === "string" && /^\/(?!\/)/.test(s.next) ? s.next : undefined,
 });
-/* better-auth D16: the código screen knows the address it is for; a
-   visit without one asks for it. */
-export const verifySearch = (s: Record<string, unknown>): { next?: string; email?: string } => ({
-  ...nextSearch(s),
-  email: typeof s.email === "string" && s.email.includes("@") ? s.email : undefined,
-});
+/* passwordless-access D6: the código is a step of /login and /signup now.
+   An old link to /verify-email lands on /login with its validated `next`;
+   the address it may carry is dropped — an address never travels in a URL
+   (analysis I5). Three lines spare a bookmark the not-found page. */
+function VerifyEmailRedirect() {
+  const { next } = verifyEmailRoute.useSearch();
+  return <Navigate to="/login" search={{ next }} replace />;
+}
 const verifyEmailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/verify-email",
-  component: VerifyEmailPage,
-  validateSearch: verifySearch,
+  component: VerifyEmailRedirect,
+  validateSearch: nextSearch,
+});
+/* passwordless-access D6: where every door that opens a session by código
+   lands — the name if it is missing, then the key (D7) — before `next` */
+const welcomeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/welcome",
+  component: WelcomePage,
+  validateSearch: nextSearch,
 });
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -61,15 +71,19 @@ const signupRoute = createRoute({
   component: SignupPage,
   validateSearch: nextSearch,
 });
-/* bug: invitee-lands-own-business — recovery carries `next` and the
-   address like the código screen does, so an invitee who forgot their
-   password comes back to the invitation instead of landing in their own
-   business. */
+/* passwordless-access D6: no password, so nothing to recover — the código
+   on /login is the way back in. An old link lands there keeping `next`
+   (bug: invitee-lands-own-business: an invitee still comes back to the
+   invitation), and drops the address, as /verify-email does. */
+function RecoverRedirect() {
+  const { next } = recoverRoute.useSearch();
+  return <Navigate to="/login" search={{ next }} replace />;
+}
 const recoverRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/recover",
-  component: RecoverPage,
-  validateSearch: verifySearch,
+  component: RecoverRedirect,
+  validateSearch: nextSearch,
 });
 /* Outside the shell: both exist before (or without) an active business */
 const newBusinessRoute = createRoute({ getParentRoute: () => rootRoute, path: "/nuevo-negocio", component: NewBusinessScreen });
@@ -180,6 +194,7 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   signupRoute,
   verifyEmailRoute,
+  welcomeRoute,
   recoverRoute,
   newBusinessRoute,
   invitationRoute,

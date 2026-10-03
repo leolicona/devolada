@@ -99,7 +99,10 @@ pnpm exec playwright test --config playwright.review.config.ts   # design-review
 ```
 
 Local seed: with the API up, `curl -X POST localhost:8787/dev/seed` creates a
-demo ISP (`demo@devolada.app` / `devolada123`). `/dev/*` 404s unless
+demo ISP (`demo@devolada.app`), with no password: the panel signs in with a
+código, which prints in the API's console without `RESEND_API_KEY`, or comes
+from `POST /dev/code {email, type: "sign-in"}` — only for `.invalid` and the
+demo's addresses (passwordless-access D14, D16). `/dev/*` 404s unless
 `ENVIRONMENT=dev`. Secrets go in per-app `.dev.vars` (git-ignored, including
 suffixed copies). The API's optional secrets, each degrading when unset
 (constitution VIII; the authoritative comments live in `apps/api/src/env.ts`):
@@ -112,7 +115,7 @@ suffixed copies). The API's optional secrets, each degrading when unset
 | `WEBHOOK_SIGNING_KEYS` | webhook deliveries are recorded but never attempted (`SIGNING_KEY_MISSING` on the row, empty JWKS); mint one with the one-liner in `specs/003-automated-collections-api/quickstart.md` |
 | `RESEND_API_KEY` | the OTP is logged instead of emailed |
 | `WISPHUB_API_KEY` | the dev seed connects no provider |
-| `APICEP_DEADLINE_MS`, `WEBHOOK_DELIVERY_TIMEOUT_MS`, `READER_TIMEOUT_MS` | 25 s, 10 s and 8 s — test knobs, never set by a deploy |
+| `APICEP_DEADLINE_MS`, `WEBHOOK_DELIVERY_TIMEOUT_MS`, `READER_TIMEOUT_MS`, `STORE_SIGN_IN_FLOOR_MS` | 25 s, 10 s, 8 s and 1 s — the last is the base of the floor a refused store sign-in waits for (it grows to ten times the store lookup's round trip; `0` turns it off), so timing cannot tell a store's phone from a stranger's (passwordless-access FR-033) — test knobs, never set by a deploy |
 
 `BETTER_AUTH_SECRET` is the one exception — CI refuses to deploy without it.
 
@@ -150,8 +153,11 @@ apps/red      the shopkeeper's app, phone-first, no offline work (assets
               (cash-at-stores D32): Cobrar (search → debt → record → folio and the
               WhatsApp receipt), Caja and Movimientos (the store's cash
               book, the hand-over). Its own session kind, the store actor
-              (`requireStore`); the cash book is `store_ledger`, written
-              only by `src/store-ledger/` (cash-at-stores D19)
+              (`requireStore`); no account holds a password: the
+              shopkeeper's código is asked by phone and goes to the
+              store's email (passwordless-access D10); the cash book is
+              `store_ledger`, written only by `src/store-ledger/`
+              (cash-at-stores D19)
 packages/ui   design tokens + the atoms every surface renders
 ```
 

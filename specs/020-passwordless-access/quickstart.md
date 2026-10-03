@@ -93,8 +93,13 @@ Locally, with the API up (`pnpm --filter @devolada/api dev`) and no
    - **with an account and a key**: open the console's invitation link in a
      clean session and use "Entrar con huella o rostro". You land inside the
      business, with the invited role;
-   - **without an account**: type the name, activate, and you are inside. No
-     código, no password.
+   - **without an account**: type the name and "Continuar"; the código
+     reaches the invited address; type it, activate, and you are inside. No
+     password (spec Clarifications Q5, 2026-10-03);
+   - **the hole Q5 closed**: as the owner, take the pending invitation's id
+     and `POST /businesses/invitations/:id/accept-new` with a name and any
+     six digits, with no cookie: `400 INVALID_OTP`, and no account exists
+     for that address afterwards.
 6. **Keys and sessions** (US5). Keep two browsers signed in. From one, use
    "Cerrar sesión en los demás dispositivos": the other's next click lands on
    `/login`. Then make the session a day old (M2's trick) and use "Activar en

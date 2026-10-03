@@ -1,12 +1,18 @@
 import type { Context } from "hono";
-import { drizzle } from "drizzle-orm/d1";
+import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { CUSTOMERS_BLOCK_MIN, WispHubError } from "../../wisphub/client";
+import { CUSTOMERS_BLOCK_MIN, WispHubError, type PaymentMethod } from "../../wisphub/client";
+/* payment-method-per-channel D8, D14, D16: the WispHub integration's own
+   setup reaches its adapter for Devolada's methods — the rule recorded in
+   the debt `core-reads-provider-directly` ("Confirm on the tree"). This
+   file builds no provider path and parses no provider payload. */
+import { readDevoladaMethods, setupBlockOf } from "../../wisphub/payment-methods";
+import { rememberPaymentMethods } from "../../wisphub/cache";
 /* provider-address-per-isp D4: the eleventh call site, and the only one
    that cannot read `integration.installation` — it tests a key and an
    installation that are not yet saved, so it resolves the catalogue
    directly (`wisphubAt`) rather than from a stored row. */
-import { effectiveInstallation, wisphubAt } from "../../wisphub/factory";
+import { effectiveInstallation, wisphubAt, wisphubFor } from "../../wisphub/factory";
 import { isInstallationKey } from "../../wisphub/installations";
 import { integrationOf, upsertIntegration, type Integration } from "../../integrations/store";
 import {
@@ -22,6 +28,7 @@ import { apiWebhooks, payments, webhookDeliveries } from "../../db/schema";
 import { activeSigningKey, parseSigningKeys } from "../../webhooks/sign";
 import type {
   ApiCredential,
+  DevoladaMethods,
   InstallationKeyValue,
   IntegrationsResponse,
   IssueCredentialRequest,
@@ -121,27 +128,41 @@ function toWisphub(
 
 const WRITES = ["create_invoice", "register_payment", "auto_activate", "payment_promise"] as const;
 
+/* payment-method-per-channel D8: the answer, and the methods list when the
+   probe read it, for the caller that keeps it under a new stamp (D16) */
+type TestRun = { result: WispHubTestResponse; methods: PaymentMethod[] | null };
+
 async function testKey(
   apiKey: string,
   installation: string | null,
   env: Bindings,
-): Promise<WispHubTestResponse> {
+  /* payment-method-per-channel FR-008: whether the block carries the
+     network's line */
+  storeChannelOn: boolean,
+): Promise<TestRun> {
   const tried = effectiveInstallation(installation, env).installation;
+  let methods: PaymentMethod[] | null = null;
   const answer = (
     outcome: WispHubTestResponse["outcome"],
     rest: Partial<WispHubTestResponse> = {},
-  ): WispHubTestResponse => ({
-    ok: outcome === "OK",
-    outcome,
-    triedInstallation: { key: tried.key, label: tried.label },
-    verified: [],
-    /* Always all four: a write is never proven here, whatever the reads
-       said (D7). A healthy connection that listed nothing as unverified
-       would be the old silent claim in a new shape. */
-    unverified: [...WRITES],
-    missingPermission: null,
-    sampleCustomerCount: null,
-    ...rest,
+  ): TestRun => ({
+    methods,
+    result: {
+      ok: outcome === "OK",
+      outcome,
+      triedInstallation: { key: tried.key, label: tried.label },
+      verified: [],
+      /* Always all four: a write is never proven here, whatever the reads
+         said (D7). A healthy connection that listed nothing as unverified
+         would be the old silent claim in a new shape. */
+      unverified: [...WRITES],
+      missingPermission: null,
+      sampleCustomerCount: null,
+      /* payment-method-per-channel D8: null while the methods probe has
+         not run — the screen keeps the card it already shows */
+      devoladaMethods: null,
+      ...rest,
+    },
   });
 
   const wisphub = wisphubAt(apiKey, installation, env);
@@ -161,8 +182,22 @@ async function testKey(
       },
     },
     { name: "invoices", run: () => wisphub.probeInvoices() },
-    { name: "payment_methods", run: () => wisphub.probePaymentMethods() },
+    /* payment-method-per-channel D8: the whole list, not one row — the same
+       answer then says whether Devolada's methods exist. An answer that
+       is not a list is the installation failing to answer usefully, as a
+       5xx is. Whether this probe is verified never depends on Devolada's
+       methods existing. */
+    {
+      name: "payment_methods",
+      run: async () => {
+        methods = await wisphub.listPaymentMethods();
+      },
+    },
   ];
+  /* payment-method-per-channel D8, FR-009: the probe ran and failed —
+     refused, timed out, unusable — is `checked: false`, never "missing" */
+  const blockAfter = (probe: WispHubVerifiableRead): DevoladaMethods | null =>
+    probe === "payment_methods" ? { checked: false } : null;
 
   for (const probe of probes) {
     try {
@@ -176,7 +211,7 @@ async function testKey(
            to the ISP ("we could not get an answer from there") and take
            the same advice, and none of them is evidence about the key,
            which is the mistake this outcome exists to stop making. */
-        return answer("INSTALLATION_UNREACHABLE", { verified, sampleCustomerCount });
+        return answer("INSTALLATION_UNREACHABLE", { verified, sampleCustomerCount, devoladaMethods: blockAfter(probe.name) });
       }
       /* Refused on the FIRST probe: the key is refused, and the likeliest
          reason by far is that it belongs to another installation — which
@@ -190,11 +225,34 @@ async function testKey(
         verified,
         sampleCustomerCount,
         missingPermission: probe.name,
+        devoladaMethods: blockAfter(probe.name),
       });
     }
   }
 
-  return answer("OK", { verified, sampleCustomerCount });
+  return answer("OK", {
+    verified,
+    sampleCustomerCount,
+    devoladaMethods: methods ? setupBlockOf(methods, storeChannelOn) : null,
+  });
+}
+
+/* payment-method-per-channel D16: the methods were seen, fresh, for the
+   key and installation the integration holds — stamp the moment, so the
+   next payment in every data center reads the list again (the stamp is
+   the cache key's version), and keep the list here under that stamp.
+   Only for the stored connection: a candidate's list may be the door the
+   business is walking away from. */
+async function keepSeenMethods(
+  db: DrizzleD1Database,
+  businessId: string,
+  address: { apiKey: string; installation: string | null },
+  methods: PaymentMethod[],
+  env: Bindings,
+  now: Date,
+) {
+  await upsertIntegration(db, businessId, { paymentMethodsSeenAt: now });
+  await rememberPaymentMethods(businessId, wisphubAt(address.apiKey, address.installation, env), methods, now, now.getTime());
 }
 
 /* The panel's view of a credential (FR-003): tail, never hash */
@@ -220,6 +278,28 @@ export async function getIntegrations(c: Ctx) {
     api: { activeCredentials: credentials.filter((row) => row.revokedAt === null).length },
   };
   return c.json({ success: true, data });
+}
+
+/* GET /integrations/wisphub/payment-methods (payment-method-per-channel
+   D8, US4): whether each of Devolada's methods exists in the business's
+   WispHub — read fresh, off the screen's main read, so the integrations
+   screen never waits on WispHub. A provider that cannot answer (a refused
+   key included) is `checked: false`; "Probar conexión" is where a refused
+   key is explained. */
+export async function getWisphubPaymentMethods(c: Ctx) {
+  const ctx = businessGuard(c);
+  if ("error" in ctx) return ctx.error;
+  const stored = await integrationOf(ctx.db, ctx.actor.id);
+  if (!stored?.apiKey) {
+    return c.json({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }, 409);
+  }
+  const { block, methods } = await readDevoladaMethods(wisphubFor(stored, c.env), ctx.actor.storeChannel.on);
+  /* D16: the read's one write — a cache version, so repeating the read
+     repeats the stamp and changes nothing else */
+  if (methods) {
+    await keepSeenMethods(ctx.db, ctx.actor.id, { apiKey: stored.apiKey, installation: stored.installation }, methods, c.env, new Date());
+  }
+  return c.json({ success: true, data: block });
 }
 
 /* GET /integrations/api (automated-collections-api US1, FR-001/FR-003):
@@ -334,16 +414,52 @@ export async function patchWisphub(c: Ctx, body: WisphubPatchRequest) {
      more now, not less: an ISP whose key is rejected by the wrong
      installation must be able to save the right installation without
      first clearing the key. */
-  const stored =
-    body.wisphubApiKey === undefined || body.installation === undefined
-      ? await integrationOf(ctx.db, ctx.actor.id)
-      : null;
+  /* Read always: the execution gate below compares with the stored switch */
+  const stored = await integrationOf(ctx.db, ctx.actor.id);
   const testKeyValue = body.wisphubApiKey ?? stored?.apiKey ?? null;
   const testInstallation = body.installation ?? stored?.installation ?? null;
-  const test =
-    (body.wisphubApiKey !== undefined || body.installation !== undefined) && testKeyValue
-      ? await testKey(testKeyValue, testInstallation, c.env)
-      : null;
+  const storeChannelOn = ctx.actor.storeChannel.on;
+  const newConnection = body.wisphubApiKey !== undefined || body.installation !== undefined;
+
+  /* payment-method-per-channel D14 (FR-013): turning automatic execution
+     on requires the connection and the methods of the business's
+     channels — the one moment a missing method can be prevented rather
+     than repaired, since a payment recorded as cash stays so (FR-006).
+     Only the move from off to on is checked: turning off, leaving it as
+     it is, or `true` on a row already on asks nothing. Devolada never
+     turns execution off on its own — not at a release, not when a
+     method disappears. Without a key there is nothing to check, and a
+     business that turned execution on before connecting would skip the
+     requirement (found by /speckit-analyze, 2026-10-02). */
+  const turningOn = body.actionsEnabled === true && !stored?.actionsEnabled;
+  if (turningOn && !testKeyValue) {
+    return c.json({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }, 409);
+  }
+
+  const run = newConnection && testKeyValue ? await testKey(testKeyValue, testInstallation, c.env, storeChannelOn) : null;
+  const test = run?.result ?? null;
+
+  /* D14: checked with the key and installation the row will have after
+     this patch — the re-test's own read when it reached the methods,
+     a fresh one otherwise */
+  let seen: PaymentMethod[] | null = run?.methods ?? null;
+  if (turningOn) {
+    let block = test?.devoladaMethods ?? null;
+    if (!block || !block.checked) {
+      const read = await readDevoladaMethods(wisphubAt(testKeyValue!, testInstallation, c.env), storeChannelOn);
+      block = read.block;
+      seen = read.methods;
+    }
+    if (!block.checked) {
+      return c.json({ success: false, error: { code: "PAYMENT_METHODS_UNCHECKED" } }, 503);
+    }
+    /* Required: the SPEI line always, the network's with the store
+       channel on. Two with one name count as present (FR-003). The
+       whole patch is refused, so a combined patch never half-applies. */
+    if (block.link.status === "missing" || block.network?.status === "missing") {
+      return c.json({ success: false, error: { code: "PAYMENT_METHODS_MISSING" } }, 409);
+    }
+  }
 
   const patch = {
     ...(body.wisphubApiKey !== undefined ? { apiKey: body.wisphubApiKey } : {}),
@@ -363,9 +479,22 @@ export async function patchWisphub(c: Ctx, body: WisphubPatchRequest) {
       : {}),
     ...(body.actionsEnabled !== undefined ? { actionsEnabled: body.actionsEnabled } : {}),
   };
-  const integration = Object.keys(patch).length
-    ? await upsertIntegration(ctx.db, ctx.actor.id, patch)
-    : await integrationOf(ctx.db, ctx.actor.id);
+  /* payment-method-per-channel D16: a new key or installation moves the
+     stamp with no provider call for it — the cache key carries the
+     address but not the key, so another account on the same installation
+     would otherwise be answered from the old account's list. A passing
+     gate moves it in the same write. */
+  const now = new Date();
+  const stamp = newConnection || turningOn ? { paymentMethodsSeenAt: now } : {};
+  const integration =
+    Object.keys(patch).length || Object.keys(stamp).length
+      ? await upsertIntegration(ctx.db, ctx.actor.id, { ...patch, ...stamp })
+      : stored;
+  /* D16: what was read for the connection now saved is kept under its
+     stamp, as the setup read keeps its own */
+  if (seen && testKeyValue && (newConnection || turningOn)) {
+    await rememberPaymentMethods(ctx.actor.id, wisphubAt(testKeyValue, testInstallation, c.env), seen, now, now.getTime());
+  }
 
   /* The panel replaces its cached GET with this answer, so it carries
      the same shape — the API card's count included */
@@ -407,6 +536,13 @@ export async function testWisphubKey(c: Ctx, body: WisphubTestRequest) {
        panel words it the way it already words that. */
     return c.json({ success: false, error: { code: "WISPHUB_NOT_CONFIGURED" } }, 409);
   }
+  const run = await testKey(key, installation, c.env, ctx.actor.storeChannel.on);
+  /* payment-method-per-channel D16: only a test of the saved connection
+     stamps; a candidate's stamps nothing and leaves the cache */
+  const ofStored = Boolean(stored?.apiKey) && stored!.apiKey === key && (stored!.installation ?? null) === installation;
+  if (run.methods && ofStored) {
+    await keepSeenMethods(ctx.db, ctx.actor.id, { apiKey: key, installation }, run.methods, c.env, new Date());
+  }
   /* 200 either way: the test succeeded in telling us the answer (D2) */
-  return c.json({ success: true, data: await testKey(key, installation, c.env) });
+  return c.json({ success: true, data: run.result });
 }

@@ -18,6 +18,7 @@ import { useSession } from "../auth/session";
 import { api } from "@/lib/api";
 import { SignOutLink } from "../auth/SignOutLink";
 import { ChooseBusinessScreen } from "../onboarding/ChooseBusinessScreen";
+import { PendingInvitations } from "../invitations/PendingInvitations";
 import { BusinessSwitcher } from "./BusinessSwitcher";
 import { CreditBanner, CreditChip, STEP_COPY } from "../credit/CreditChip";
 import { CreditStrip } from "../credit/CreditStrip";
@@ -302,6 +303,11 @@ export function Shell() {
             rows the same day — the page title is the first thing now. */}
         <CreditStrip credit={actor.credit} businessId={actor.id} canTopUp={roleCan(actor.role, "credit", "manage")} />
         <CreditBanner credit={actor.credit} canTopUp={roleCan(actor.role, "credit", "manage")} />
+        {/* bug: invitee-lands-own-business — an invitation sent to this
+            person, named in whichever business they signed in to: the email
+            is no longer the only way to it. Nothing renders when there is
+            none. */}
+        <PendingInvitations className="m-4 lg:mx-8 lg:mt-6" />
         {/* business-and-memberships D5 (2026-09-02): born without a CLABE;
             the banner is the wizard's missing step, the owner's to close.
             receipt-triage D32 (converge T061): any account opens the

@@ -7,6 +7,7 @@ import {
   getApiIntegration,
   getIntegrations,
   getWebhookIntegration,
+  getWisphubPaymentMethods,
   issueApiCredential,
   patchWisphub,
   revokeApiCredential,
@@ -36,6 +37,13 @@ integrationsRoute.post(
   requireArea("integrations", "manage"),
   zValidator("json", wisphubTestRequest),
   (c) => testWisphubKey(c, c.req.valid("json")),
+);
+
+/* payment-method-per-channel D8 (US4): whether Devolada's payment methods
+   exist in the business's WispHub — the setup step between the
+   connection and execution. Same area as the hub. */
+integrationsRoute.get("/wisphub/payment-methods", requireSession, requireArea("integrations", "manage"), (c) =>
+  getWisphubPaymentMethods(c),
 );
 
 /* automated-collections-api US1: the API card — credentials issued,

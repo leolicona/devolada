@@ -11,6 +11,8 @@ import {
   proofReadingResponse,
 } from "../../apps/api/src/routes/direct-payments/schema";
 import { paymentRequestsResponse } from "../../apps/api/src/routes/payment-requests/schema";
+import { devoladaMethods } from "../../apps/api/src/routes/integrations/schema";
+import { myInvitationsResponse } from "../../apps/api/src/routes/businesses/schema";
 import { settingsResponse } from "../../apps/api/src/routes/settings/schema";
 import { feedResponse, proofResponse, unmatchedTransfersResponse } from "../../apps/api/src/routes/payments/schema";
 import {
@@ -211,6 +213,25 @@ export const integrationsHub = {
   /* automated-collections-api US1: the API card's count */
   api: { activeCredentials: 1 },
 };
+
+/* payment-method-per-channel D8: the WispHub screen's setup block — the
+   SPEI line created, the network's still to create — so the browser
+   measures the card, both badges (success and info), the copy fields and
+   the mono names, in both themes and at every width */
+export const wisphubPaymentMethods = devoladaMethods.parse({
+  checked: true,
+  link: {
+    name: "SPEI - LINK.DEVOLADAPAGO",
+    description:
+      "Pagos SPEI validados por link de Devolada (bancos, Spin, Mercado Pago, CoDi, DiMo). Los registra Devolada; no usar en mostrador.",
+    status: "found",
+  },
+  network: {
+    name: "CASH - RED.DEVOLADAPAGO",
+    description: "Pagos en efectivo en tiendas de la red Devolada. Los registra Devolada; no usar en mostrador.",
+    status: "missing",
+  },
+});
 
 /* automated-collections-api US1: the API card's detail */
 export const apiIntegration = {
@@ -434,10 +455,14 @@ export async function stubAdminApi(page: Page): Promise<void> {
   await apiRoute(page, "**/direct-payments/customers/debt*", customerDebt);
   await apiRoute(page, "**/integrations", integrationsHub);
   await apiRoute(page, "**/integrations/api", apiIntegration);
+  await apiRoute(page, "**/integrations/wisphub/payment-methods", wisphubPaymentMethods);
   await apiRoute(page, "**/direct-payments/customers*", customersBlock);
   /* links-on-demand-search D13: nothing to be told, which is what every
      business sees once the one-time cleanup has been dismissed */
   await apiRoute(page, "**/direct-payments/prune-notice", null);
+  /* bug: invitee-lands-own-business: the shell asks for the invitations
+     sent to the person signed in — none, which is what nearly everyone sees */
+  await apiRoute(page, "**/businesses/invitations/mine", myInvitationsResponse.parse({ invitations: [] }));
   await apiRoute(page, "**/direct-payments/links", createdLink);
   await apiRoute(page, "**/v1/payment-links", apiPaymentLink);
 }

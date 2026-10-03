@@ -218,6 +218,8 @@ describe("provider-address-per-isp US2: a failed connection says which thing is 
     expect(data.ok).toBe(false);
     expect(data.triedInstallation).toEqual({ key: "wisphub_io", label: "wisphub.io" });
     expect(data.verified).toEqual([]);
+    /* payment-method-per-channel D8: stopped before the methods probe */
+    expect(data.devoladaMethods).toBeNull();
   });
 
   it("a refused key is refused by everything (KEY_REJECTED), and names the door knocked on", async () => {
@@ -233,6 +235,7 @@ describe("provider-address-per-isp US2: a failed connection says which thing is 
     expect(data.triedInstallation).toEqual({ key: "wisphub_io", label: "wisphub.io" });
     expect(data.verified).toEqual([]);
     expect(data.missingPermission).toBeNull();
+    expect(data.devoladaMethods).toBeNull();
   });
 
   it("a permission refused AFTER a read passed is a permission, not a bad key (PERMISSION_MISSING)", async () => {
@@ -249,6 +252,7 @@ describe("provider-address-per-isp US2: a failed connection says which thing is 
     expect(data.verified).toEqual(["customers"]);
     expect(data.missingPermission).toBe("invoices");
     expect(data.triedInstallation).toEqual({ key: "wisphub_net", label: "wisphub.net" });
+    expect(data.devoladaMethods).toBeNull();
   });
 
   it("OK carries the three reads as verified and the four writes as NOT (FR-011 as amended, D7)", async () => {
@@ -272,6 +276,8 @@ describe("provider-address-per-isp US2: a failed connection says which thing is 
       "payment_promise",
     ]);
     expect(data.sampleCustomerCount).toBe(1);
+    /* payment-method-per-channel D8: the block of what the probe read */
+    expect(data.devoladaMethods).toMatchObject({ checked: true, link: { status: "missing" }, network: null });
   });
 
   it("FR-013: the key is in no response body and in no log line, on every outcome", async () => {

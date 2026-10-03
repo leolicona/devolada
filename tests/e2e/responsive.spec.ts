@@ -174,6 +174,9 @@ test.describe("provider-address-per-isp US1: the installation picker in a real b
       await page.setViewportSize(size);
       await page.goto(`${ADMIN}/integrations/wisphub`);
       await expect(page.getByText("Instalación en uso:")).toBeVisible();
+      /* payment-method-per-channel T027: the methods block, with its long
+         mono names, comes on its own read — measured once it is there */
+      await expect(page.getByText("SPEI - LINK.DEVOLADAPAGO")).toBeVisible();
       await expectNoHorizontalScroll(page);
 
       /* The listbox is the part that can overflow: it is as wide as its

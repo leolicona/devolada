@@ -29,12 +29,20 @@ const screens = [
   /* Both badges must be on screen before axe measures them: they come
      from two separate debt answers (review of 2026-09-28) */
   { name: "Por cobrar búsqueda", url: `${ADMIN}/links?view=receivables&q=wif`, stub: stubPorCobrarSearch, ready: ["Sin confirmar", "Sin adeudo"] },
-  { name: "WispHub", url: `${ADMIN}/integrations/wisphub`, stub: stubAdminApi, ready: "Ejecutar acciones automáticamente" },
+  /* payment-method-per-channel T027: the methods block arrives on its own
+     read, after the switch — both of its badges must be on screen before
+     axe measures them */
+  {
+    name: "WispHub",
+    url: `${ADMIN}/integrations/wisphub`,
+    stub: stubAdminApi,
+    ready: ["Ejecutar acciones automáticamente", "Creada", "Falta crearla"],
+  },
   /* provider-address-per-isp US1 (T042): the installation picker and the
      two badges that mark a sandbox and an assumed default. A status told
      by colour alone fails the brief, and only a browser can say whether
      these met their surface in either theme. */
-  { name: "WispHub instalación", url: `${ADMIN}/integrations/wisphub`, stub: stubAdminApi, ready: "Instalación en uso:" },
+  { name: "WispHub instalación", url: `${ADMIN}/integrations/wisphub`, stub: stubAdminApi, ready: ["Instalación en uso:", "Creada"] },
   /* account-hub (US-A05): the rail, the identity card and the door */
   { name: "Cuenta", url: `${ADMIN}/settings`, stub: stubAdminApi, ready: "Cerrar sesión" },
   /* automated-collections-api US1 scenarios 3 and 4 (D6, FR-031): the

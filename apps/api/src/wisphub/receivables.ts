@@ -326,7 +326,12 @@ async function customerSearch(
 
 /* Both capabilities, for one business's integration. Each call builds a
    fresh client, so each block and each debt has its own budget. */
-export function wisphubCapabilities(integration: WispHubAddress, env: AdapterEnv): IntegrationCapabilities {
+export function wisphubCapabilities(
+  /* payment-method-per-channel D16: with the row's seen stamp, which
+     every caller's integration row already carries */
+  integration: WispHubAddress & { paymentMethodsSeenAt?: Date | null },
+  env: AdapterEnv,
+): IntegrationCapabilities {
   return {
     receivables: {
       page: (cursor, limit) => receivablesPage(integration, env, cursor, limit),

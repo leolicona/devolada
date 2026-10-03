@@ -22,7 +22,10 @@ function coreError(error: "WISPHUB_AUTH_FAILED" | "WISPHUB_UNAVAILABLE" | "NOT_A
 }
 
 export function paymentActions(
-  integration: WispHubAddress,
+  /* payment-method-per-channel D16: the integration row the caller
+     already holds carries the seen stamp, so the recording path makes no
+     extra query for it */
+  integration: WispHubAddress & { paymentMethodsSeenAt?: Date | null },
   env: AdapterEnv,
 ): NonNullable<IntegrationCapabilities["paymentActions"]> {
   return {
@@ -37,6 +40,12 @@ export function paymentActions(
         input.now,
         { invoiceId: input.invoiceId, paymentRegistered: input.paymentRegistered },
         input.reconnect,
+        /* payment-method-per-channel D2, D16 */
+        {
+          channel: input.channel,
+          reference: input.recordReference,
+          methodsSeenAt: integration.paymentMethodsSeenAt?.getTime() ?? null,
+        },
       );
       return {
         status: result.status,

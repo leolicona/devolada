@@ -65,6 +65,11 @@ const sampleStatuses: Status[] = [
   /* cobros-in-links D15: a search result's debt when it is not an amount */
   "debtNone",
   "debtUnconfirmed",
+  /* payment-method-per-channel D8: one of Devolada's payment methods in
+     the business's WispHub */
+  "methodFound",
+  "methodMissing",
+  "methodDuplicate",
 ];
 
 const ledgerEntries = [

@@ -1,5 +1,6 @@
 import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
+import { devoladaMethods, type DevoladaMethods } from "@devolada/api/integrations-schema";
 
 export const businessActor = {
   type: "business",
@@ -79,6 +80,9 @@ export const handlers = {
     http.patch("/integrations/wisphub", async ({ request }) => r(await request.json())),
   testWisphubIntegration: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/integrations/wisphub/test", async ({ request }) => r(await request.json())),
+  /* payment-method-per-channel D8: the setup block, read on its own */
+  devoladaMethods: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/integrations/wisphub/payment-methods", () => r()),
   /* automated-collections-api US1: the API card (FR-001, FR-003, FR-004) */
   apiIntegration: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/integrations/api", () => r()),
   issueCredential: (r: (body: unknown) => ReturnType<typeof ok | typeof fail>) =>
@@ -126,6 +130,9 @@ export const handlers = {
   logout: (r: () => Response) => http.post("/auth/sign-out", () => r()),
   invitationPreview: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/businesses/invitations/:id/preview", ({ params }) => r(String(params.id))),
+  /* bug: invitee-lands-own-business: the invitations sent to me */
+  myInvitations: (r: () => ReturnType<typeof ok | typeof fail>) =>
+    http.get("/businesses/invitations/mine", () => r()),
   acceptInvitationNew: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/businesses/invitations/:id/accept-new", async ({ params, request }) => r(String(params.id), await request.json())),
   resendInvitation: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
@@ -225,8 +232,38 @@ export const sessionUser = { id: "user-1", name: "Leo", email: "demo@devolada.ap
    payment-without-receipt D19: the provider quota, likewise — every
    render of /operador's Reglas tab asks for it, and `null` is what the
    operator sees before any answer carried the header. The tests that
-   care override it with `handlers.providerQuota(...)`. */
+   care override it with `handlers.providerQuota(...)`.
+
+   bug: invitee-lands-own-business: every render of the shell, the
+   business wizard and the chooser asks for the invitations sent to the
+   person signed in.
+   None is what nearly everyone sees; the tests that care override it with
+   `handlers.myInvitations(...)`. */
 export const server = setupServer(
   http.get("/direct-payments/prune-notice", () => ok(null)),
   http.get("/platform/provider-quota", () => ok(null)),
+  http.get("/businesses/invitations/mine", () => ok({ invitations: [] })),
 );
+
+/* payment-method-per-channel D8: a setup block, validated against the
+   contract. The names and descriptions are the adapter's (D1, D15). */
+export const METHOD_LINES = {
+  link: {
+    name: "SPEI - LINK.DEVOLADAPAGO",
+    description:
+      "Pagos SPEI validados por link de Devolada (bancos, Spin, Mercado Pago, CoDi, DiMo). Los registra Devolada; no usar en mostrador.",
+  },
+  network: {
+    name: "CASH - RED.DEVOLADAPAGO",
+    description: "Pagos en efectivo en tiendas de la red Devolada. Los registra Devolada; no usar en mostrador.",
+  },
+} as const;
+
+type LineStatus = "found" | "missing" | "duplicate";
+export function methodsBlock(link: LineStatus = "found", network: LineStatus | null = null): DevoladaMethods {
+  return devoladaMethods.parse({
+    checked: true,
+    link: { ...METHOD_LINES.link, status: link },
+    network: network === null ? null : { ...METHOD_LINES.network, status: network },
+  });
+}

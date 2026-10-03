@@ -297,10 +297,21 @@ export function mockPendingInvoices(invoices: { usuario: string; total: number; 
     .times(times);
 }
 
+/* What reached `registrar-pago` (payment-method-per-channel D13: a
+   recording is asserted at the edge, never on the object the core built) */
+export type RegisteredBody = { formaPago?: number; referencia?: string; accion?: number };
+
 /* A panel confirmation's WispHub half (direct-payment D6, D14): the fresh
    debt re-check, then auto-activate → payment method → register → verify.
-   `again`: the payment method is cached per tenant after the first. */
-export function mockPanelSettle(customer: FakeCustomer, total = 3.5, opts: { again?: boolean; invoiceId?: number } = {}) {
+   `again`: the payment methods are cached per tenant after the first.
+   `methods` (payment-method-per-channel T013): the tenant's list, today's
+   one cash method unless a test names another. */
+export function mockPanelSettle(
+  customer: FakeCustomer,
+  total = 3.5,
+  opts: { again?: boolean; invoiceId?: number; methods?: { id: number; nombre: string }[] } = {},
+): RegisteredBody {
+  const captured: RegisteredBody = {};
   const invoiceId = opts.invoiceId ?? 42;
   mockCustomer({ ...customer, estado: "Suspendido" });
   mockPendingInvoices([{ usuario: customer.usuario, total, id: invoiceId }]);
@@ -318,13 +329,24 @@ export function mockPanelSettle(customer: FakeCustomer, total = 3.5, opts: { aga
     fetchMock
       .get(WISPHUB)
       .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })
-      .reply(...json({ results: [{ id: 7, nombre: "efectivo" }] }));
+      .reply(...json({ next: null, results: opts.methods ?? [{ id: 7, nombre: "efectivo" }] }));
   }
   fetchMock
     .get(WISPHUB)
-    .intercept({ method: "POST", path: `/api/facturas/${invoiceId}/registrar-pago/` })
+    .intercept({
+      method: "POST",
+      path: `/api/facturas/${invoiceId}/registrar-pago/`,
+      body: (raw) => {
+        const b = JSON.parse(String(raw));
+        captured.formaPago = b.forma_pago;
+        captured.referencia = b.referencia;
+        captured.accion = b.accion;
+        return true;
+      },
+    })
     .reply(...json({ messages: ["Se agrego correctamente el pago"], task_id: "t-1" }));
   mockCustomer({ ...customer, estado: "Activo" });
+  return captured;
 }
 
 /* ---- confirmation-hierarchy (tasks T004) ---- */

@@ -1,5 +1,7 @@
 import { WispHubError, type WispHub } from "./client";
-import { cashPaymentMethodId } from "./cache";
+import { forgetPaymentMethods, paymentMethods } from "./cache";
+import { cashMethodOf, devoladaMethodFor, referenceFor, type MethodChannel } from "./payment-methods";
+import type { ActionAttemptInput } from "../integrations/capabilities";
 import { businessWallClock } from "../time/business-day";
 
 /* One reconnection attempt (charge-record D3, reconnection-queue spec).
@@ -24,6 +26,17 @@ export type AttemptResult = AttemptState & {
   status: "reconnected" | "queued" | "withheld";
   /* WISPHUB_AUTH_FAILED does not count toward the attempt budget (D5) */
   error: "WISPHUB_AUTH_FAILED" | "WISPHUB_UNAVAILABLE" | "NOT_ACTIVE_YET" | null;
+};
+
+/* payment-method-per-channel D2, D16: what the recording needs to say
+   where the money came from — the channel picks the method, the
+   reference ties the record back to Devolada, and `methodsSeenAt` is the
+   version of the method-list cache key (the integration's
+   `payment_methods_seen_at` in ms, or null). */
+export type RecordContext = {
+  channel: MethodChannel;
+  reference: ActionAttemptInput["recordReference"];
+  methodsSeenAt: number | null;
 };
 
 /* bug: transferred-invoice-paid — the invoice a payment should land on,
@@ -66,7 +79,8 @@ export async function attemptReconnection(
   /* partial-payment D5: `false` records the money and leaves the cut in
      place. The money still travels — the ISP's books are right either
      way — only the router is left alone. */
-  reconnect = true,
+  reconnect: boolean,
+  record: RecordContext,
 ): Promise<AttemptResult> {
   let { invoiceId, paymentRegistered } = state;
   try {
@@ -103,12 +117,21 @@ export async function attemptReconnection(
          which is the honest answer.
          provider-latency D2: it has nothing to do with the payment
          method, so the two wait together instead of in a row. */
-      const [, paymentMethodId] = await Promise.all([
+      const [, methods] = await Promise.all([
         wisphub.ensureAutoActivate(customer.wisphubId).catch((e: unknown) => {
           console.warn(`auto_activar_servicio PATCH failed for ${customer.usuario}:`, e);
         }),
-        cashPaymentMethodId(business.id, wisphub, now),
+        paymentMethods(business.id, wisphub, now, record.methodsSeenAt),
       ]);
+      /* payment-method-per-channel D4: the channel's method when the
+         business created it (FR-001, FR-002), the cash method otherwise —
+         never one of Devolada's names as the cash method (FR-012). The
+         action never waits for the business's setup (FR-004). */
+      const devolada = devoladaMethodFor(methods, record.channel);
+      /* Chosen here, before any invoice is looked up or created: a tenant
+         with no payment method at all fails as it always did, without an
+         invoice left behind */
+      const method = devolada ?? cashMethodOf(methods);
 
       /* D1 (pays TD-009): reuse before creating. The id we already
          stored wins — while the debt is still on it (above); otherwise ask
@@ -130,15 +153,41 @@ export async function attemptReconnection(
         invoiceId = await wisphub.createInvoice(customer.usuario, 0, date, "Adeudo anterior");
       }
 
+      /* The payment settles the whole account, whichever invoice carries
+         it (D15) — so what travels is the debt, not one invoice's total. */
+      /* payment-method-per-channel D7: on every recording, the fallback's
+         included (FR-007) */
+      const reference = referenceFor(record.reference);
+      const register = async (methodId: number) => {
+        try {
+          await wisphub.registerPayment(invoiceId!, methodId, debtCents, dateTime, reconnect, reference);
+        } catch (e) {
+          /* 422 is WispHub refusing to pay a paid invoice — which means
+             the money already landed (an overlapping attempt, or a payment
+             made in the panel). The refusal IS the goal state (D8). */
+          if (!(e instanceof WispHubError && e.status === 422)) throw e;
+        }
+      };
       try {
-        /* The payment settles the whole account, whichever invoice carries
-           it (D15) — so what travels is the debt, not one invoice's total. */
-        await wisphub.registerPayment(invoiceId, paymentMethodId, debtCents, dateTime, reconnect);
+        await register(method.id);
       } catch (e) {
-        /* 422 is WispHub refusing to pay a paid invoice — which means
-           the money already landed (an overlapping attempt, or a payment
-           made in the panel). The refusal IS the goal state (D8). */
-        if (!(e instanceof WispHubError && e.status === 422)) throw e;
+        /* payment-method-per-channel D6: the provider refused Devolada's
+           method — deleted or renamed since the list was read. Measured
+           2026-10-02 (R9): 400 `{"forma_pago": ["Clave primaria … inválida
+           - objeto no existe."]}`, and the invoice stays pending, so
+           nothing was recorded and a second call cannot pay twice. The
+           list this data center holds is dropped and the same payment
+           goes once more, at once, with the cash method. Any other 400 is
+           what it was (WISPHUB_UNAVAILABLE): an amount or a date refused
+           under another method would hide the real error.
+           The cash method is chosen without the method just refused: a
+           business with only Devolada's methods could otherwise get the
+           refused one back, and the action would wait in the queue for
+           nothing (FR-004; /speckit-analyze C1, 2026-10-02). */
+        const missingMethod = e instanceof WispHubError && e.status === 400 && (e.fields ?? []).includes("forma_pago");
+        if (!devolada || !missingMethod) throw e;
+        await forgetPaymentMethods(business.id, wisphub, record.methodsSeenAt);
+        await register(cashMethodOf(methods.filter((m) => m.id !== devolada.id)).id);
       }
       paymentRegistered = true;
     }

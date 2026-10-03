@@ -40,6 +40,7 @@ import { readPendingInvoices } from "../wisphub/snapshot";
 import { settle } from "./partial";
 import { firstAttemptSchedule } from "../reconnection/queue";
 import { makeFolio } from "../folio";
+import { recordReferenceOf, storeNamesFor } from "./record-reference";
 import { ladderSlot, nextValidationSlot, suggestedSlot } from "./schedule";
 import { businessWallClock } from "../time/business-day";
 import { classifyPayment, type ReconciliationClass } from "./classes";
@@ -1982,8 +1983,13 @@ export async function settleConfirmed(env: Bindings, db: DB, input: ConfirmedPay
   /* business-and-memberships D6: the payment row IS the confirmed record
      — folio, customer and the registered amount land on it, and the
      reconnection queue rides it. No twin row. A row that already has its
-     folio (a store's record, D17) keeps it. */
-  await update({
+     folio (a store's record, D17) keeps it.
+     payment-method-per-channel D2: the row this write returns, not
+     `payment`, is what the adapter's reference is built from — the folio
+     is born in this very write, and the clave may have been adopted onto
+     the row after `payment` was read (`adoptKey`, the matcher's write,
+     the accepted key). */
+  const recorded = await update({
     folio: payment.folio ?? makeFolio(),
     wisphubCustomerId: customer.providerCustomerId,
     customerUsuario: customer.usuario,
@@ -2069,6 +2075,9 @@ export async function settleConfirmed(env: Bindings, db: DB, input: ConfirmedPay
     class: klass,
     action,
   });
+  /* payment-method-per-channel D10: the store's name as it is now, read
+     once for every attempt this verdict makes */
+  const recordReference = recordReferenceOf(recorded, await storeNamesFor(db, [recorded]));
   const attemptOf = (at: Date) =>
     actions.attempt({
       business,
@@ -2080,6 +2089,8 @@ export async function settleConfirmed(env: Bindings, db: DB, input: ConfirmedPay
       /* D3: register_only never asks the router, whatever the threshold */
       reconnect: action === "register_and_reconnect" && settlement.reconnect,
       now: at,
+      channel: recorded.channel,
+      recordReference,
     });
   /* The queue's first attempt, on the same row (reconnection-queue D2).
      The adapter's answer in the row's generic words: register_only's

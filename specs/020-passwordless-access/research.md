@@ -54,6 +54,12 @@ user `user.name || user.id` (`@better-auth/passkey` `index.mjs`, around line
 165), so a key made before the name would show the device's account picker a
 random id.
 
+**Measured 2026-10-02 (M1)**: `send-verification-otp {type: "sign-in"}` for
+an address with no user answers 200 and writes no `user` row. The código
+the sender logged, sent to `sign-in/email-otp` with `name: "Ana López"`,
+answers 200 with a session cookie, and the user is born
+`email_verified = 1`, named "Ana López", with no `account` row. D1 holds.
+
 **Alternatives considered**:
 - Keep `POST /auth/business/signup` and give it a código instead of a
   password. Rejected: the plugin already creates the account at the right
@@ -105,6 +111,26 @@ The `emailOTP` options gain three explicit values:
 
 This is a guarantee that lived in a default and was nobody's (the lesson of
 business-and-memberships D8 and better-auth D11).
+
+**Measured 2026-10-02 (M4)**, with `storeOTP: "hashed"`, `expiresIn: 600`,
+`allowedAttempts: 3` and no `hooks.before` yet:
+- the stored value is `<43 base64url characters>:0`, and the six digits are
+  not in it;
+- the right código opens a session once; the second use is `INVALID_OTP`;
+- three wrong tries, then the right código: 403 `TOO_MANY_ATTEMPTS`;
+- **códigos A then B, asked for in the same second: two rows, and A opened a
+  session while B was live; B was then refused.** The rows' `created_at` is
+  stored to the second, so "the newest row" is a tie, and the plugin checked
+  the older one. A second run (B typed first) refused B and let A in.
+- **What the reading above got wrong**: once a row is consumed, the
+  plugin's `consumeVerificationValue` deletes *every* row of the identifier
+  (`db/internal-adapter.mjs`, the `deleteMany` inside the consume), so an
+  old código never comes back after a use. The failure is the tie, not a
+  revival.
+
+The `hooks.before` decision stands, for a sharper reason: with one live row
+per address there is no tie to lose, and FR-003's "a new request ends the
+previous código" becomes true by construction instead of by the clock.
 
 **Alternatives considered**:
 - `storeOTP: "encrypted"`. Rejected: a código is only ever compared, never
@@ -187,6 +213,11 @@ doors are `/sign-in/username` and `/email-otp/reset-password`, and both need
   still merge the two if the notice is given first.
 - Removing the `username` plugin. Rejected: `auth-schema.ts` comes from the
   generator (better-auth D10), and the column is still the store's phone.
+
+**Measured 2026-10-02 (M3)**: with `/sign-in/email` in `disabledPaths`,
+`POST /auth/sign-in/email` over HTTP answers 404, and
+`auth.api.signInEmail` from the server still signs the same account in.
+D4 holds: the server's own calls (D9, D10) keep their doors.
 
 ---
 
@@ -370,6 +401,11 @@ ends it on request.
 - Show "Activar" only while the session is fresh. Rejected: it hides a promise
   the spec makes (FR-006: "always in Cuenta → Seguridad").
 
+**Measured 2026-10-02 (M2)**: a session whose `created_at` is 25 hours old
+gets 403 `SESSION_NOT_FRESH` from `GET /auth/passkey/generate-register-options`;
+the same session at 23 hours gets 200 with the options. The bug named above
+is real, and the step-up stays in the tasks (T048, T049, T061, T073).
+
 ---
 
 ## D9 — The member invitation page
@@ -385,27 +421,59 @@ unchanged: status, business, role, email and `hasAccount`.
     text, never typed), then `sign-in/email-otp`, then the same acceptance.
   - Both end in `acceptInvitation` and `setActiveBusiness`, as today, then
     `/welcome?next=/`, so the activation is offered after a código.
-- **Without an account.** `POST /businesses/invitations/:id/accept-new`
-  takes `{name}` and no password. The invitation proves the inbox (D14), so
-  the server:
-  1. deletes any live sign-in código for that address (the plugin consumes
-     one row per identifier, and a stray row would make the next step fail —
-     the same care as better-auth D16's code);
-  2. mints a código with `auth.api.createVerificationOTP` (server-only,
-     routes.mjs line 121);
-  3. consumes it at once with `auth.api.signInEmailOTP({email, otp, name},
-     returnHeaders)`. The user is born verified and holds a session;
-  4. accepts and activates with those cookies, as today;
-  5. forwards the cookies.
+- **Without an account** (amended 2026-10-03, spec Clarifications Q5).
+  The page asks for the name, then sends a código to the invited address
+  (`send-verification-otp`, shown as text, never typed — the same call as
+  the account branch) and asks for it.
+  `POST /businesses/invitations/:id/accept-new` takes `{name, otp}`, and the
+  server:
+  1. checks the invitation (pending, unexpired), then refuses an address
+     that has an account (`EMAIL_TAKEN`: the page's `hasAccount` branch is
+     the right door — the preview already says so to the link's holder);
+  2. signs in with `auth.api.signInEmailOTP({email, otp, name},
+     returnHeaders)`. The user is born verified, named, and holds a
+     session; the plugin's refusals (`INVALID_OTP`, `OTP_EXPIRED`,
+     `TOO_MANY_ATTEMPTS`) are carried through the envelope, as the store
+     acceptance does (D10);
+  3. accepts and activates with those cookies, as before. If the
+     invitation died in between, the account stays — its owner proved the
+     inbox, so it is theirs, as a registration's would be — the cookies are
+     forwarded, and the answer is `INVITATION_NOT_FOUND`;
+  4. forwards the cookies (right after step 2, so a 404 from step 3
+     carries them too).
   The page then goes to `/welcome?next=/`, where the name is already set.
+  Only the plugin's own `INVITATION_NOT_FOUND` in step 3 reads as "the
+  invitation died"; any other failure there is a 500, the proved account
+  kept. The page marks itself "accepting" before the request, so a refetch
+  of the user on a window refocus cannot fire a second acceptance, and
+  after an `INVITATION_NOT_FOUND` it reads the user again before it offers
+  the way on ("Ir al panel" with a session, "Ir a iniciar sesión" without).
+
+  *Why the amendment*: the first version minted a código on the server
+  (`createVerificationOTP`) and consumed it at once, because "the invitation
+  proves the inbox (D14)". It does not: the invitation's id is the route's
+  key, and the panel hands it to the inviter (`inviteMember`'s answer) and
+  to every owner and admin (`listMembers`' pending list), as does Better
+  Auth's `list-invitations`. Anyone who could send an invitation could open
+  the account of any address without one, add a key, and keep it after the
+  real person registered — FR-005 opens the existing account without a
+  word, and no password reset is left to end the sessions (adversarial
+  review, 2026-10-02, reproduced with this feature's own tests). A código
+  makes the inbox the proof. With it, no separate refusal of an operator's
+  address is needed either: whoever types the código holds that inbox, and
+  an operator may be a business's member.
 - **"Olvidé mi contraseña" leaves.** The bug fix `invitee-lands-own-business`
   keeps its point: the código is asked here, so the invitee never leaves.
 
 **Alternatives considered**:
 - Create the user and the session through `internalAdapter` and set the
   cookie by hand. Rejected: signing Better Auth's cookie ourselves couples us
-  to its cookie format. Minting a código and consuming it goes through the
-  plugin's own door.
+  to its cookie format.
+- (2026-10-03) Keep the page to one step with a secret carried only by the
+  invitation email's link, stored hashed and never shown to the sender.
+  Rejected by the creator (Q5): a new stored secret per invitation, and
+  every invitation already sent would stop working for a new account; the
+  código is the door every other screen already has.
 
 ---
 
@@ -462,11 +530,41 @@ unchanged: status, business, role, email and `hasAccount`.
 - **Keys stay named "Tienda"** (`addPasskey({name: "Tienda"})`, today's
   call). That is also the account name the store phone's picker shows.
 
+**The phone, kept unprovable (adversarial reviews, 2026-10-02 and -03).**
+FR-033 asks that no answer tells a store's phone from a stranger's. Built:
+`/store/sign-in/code` answers before it sends (`waitUntil`); `/store/sign-in`
+runs the same statements for every phone (a stranger's against an address
+nobody could predict), folds every refusal into `INVALID_OTP`, and answers
+no sooner than a floor scaled with the store lookup's own round trip; and
+every door that checks a código — Better Auth's public
+`/auth/sign-in/email-otp`, the store acceptance, `accept-new` — folds its
+refusals the same way (`auth/otp-refusal.ts`), because the phone door's
+código lives under the store's email.
+**Residual, for the creator to weigh**: that public door has no floor. A
+person who already guesses a shop's email can ask a código by its phone and
+time one wrong try at the public door with that email — a live código costs
+a few more database round trips than none. Closing it means a floor on every
+wrong código in the panel too (about a second); each probe also spends the
+shopkeeper's live código and is rate-limited. Recorded, not built.
+
 **Alternatives considered**:
 - The email at the sign-in, like the panel. Rejected in the spec's
   Assumptions: the network knows the shopkeeper by the phone.
 - One `/store/sign-in` call that sends and checks. Rejected: two steps keep
   each answer the same for every phone.
+
+**Measured 2026-10-02 (M6)**: `auth.api.checkVerificationOTP {type:
+"sign-in"}`:
+- right código, address with a user: `{success: true}`, and the row is left
+  as it was (`…:0`): the same código then opens a session with
+  `sign-in/email-otp`. It validates without consuming;
+- wrong código, address without a user: `INVALID_OTP`, and the row's tries
+  go to 1;
+- right código, address without a user: `USER_NOT_FOUND`, and no user is
+  created.
+
+D10's taken check holds as written; quickstart §0's alternative is not
+needed.
 
 ---
 
@@ -484,6 +582,11 @@ The session cookie cache is off (better-auth D5), so the API's middleware
 reads the session row on every request. The other devices find themselves
 signed out at their next request (FR-022, SC-009). One button, in both cards,
 with a one-line confirmation of what it did.
+
+**Measured 2026-10-02 (M5)**: three sessions of one user;
+`POST /auth/revoke-other-sessions` from the first answers 200
+`{"status": true}`. `get-session` then answers the caller's session, and
+`null` for the other two; one `session` row is left.
 
 ---
 

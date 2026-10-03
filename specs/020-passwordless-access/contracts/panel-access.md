@@ -42,10 +42,17 @@ account does not exist yet (D1).
 
 - **200** `{ "token": "…", "user": { "id", "email", "name", "emailVerified": true, … } }`
   and the session cookie. When no account existed, one is born verified.
-- **400** `INVALID_OTP` (wrong, or no live código), `OTP_EXPIRED` (older than
-  ten minutes); **403** `TOO_MANY_ATTEMPTS` (the third wrong try killed it).
-  The screens show one message for the three: "El código no es válido o ya
+- **400** `INVALID_OTP` for every refusal of the código: a wrong one, none
+  live, one older than ten minutes, one whose three tries are spent. The
+  plugin's own `OTP_EXPIRED` and `TOO_MANY_ATTEMPTS` are folded into it at
+  our `/auth/*` mount (adversarial review, 2026-10-03): they exist only for
+  an address that holds a código, and the store's phone door writes one
+  under the store's email, so passing them through let four tries here
+  confirm which phone belongs to which store (FR-033, SC-006). The screens
+  already showed one message for the three: "El código no es válido o ya
   venció. Reenvíalo e intenta otra vez." (better-auth's UI contract).
+  Our routes that check a código on the server (`accept-new`, the store
+  routes) fold the same three the same way.
 - **429**: 5 per 60 s per address (D3).
 
 ### `POST /auth/update-user`
@@ -102,29 +109,40 @@ route, its zod input and its rate rule (better-auth D15) leave in PR 1.
 
 ### Changed: `POST /businesses/invitations/:invitationId/accept-new`
 
-Session-less; the random id is the key (better-auth D14). Rate-limited 5
-per 60 s per address (unchanged).
+Session-less. The random id finds the invitation, but it is not a proof:
+the inviter and every owner and admin hold it too. The código sent to the
+invited address is the proof (D9 as amended 2026-10-03; spec
+Clarifications Q5). Rate-limited 5 per 60 s per client IP address
+(unchanged; `rateLimitRoute` keys on the caller, not the email).
 
 ```json
-{ "name": "Ana López" }
+{ "name": "Ana López", "otp": "482913" }
 ```
 
 `AcceptInvitationNewRequest` (`@devolada/api/businesses-schema`) loses
-`password`. `name` is trimmed, 2–80 characters.
+`password` and gains `otp`, six digits. `name` is trimmed, 2–80 characters.
+The código was asked for by the page through `send-verification-otp`, with
+the invited address.
 
 The server (D9):
 1. checks the invitation (pending, unexpired);
 2. refuses an address that already has an account;
-3. deletes any live sign-in código for the address;
-4. mints one (`createVerificationOTP`) and consumes it (`signInEmailOTP`
-   with the name);
-5. accepts the invitation and activates its business;
-6. forwards the session cookies.
+3. signs in with `signInEmailOTP` (the invited address, the typed código,
+   the name): the user is born verified, named, with a session;
+4. accepts the invitation and activates its business;
+5. forwards the session cookies.
 
 - **201** the business actor (as today), with the session cookie.
-- **404** `INVITATION_NOT_FOUND` (gone, accepted or expired);
-  **409** `EMAIL_TAKEN` (the address has an account: the page's
-  `hasAccount` branch is the right door); **400** `VALIDATION`; **429**.
+- **400** `INVALID_OTP`: a wrong, expired or spent código, alike, as on
+  every door (FR-033; adversarial review, 2026-10-03). Nothing is born.
+- **404** `INVITATION_NOT_FOUND` (gone, accepted or expired). When the
+  invitation dies between steps 1 and 4 (the plugin's own
+  `INVITATION_NOT_FOUND`), the account the código proved stays, with its
+  session cookie: it is its owner's, as a registration's would be. Any
+  other failure of the acceptance is a 500, the proved account kept.
+- **409** `EMAIL_TAKEN` (the address has an account: the page's
+  `hasAccount` branch is the right door); **400** `VALIDATION` (in the
+  envelope); **429**.
 
 ### Unchanged
 
@@ -214,8 +232,17 @@ No message ever says an address is taken (FR-005).
 
 ### `/welcome?next=`
 
-A session is required; without one, it goes to `/login?next=…`. The screen
-decides before it paints:
+A session is required; without one, it goes to `/login?next=…`. A session
+read that fails (a lost signal, a server error) is not "no session": it
+says "No pudimos cargar tu sesión." with "Reintentar", and never sends a
+person who just typed their código back to `/login`. The screen reads the
+actor as the Shell does: a store's account (`WRONG_ACTOR`) or a suspended
+one (`ACCOUNT_SUSPENDED`) goes straight on to `next`, where the Shell's own
+screens answer, and is never offered a key — except a suspended business,
+whose session the API ends in that same answer, so "Cuenta suspendida"
+shows on `/welcome` itself; `NO_BUSINESS`, `NO_ACTIVE_BUSINESS` and
+`MEMBERSHIP_REVOKED` are offered as usual (adversarial review,
+2026-10-02). It then decides before it paints:
 
 1. **The user has no name.** "¿Cómo te llamas?", with "Tu nombre" and
    "Continuar" (`update-user`). Then it goes on to 2.
@@ -239,6 +266,12 @@ decides before it paints:
 3. Otherwise, or after 2, it goes to `next` (validated, better-auth D12) or
    `/`.
 
+A session a day old or older is not offered the key — its ceremony would
+answer `SESSION_NOT_FRESH`, and only Seguridad has the step-up (D8) — and
+if the server answers that anyway, the screen goes on. After the name is
+saved, the person's cached data carries it before the screen moves on, so
+the Shell never sends a just-named person back here.
+
 ### `/invitaciones/:invitationId`
 
 The states the page has today stay. The changes:
@@ -246,10 +279,12 @@ The states the page has today stay. The changes:
 | State | Shows |
 | --- | --- |
 | No session, the address has an account | "Te invitaron a {negocio}", "Como {rol}.", "Correo: {email}" as text; "Entrar con huella o rostro" (where supported), then "o con un código"; "Enviarme un código" → `CodeInput` + "Entrar"; no password; no "Olvidé mi contraseña" |
-| No session, no account | "Tu nombre" + "Crear cuenta y entrar" → `accept-new` → `/welcome?next=/` |
+| No session, no account | Step 1: "Correo: {email}" as text, "Tu nombre" + "Continuar", which sends a código to the invited address. Step 2: "Te enviamos un código a {email}. Vence en 10 minutos.", `CodeInput` + "Crear cuenta" → `accept-new {name, otp}` → `/welcome?next=/`; "Reenviar código" (confirms with "Código reenviado"); "Corregir mi nombre" back to step 1 with the name kept. Step 2 keeps the invitation's title above. A failed send keeps step 1 and its name: the 429's "Demasiados intentos. Espera un momento e intenta de nuevo.", else "No pudimos enviar el código. Intenta de nuevo.". A wrong, expired or exhausted código reads as on every door; `EMAIL_TAKEN` reloads the preview, which then shows the account branch; `INVITATION_NOT_FOUND` says "La invitación ya no es válida. Pide una nueva a quien te invitó." with "Ir al panel" (through `/welcome?next=/`) when the código opened a session, or "Ir a iniciar sesión" when nothing was born (D9 as amended 2026-10-03) |
 | Signed in with the invited address | accepts on sight (unchanged) |
 | Signed in with another address, including after a key of another account | "Entraste como {email}, y esta invitación fue enviada a otro correo." + "Entrar con el correo invitado" (unchanged, FR-018) |
 | Expired, gone | unchanged |
+| The invitation could not be read (first load: no answer, a 5xx) | "No pudimos cargar la invitación." with «Reintentar» (48 px) and «Ir a iniciar sesión». "Ya no existe" is said only when the preview answers `gone`. A re-read that fails keeps the last good invitation on screen; the preview is read at load and on `EMAIL_TAKEN`'s re-read only, never on a window refocus or a returning signal (adversarial review, 2026-10-03) |
+| An acceptance that fails for another reason (any branch) | "No pudimos aceptar la invitación. Intenta de nuevo." with "Intentar de nuevo" (which, with a session, accepts on sight) and "Ir al panel" (or "Ir a iniciar sesión" without a session); a 429 says "Demasiados intentos. Espera un momento e intenta de nuevo.". In the new-person branch this covers every failure past the código's check (a 500, a lost answer); only a refused código, a 429 or `VALIDATION` stays on the código step. Before saying "ya no es válida" to a person with a session, the page checks whether the invitation's business is already theirs (a lost answer whose acceptance went through), and if so goes on through `/welcome?next=/`; "ya no es válida" is said only for `INVITATION_NOT_FOUND`. The page is never left on a disabled "Entrando…" (adversarial review, 2026-10-02) |
 
 ### `/settings/security` (Cuenta → Seguridad)
 
@@ -266,8 +301,22 @@ The states the page has today stay. The changes:
   Este dispositivo ya puede entrar con huella o rostro.", and the new key
   joins the list. On a cancel or failure: "No se pudo activar. Intenta de
   nuevo.", with no password to fall back on (FR-030).
+  The step-up (adversarial review, 2026-10-02):
+  - opens only once its código was sent; while it goes, the button says it
+    is sending it, inside a pending region. A failed send keeps «Activar»
+    and says "No pudimos enviar el código. Intenta de nuevo." (or the 429's
+    "Demasiados intentos. Espera un momento e intenta de nuevo.");
+  - a try that fails for another reason than the código says "No pudimos
+    revisar el código. Intenta de nuevo." and keeps the digits; only a
+    refused código reads "El código no es válido o ya venció…";
+  - the código opens a new session, so the business the person was working
+    in is set again on it before the ceremony: a member of several
+    businesses stays where they were.
+  - "Quitar" on the key this device just activated brings «Activar» back.
 - **"Cerrar sesión en los demás dispositivos"**, a secondary button. After
-  it: "Listo. Solo este dispositivo sigue con tu sesión abierta." (D11).
+  it: "Listo. Solo este dispositivo sigue con tu sesión abierta." (D11). A
+  close that fails says "No pudimos cerrar las demás sesiones. Intenta de
+  nuevo." and keeps the button (adversarial review, 2026-10-02).
 
 Cuenta's identity card now says: "Para cambiar tu nombre, escríbenos. Pronto
 podrás hacerlo desde aquí." (FR-030). Its rail row "Entrar con huella o

@@ -670,20 +670,36 @@ export class WispHub {
     });
   }
 
-  /* Whether one invoice can still carry a payment — asked fresh, right
-     before money is registered against an id that came from the sweep's
-     snapshot (bug: pending-invoice-cap). A snapshot is minutes old, and
-     an invoice paid in the panel meanwhile would answer `registrar-pago`
-     with the 422 that reconnection D8 reads as "already landed" — and
-     the SPEI payment would go unregistered. The detail route's `estado`
-     shape is not documented: only a clear "paid" or "cancelled" — or a
-     404 — closes the door; anything unreadable keeps today's behaviour. */
-  async invoiceState(invoiceId: number): Promise<"pending" | "closed" | "unknown"> {
-    let data: { estado?: unknown };
+  /* What WispHub says about one invoice, asked fresh right before money
+     is registered against an id chosen earlier — by the sweep's snapshot,
+     at a verdict, at a store's counter, or stored on a queued row
+     (bug: pending-invoice-cap, bug: transferred-invoice-paid). Measured
+     2026-10-01 on the demo tenant: the detail route answers `estado` as
+     text — "Pendiente de Pago", "Pagada", "Se Transfirio" — never a
+     number. The numbers are the list filter's words for the same three
+     (1, 2, 5) and are read too, should a route ever answer in them.
+
+     - `pending`: it can carry the payment.
+     - `paid` is matched loosely on purpose. It may be Devolada's own
+       earlier attempt whose answer was lost, so the caller still sends
+       the registration and lets WispHub's 422 say "already landed"
+       (reconnection D8). Misread as `gone`, it would be re-routed — and
+       paid twice.
+     - `gone`: the debt is no longer on this invoice. WispHub moves a
+       pending invoice into the next one it issues the customer ("Se
+       Transfirio"), and still ACCEPTS a payment on the moved one — the
+       moved amount is then billed twice (measured 2026-10-01). Cancelled,
+       deleted (404) and any state Devolada never sets read the same:
+       Devolada never moves, cancels or deletes an invoice, so `gone` is
+       never its own doing.
+     - `unknown`: WispHub cannot say — a route it does not serve (405), a
+       body without `estado` — and the caller keeps the old behaviour. */
+  async invoiceState(invoiceId: number): Promise<"pending" | "paid" | "gone" | "unknown"> {
+    let data: { estado?: unknown } | null;
     try {
       data = await this.get(`/facturas/${invoiceId}/`);
     } catch (e) {
-      if (e instanceof WispHubError && e.status === 404) return "closed";
+      if (e instanceof WispHubError && e.status === 404) return "gone";
       /* A route WispHub does not serve (405) cannot answer; an outage or
          a rejected key must surface as itself */
       if (e instanceof WispHubError && e.status !== undefined && e.status < 500 && e.code !== "WISPHUB_AUTH_FAILED") {
@@ -691,14 +707,15 @@ export class WispHub {
       }
       throw e;
     }
-    const estado = data.estado;
+    const estado = data?.estado;
     if (estado === 1 || estado === "1" || (typeof estado === "string" && /pendiente/i.test(estado))) {
       return "pending";
     }
-    if (estado === 2 || estado === 3 || (typeof estado === "string" && /pagad|cancel/i.test(estado))) {
-      return "closed";
+    if (estado === 2 || estado === "2" || (typeof estado === "string" && /pagad/i.test(estado))) {
+      return "paid";
     }
-    return "unknown";
+    if (estado === undefined || estado === null || estado === "") return "unknown";
+    return "gone";
   }
 
   /* TD-009: the pending invoice a customer already has, if any.

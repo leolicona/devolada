@@ -77,8 +77,12 @@ businessesRoute.delete(
 businessesRoute.get("/invitations/mine", (c) => myInvitations(c));
 
 /* D14 (better-auth.spec.md): the two session-less doors of the
-   invitation page. The id is the key — random, sent by email only —
-   and D15's tope stands in front of both. */
+   invitation page, and D15's tope stands in front of both. The id finds
+   the invitation, but it proves nothing — the inviter and every owner and
+   admin hold it too; accept-new's proof is the código sent to the invited
+   address (passwordless-access D9 as amended, spec Clarifications Q5).
+   Its tope also counts the tries at that código: the plugin's server door
+   skips Better Auth's limiter (passwordless-access D3). */
 businessesRoute.get(
   "/invitations/:invitationId/preview",
   rateLimitRoute("invitation-preview", { window: 60, max: 30 }),
@@ -87,6 +91,12 @@ businessesRoute.get(
 businessesRoute.post(
   "/invitations/:invitationId/accept-new",
   rateLimitRoute("invitation-accept-new", { window: 60, max: 5 }),
-  zValidator("json", acceptInvitationNewRequest),
+  /* contracts/panel-access.md (passwordless-access D9): a rejected body
+     is the one envelope's `VALIDATION`, never the validator's raw ZodError
+     (adversarial review, 2026-10-02). Inline: a shared hook typed without
+     the `:invitationId` param would erase it. */
+  zValidator("json", acceptInvitationNewRequest, (result, c) => {
+    if (!result.success) return c.json({ success: false, error: { code: "VALIDATION" } }, 400);
+  }),
   (c) => acceptInvitationAsNewUser(c, c.req.param("invitationId"), c.req.valid("json")),
 );

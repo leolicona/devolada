@@ -1861,10 +1861,13 @@ async function settlePanelPayment(
      Paid in the panel meanwhile, it would answer `registrar-pago` with
      the 422 that reconnection D8 reads as "already landed", and this
      payment would never reach WispHub's books. So it is re-read fresh,
-     oldest first, and a closed one yields to the next; none left means
+     oldest first, and a paid one yields to the next; none left means
      debt-truth D15's empty vehicle, exactly as a customer with no
      pending invoice gets. A live list needs none of this: it is seconds
-     old, and D8's reading of the 422 was measured against it. */
+     old, and D8's reading of the 422 was measured against it.
+     bug: transferred-invoice-paid — a moved one does NOT yield here: the
+     snapshot is older than the invoice its debt moved to, so the
+     adapter follows the debt instead, on every path. */
   let invoiceId = debt.invoiceId;
   if (pending.source === "snapshot" && invoiceId !== null && customer) {
     try {
@@ -2359,7 +2362,9 @@ export type DirectSweepReport = {
    reconnection sweep. */
 /* The customer's pending invoices as the snapshot lists them, oldest
    first (the rule `debtOf` picks by), each confirmed with WispHub before
-   it is trusted with money (bug: pending-invoice-cap). */
+   it is trusted with money (bug: pending-invoice-cap). Only a paid one
+   is skipped: a moved one is the adapter's to follow
+   (bug: transferred-invoice-paid). */
 async function stillPendingInvoiceId(
   wisphub: WispHub,
   usuario: string,
@@ -2370,7 +2375,7 @@ async function stillPendingInvoiceId(
     .map((f) => f.invoiceId)
     .sort((a, b) => a - b);
   for (const id of candidates) {
-    if ((await wisphub.invoiceState(id)) !== "closed") return id;
+    if ((await wisphub.invoiceState(id)) !== "paid") return id;
   }
   return null;
 }

@@ -150,7 +150,8 @@ function AccountRail({ actor }: { actor: BusinessActor }) {
       : []),
   ];
   const cuenta: Row[] = [
-    { to: "/settings/security", label: "Entrar con huella o rostro", icon: Fingerprint, detail: "Tus passkeys" },
+    /* passwordless-access (the design canvas): the product's words for what the card holds */
+    { to: "/settings/security", label: "Entrar con huella o rostro", icon: Fingerprint, detail: "Tus llaves y sesiones" },
   ];
 
   async function onSignOut() {
@@ -225,7 +226,8 @@ export function AccountIndex() {
         </div>
       </dl>
       <p className="mt-4 text-sm text-ink-soft">
-        Para cambiar tu nombre o tu contraseña, escríbenos. Pronto podrás hacerlo desde aquí.
+        {/* passwordless-access FR-030: no password left to promise */}
+        Para cambiar tu nombre, escríbenos. Pronto podrás hacerlo desde aquí.
       </p>
     </Card>
   );

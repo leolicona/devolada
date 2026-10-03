@@ -92,6 +92,9 @@ export function TabLayout() {
   if (suspended || session.error?.code === "STORE_SUSPENDED") return <SuspendedScreen />;
   if (session.error?.code === "WRONG_ACTOR") return <WrongAccountScreen />;
   /* no session, or an unverified one: the sign-in, which offers the código.
+     Every door births a verified account now (passwordless-access D1, D10),
+     so EMAIL_NOT_VERIFIED is only ever a legacy shopkeeper's session from
+     before the release — and /entrar's código is what verifies them.
      T074 (FR-010, D26): only an answer that SAYS so signs the shopkeeper
      out of view — a lost signal or a server error keeps the layout, its
      banner and whatever the session already knew */

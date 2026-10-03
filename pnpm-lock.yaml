@@ -413,6 +413,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^4.3.4
         version: 4.7.0(vite@6.4.3(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.33.0)(yaml@2.9.1))
+      axe-core:
+        specifier: ^4.13.0
+        version: 4.13.0
       happy-dom:
         specifier: ^17.6.3
         version: 17.6.3

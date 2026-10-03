@@ -37,6 +37,14 @@ const mockPaymentMethods = () =>
     .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })
     .reply(...json({ results: [{ id: 7, nombre: "efectivo" }] }));
 
+/* bug: transferred-invoice-paid — a stored invoice is asked about before
+   any money moves; `estado` as the detail route answers it (measured
+   2026-10-01) */
+const mockInvoiceState = (invoiceId: number, estado: string) =>
+  wh()
+    .intercept({ method: "GET", path: `/api/facturas/${invoiceId}/` })
+    .reply(...json({ id_factura: invoiceId, estado }));
+
 /* D9: the payment attempt ensures the reactivation opt-in first.
    Registering the interceptor also asserts the PATCH happens —
    assertNoPendingInterceptors fails if it never fires. */
@@ -151,6 +159,9 @@ describe("US-C04: the queue pays the invoice the customer already has (TD-009)",
     /* An overlapping attempt or a panel payment got there first. The
        refusal is the goal state: verify, don't fail. Measured live. */
     const { charge, db } = await seedQueuedCharge({ wisphubInvoiceId: 55 });
+    /* bug: transferred-invoice-paid — WispHub says paid, and the
+       registration still goes: only its 422 can tell "ours, landed" */
+    mockInvoiceState(55, "Pagada");
     mockAutoActivate();
     mockPaymentMethods();
     wh()
@@ -214,6 +225,7 @@ describe("US-C04: a rejected key is not the store's fault", () => {
     const { charge, db } = await seedQueuedCharge({ wisphubInvoiceId: 55, lastError: "PROVIDER_LATE" });
 
     /* D5: WispHub rejects the ISP's key */
+    mockInvoiceState(55, "Pendiente de Pago");
     mockAutoActivate();
     wh()
       .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })
@@ -232,6 +244,7 @@ describe("US-C04: a rejected key is not the store's fault", () => {
       .update(payments)
       .set({ nextAttemptAt: new Date(Date.now() - MINUTE) })
       .where(eq(payments.id, charge.id));
+    mockInvoiceState(55, "Pendiente de Pago");
     mockAutoActivate();
     wh()
       .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })

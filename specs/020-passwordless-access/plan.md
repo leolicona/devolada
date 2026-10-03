@@ -158,7 +158,9 @@ R2 and Workers AI are untouched.
 - **Red**: three access screens and Caja (PR 2).
 - **`@devolada/ui`**: three atoms.
 - **Tests**: about 20 test files rewritten across the layers (research D16).
-- Two PRs and two constitution amendments.
+- Two PRs and two constitution amendments. *(2026-10-03: the creator
+  merged the two PRs into one once the notice was given — the split only
+  waited on it; tasks.md, Implementation Strategy.)*
 
 ## Constitution Check
 

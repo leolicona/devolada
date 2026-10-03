@@ -12,5 +12,36 @@ export const authClient = createAuthClient({
   plugins: [passkeyClient()],
 });
 
+/* passwordless-access D7: the browser supports passkeys. It decides the
+   "Entrar con huella o rostro" button — the browser can reach a phone
+   nearby or a synced key even when this computer has no sensor (FR-016). */
 export const passkeysSupported = () =>
   typeof window !== "undefined" && Boolean(window.PublicKeyCredential);
+
+/* passwordless-access D7: the device can verify the person itself — Touch
+   ID, Face ID, Windows Hello, an Android phone's lock. It decides the
+   activation step, which `window.PublicKeyCredential` alone cannot: on a
+   desktop without a built-in authenticator the browser would open a window
+   asking for a phone or a security key in the middle of a registration.
+   Asked once per page load; any missing piece, or a throw, is a no. */
+let verifyingPlatform: Promise<boolean> | null = null;
+export function canVerifyPerson(): Promise<boolean> {
+  if (!verifyingPlatform) {
+    verifyingPlatform = (async () => {
+      try {
+        const pkc = typeof window !== "undefined" ? window.PublicKeyCredential : undefined;
+        if (!pkc || typeof pkc.isUserVerifyingPlatformAuthenticatorAvailable !== "function") return false;
+        return await pkc.isUserVerifyingPlatformAuthenticatorAvailable();
+      } catch {
+        return false;
+      }
+    })();
+  }
+  return verifyingPlatform;
+}
+
+/* For tests: a page load is a test, and a test starts from empty
+   (constitution IV) — the answer above is otherwise kept for the whole run */
+export function resetCanVerifyPerson() {
+  verifyingPlatform = null;
+}

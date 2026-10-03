@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { ADMIN, PAGO, RED } from "../../playwright.config";
 import {
+  accessScreens,
   stubAdminApi,
   stubAdminStoreApi,
   stubCashPointsApi,
@@ -10,6 +11,7 @@ import {
   stubPagoClosed,
   stubPorCobrarSearch,
   stubRedApi,
+  storeAccessScreens,
 } from "./stubs";
 
 /* docs/legacy/polish/dark-and-contrast.spec.md, the half a token file cannot
@@ -183,8 +185,10 @@ const storeScreens: {
   { name: "Cobrar: adeudo", url: `${RED}/cobro/greyes@wifiplus`, stub: (page) => stubRedApi(page), ready: "Total a cobrar" },
   { name: "Cobrar: pago registrado", url: `${RED}/cobros/pay-1`, stub: (page) => stubRedApi(page), ready: "DV-7K2Q9M" },
   { name: "Cobrar: avisando al negocio", url: `${RED}/cobros/pay-1`, stub: (page) => stubRedApi(page, { collection: "queued" }), ready: "Estamos avisando al negocio" },
-  { name: "Entrar", url: `${RED}/entrar`, stub: async () => {}, ready: "Olvidé mi contraseña" },
-  { name: "Recuperar", url: `${RED}/recuperar`, stub: async () => {}, ready: "Volver a entrar" },
+  /* passwordless-access US6: the phone and its código, no password; the
+     old recovery address lands on the same screen (D10) */
+  { name: "Entrar", url: `${RED}/entrar`, stub: async () => {}, ready: "Enviar código" },
+  { name: "Recuperar", url: `${RED}/recuperar`, stub: async () => {}, ready: "Enviar código" },
   { name: "Invitación", url: `${RED}/invitacion/tok-1`, stub: (page) => stubRedApi(page), ready: "Abarrotes Lupita" },
   {
     name: "Tienda suspendida",
@@ -300,6 +304,79 @@ for (const theme of ["light", "dark"] as const) {
         );
         expect(readable, `${screen.name} in ${theme}`).toEqual([]);
       });
+    }
+  });
+}
+
+/* passwordless-access T051 (constitution IV): the access screens — both
+   steps of /login and /signup, /welcome's two questions, the invitation's
+   two steps for an account and two for a new person (D9 as amended
+   2026-10-03) and Seguridad's keys card — measured where their colours
+   actually land, in both themes. The devices without passkey support are
+   among them (US3). */
+for (const theme of ["light", "dark"] as const) {
+  test.describe(`passwordless-access: real contrast in ${theme}`, () => {
+    for (const screen of accessScreens(ADMIN)) {
+      test(`${screen.name} has no contrast violations`, async ({ page }) => {
+        await page.emulateMedia({ colorScheme: theme });
+        await screen.stub(page);
+        await page.goto(screen.url);
+        if (screen.open) await screen.open(page);
+        await expect(page.getByText(screen.ready, { exact: true }).first()).toBeVisible();
+
+        const results = await new AxeBuilder({ page }).withRules(["color-contrast", "target-size"]).analyze();
+        const readable = results.violations.map(
+          (v) => `${v.id}: ${v.nodes.map((n) => n.failureSummary?.split("\n").slice(-1)[0]).join(" | ")}`,
+        );
+        expect(readable, `${screen.name} in ${theme}`).toEqual([]);
+      });
+    }
+  });
+}
+
+/* passwordless-access US6 (T074; constitution IV): the store app's ways in —
+   /entrar's two steps and the browser without passkey support, the
+   invitation's three steps, and Caja's keys card — measured where their
+   colours land, in both themes, at the floor, the tablet, the computer
+   layout's first width (cash-at-stores D32) and the desktop. The layout
+   changes the device word and what sits beside the card, so each width is
+   its own measurement. */
+const STORE_WIDTHS = [
+  { name: "360", width: 360, height: 740 },
+  { name: "768", width: 768, height: 1024 },
+  { name: "1024", width: 1024, height: 800 },
+  { name: "1280", width: 1280, height: 900 },
+] as const;
+
+for (const theme of ["light", "dark"] as const) {
+  test.describe(`passwordless-access US6: the store app's access in ${theme}`, () => {
+    for (const size of STORE_WIDTHS) {
+      for (const screen of storeAccessScreens(RED)) {
+        test(`${screen.name} at ${size.name}px has no contrast violations`, async ({ page }) => {
+          await page.setViewportSize({ width: size.width, height: size.height });
+          await page.emulateMedia({ colorScheme: theme });
+          await screen.stub(page);
+          await page.goto(screen.url);
+          if (screen.open) await screen.open(page);
+          await expect(page.getByText(screen.ready, { exact: true }).first()).toBeVisible();
+          /* as the store's screens above: an outcome is measured once it has
+             landed, a breath at its first frame, full ink */
+          await page.evaluate(() => {
+            for (const a of document.getAnimations()) {
+              if (a.effect?.getComputedTiming().iterations === Infinity) {
+                a.pause();
+                a.currentTime = 0;
+              } else a.finish();
+            }
+          });
+
+          const results = await new AxeBuilder({ page }).withRules(["color-contrast", "target-size"]).analyze();
+          const readable = results.violations.map(
+            (v) => `${v.id}: ${v.nodes.map((n) => n.failureSummary?.split("\n").slice(-1)[0]).join(" | ")}`,
+          );
+          expect(readable, `${screen.name} at ${size.name}px in ${theme}`).toEqual([]);
+        });
+      }
     }
   });
 }

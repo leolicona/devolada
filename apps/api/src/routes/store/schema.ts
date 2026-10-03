@@ -16,6 +16,10 @@ export const storeMeResponse = z.object({
   name: z.string(),
   /* The business with the channel on, or null (FR-015) */
   businessName: z.string().nullable(),
+  /* passwordless-access D8: the store account's own address — where Caja's
+     step-up sends its código. Shown only to the store's own session, so it
+     reveals nothing. */
+  email: z.string(),
 });
 
 /* ---- The counter ---- */
@@ -258,12 +262,38 @@ export const invitationPreviewResponse = z.discriminatedUnion("state", [
   z.object({ state: z.literal("invalid") }),
 ]);
 
+/* passwordless-access D10 (contracts/store-access.md): the invitation is an
+   email and its código — no password. The código goes out first, to any
+   address; a taken one is named only after its código (FR-032). */
+
+/* POST /store/invitations/:token/code */
+export const storeInvitationCodeRequest = z.object({
+  email: z.string().trim().toLowerCase().email(),
+});
+/* The address the person typed, whatever it holds */
+export const storeInvitationCodeResponse = z.object({ sentTo: z.string() });
+
+/* A código is six digits (data-model.md); the plugin checks the rest */
+const otp = z.string().regex(/^\d{6}$/);
+
 /* POST /store/invitations/:token/accept */
 export const acceptStoreInvitationRequest = z.object({
   email: z.string().trim().toLowerCase().email(),
-  password: z.string().min(8).max(128),
+  otp,
 });
-export const acceptStoreInvitationResponse = z.object({ email: z.string() });
+export const acceptStoreInvitationResponse = z.object({ storeName: z.string() });
+
+/* passwordless-access D10: the sign-in by phone, in two calls so each
+   answer is the same for every phone (FR-033, cash-at-stores D3). The
+   handler reads the phone with `nationalPhone` (ten national digits). */
+
+/* POST /store/sign-in/code */
+export const storeSignInCodeRequest = z.object({ phone: z.string().trim().min(1).max(32) });
+export const storeSignInCodeResponse = z.object({ sent: z.literal(true) });
+
+/* POST /store/sign-in */
+export const storeSignInRequest = z.object({ phone: z.string().trim().min(1).max(32), otp });
+export const storeSignInResponse = z.object({ storeName: z.string() });
 
 /* Every code the store's routes answer, so the app's copy has one list */
 export const STORE_ERROR_CODES = [
@@ -283,6 +313,10 @@ export const STORE_ERROR_CODES = [
   "INVALID_INVITATION",
   "EMAIL_TAKEN",
   "VALIDATION_ERROR",
+  /* passwordless-access D10: every refusal of a código, folded into one
+     word so no answer tells a store's phone from a stranger's (FR-033;
+     auth/otp-refusal.ts) */
+  "INVALID_OTP",
 ] as const;
 export type StoreErrorCode = (typeof STORE_ERROR_CODES)[number];
 
@@ -306,3 +340,10 @@ export type DeclareHandoverRequest = z.infer<typeof declareHandoverRequest>;
 export type DeclareHandoverResponse = z.infer<typeof declareHandoverResponse>;
 export type InvitationPreviewResponse = z.infer<typeof invitationPreviewResponse>;
 export type AcceptStoreInvitationRequest = z.infer<typeof acceptStoreInvitationRequest>;
+export type AcceptStoreInvitationResponse = z.infer<typeof acceptStoreInvitationResponse>;
+export type StoreInvitationCodeRequest = z.infer<typeof storeInvitationCodeRequest>;
+export type StoreInvitationCodeResponse = z.infer<typeof storeInvitationCodeResponse>;
+export type StoreSignInCodeRequest = z.infer<typeof storeSignInCodeRequest>;
+export type StoreSignInCodeResponse = z.infer<typeof storeSignInCodeResponse>;
+export type StoreSignInRequest = z.infer<typeof storeSignInRequest>;
+export type StoreSignInResponse = z.infer<typeof storeSignInResponse>;

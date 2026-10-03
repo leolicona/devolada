@@ -27,6 +27,7 @@ import { internalError } from "./routes/v1/envelope";
 import { landingPublicRoute } from "./routes/landing";
 import { storeRoute } from "./routes/store";
 import { cashPointsRoute } from "./routes/cash-points";
+import { eraseLegacyCredentials } from "./auth/credentials-sweep";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -173,6 +174,16 @@ export default {
     ctx.waitUntil(
       prunePanelLinks(env).then((report) => {
         if (report.businesses) console.log("link prune:", JSON.stringify(report));
+      }),
+    );
+    /* passwordless-access D5 (FR-029): the passwords that exist, and the
+       legacy accounts whose email was never proven, are erased here — a
+       sweep, not a migration, so a restored export or a forgotten door
+       cannot bring one back for more than a minute. Its own lane: nothing
+       else waits on it. Speaks only when it deleted something. */
+    ctx.waitUntil(
+      eraseLegacyCredentials(env).then((report) => {
+        if (report.credentials || report.users) console.log("credential erase:", JSON.stringify(report));
       }),
     );
     /* automated-collections-api D13/D14: the public API's housekeeping —

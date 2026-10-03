@@ -170,10 +170,12 @@ function mockApiCep(amountCents: number) {
     );
 }
 
-/* The reconnection a confirmed payment triggers: auto-activate, the cash
-   method, the registration on `invoiceId`, the verify read */
+/* The reconnection a confirmed payment triggers: the adapter's own fresh
+   look at the invoice (bug: transferred-invoice-paid), auto-activate, the
+   cash method, the registration on `invoiceId`, the verify read */
 function mockReconnection(invoiceId: number) {
   const captured: { totalCobrado?: number } = {};
+  mockInvoiceDetail(invoiceId, "Pendiente de Pago");
   wh().intercept({ method: "PATCH", path: "/api/clientes/6/" }).reply(...json({ id_servicio: 6 }));
   wh()
     .intercept({ method: "GET", path: (p) => p.startsWith("/api/formas-de-pago/") })
@@ -192,10 +194,13 @@ function mockReconnection(invoiceId: number) {
   return captured;
 }
 
-const mockInvoiceDetail = (invoiceId: number, estado: unknown) =>
+/* The detail route as measured 2026-10-01 (bug: transferred-invoice-paid):
+   `estado` is text — "Pendiente de Pago", "Pagada", "Se Transfirio" */
+function mockInvoiceDetail(invoiceId: number, estado: unknown) {
   wh()
     .intercept({ method: "GET", path: `/api/facturas/${invoiceId}/` })
     .reply(...json({ id_factura: invoiceId, estado }));
+}
 
 const sweepRow = async (businessId: string) =>
   (
@@ -304,7 +309,7 @@ describe("bug: pending-invoice-cap — the sweep reads the tenant whole and ever
     mockCustomerLookup([wisphubCustomer()], 2);
     mockApiCep(35000 + 1500);
     /* the snapshot's id is re-read before money moves: still pending */
-    mockInvoiceDetail(7001, 1);
+    mockInvoiceDetail(7001, "Pendiente de Pago");
     const registration = mockReconnection(7001);
 
     const res = await payTransfer();
@@ -330,7 +335,7 @@ describe("bug: pending-invoice-cap — the sweep reads the tenant whole and ever
     mockApiCep(70000 + 1500);
     /* 7001 was paid in the panel since the pass; 7002 still stands */
     mockInvoiceDetail(7001, "Pagada");
-    mockInvoiceDetail(7002, "Pendiente");
+    mockInvoiceDetail(7002, "Pendiente de Pago");
     const registration = mockReconnection(7002);
 
     const res = await payTransfer();
@@ -363,7 +368,7 @@ describe("bug: pending-invoice-cap — the sweep reads the tenant whole and ever
     await sweptTenant(business.id, sevenPagesWithMine());
     mockCustomerLookup([wisphubCustomer()], 2);
     mockApiCep(35000 + 1500);
-    mockInvoiceDetail(7001, 1);
+    mockInvoiceDetail(7001, "Pendiente de Pago");
     mockReconnection(7001);
     expect((await (await payTransfer()).json()).data.status).toBe("confirmed");
 
@@ -385,6 +390,41 @@ describe("bug: pending-invoice-cap — the sweep reads the tenant whole and ever
     ).invoices;
     expect(listed.some((f) => f.invoiceId === 7001)).toBe(false);
     expect(listed).toHaveLength(699);
+  });
+});
+
+describe("bug: transferred-invoice-paid — the snapshot's invoice moved after the pass", () => {
+  it("the verdict does not skip a moved invoice: the adapter follows its debt, and nothing is paid on the moved one", async () => {
+    const business = await seedLinkedBusiness();
+    await sweptTenant(business.id, sevenPagesWithMine());
+
+    mockCustomerLookup([wisphubCustomer()], 2);
+    mockApiCep(35000 + 1500);
+    /* the billing moved 7001 into 7101 after the pass: the verdict's own
+       look, then the adapter's, both read it moved */
+    mockInvoiceDetail(7001, "Se Transfirio");
+    mockInvoiceDetail(7001, "Se Transfirio");
+    /* where the debt went: the record, then the customer's balance door —
+       which knows 7101, an invoice the snapshot never saw */
+    mockCustomerLookup([wisphubCustomer()]);
+    wh()
+      .intercept({ method: "GET", path: "/api/clientes/6/saldo/" })
+      .reply(...json({ facturas: [{ id: 7101, fecha_emision: "2026-10-01", fecha_vencimiento: "2026-10-01", total: 849 }] }));
+
+    const res = await payTransfer();
+    expect(res.status).toBe(201);
+    expect((await res.json()).data.status).toBe("confirmed");
+    /* the verdict stands on the debt it measured; the money waits a
+       minute for the invoice its debt moved to — 7001 has no
+       registrar-pago interceptor, and an attempt on it would have failed */
+    const [charge] = await drizzle(env.DB).select().from(payments);
+    expect(charge).toMatchObject({
+      registeredCents: 35000,
+      wisphubInvoiceId: 7101,
+      actionOutcome: "queued",
+      paymentRegisteredAt: null,
+      actionError: null,
+    });
   });
 });
 

@@ -88,3 +88,27 @@ delete (env as { AI?: unknown }).AI;
    depending on which file ran first. Same reason D1 gets isolated
    storage: a test starts from empty or it is not a test. */
 beforeEach(() => resetProviderCaches());
+
+/* passwordless-access D14: códigos are stored hashed (D2), so a test reads
+   the one the sender produced. The suite pins RESEND_API_KEY to "", so
+   `sendAuthCode` logs `[código:<kind>] <to> → <digits>` (the contract in
+   contracts/codigo-email.md); every such line is kept here, the last one
+   per address, for `sentCode` in helpers.ts.
+
+   A wrapper installed once per runtime, not a `vi.spyOn`: a test that spies
+   on console.log itself (a sweep that must stay quiet) then starts from an
+   empty call list instead of inheriting the códigos logged before it. The
+   map is emptied before every test — a test starts from empty. */
+const SENT_CODES = Symbol.for("devolada.test.sentCodes");
+const ORIGINAL_LOG = Symbol.for("devolada.test.originalLog");
+const logGlobals = globalThis as { [SENT_CODES]?: Map<string, string>; [ORIGINAL_LOG]?: typeof console.log };
+if (!logGlobals[ORIGINAL_LOG]) {
+  const original = (logGlobals[ORIGINAL_LOG] = console.log);
+  logGlobals[SENT_CODES] = new Map();
+  console.log = (...args: unknown[]) => {
+    const line = /^\[código:[\w-]+\] (\S+) → (\d{6})$/.exec(typeof args[0] === "string" ? args[0] : "");
+    if (line) logGlobals[SENT_CODES]!.set(line[1].toLowerCase(), line[2]);
+    original(...args);
+  };
+}
+beforeEach(() => logGlobals[SENT_CODES]!.clear());

@@ -171,7 +171,8 @@ This spec specifies again (constitution I), and replaces, in the panel:
   the person can always say "Ahora no" (Clarifications, Q3).
 - **better-auth D14**, "the only question left is a password". The
   invitation page asks for no password. With an account: the key or a
-  código. Without one: the name, then the key.
+  código. Without one: the name and a código sent to the invited address,
+  then the key (Clarifications, Q5).
 - **The password half of better-auth D16.** The door stays: the código opens
   the session. But no account exists before its email is proven, so there
   is no unverified account left to replace, and no "right password,
@@ -266,6 +267,27 @@ same doors; and the `/v1` API keys.
   visitor would read past, and which named the fingerprint or face on a
   device that cannot use them (FR-015).
 
+### Session 2026-10-03
+
+- Q5. Q (raised by the adversarial review of the build): the invitee without
+  an account was born by the invitation alone, "because the invitation
+  reached that inbox". But the invitation's link is also known to whoever
+  sent it: the panel shows it to the inviter and to every owner and admin.
+  So anyone who sends an invitation to an address with no account could
+  open that account themselves, add their own key, and keep it after the
+  real person arrives — and with no password left to reset, nothing would
+  shut them out. How does the invitee prove the inbox? → A: a código. The
+  invitee types their name, a código goes to the invited address (shown as
+  text, never typed), and typing it births the account (creator,
+  2026-10-03: "Sigue con las opciones recomendadas"). It costs the invitee
+  one trip back to their email; nothing new is stored, and it is the same
+  door as every other in the product. Rejected: a secret carried only by
+  the invitation email's link, never shown to the sender — it keeps the
+  page to one step, but needs a stored secret per invitation, and every
+  invitation already sent would stop working for a new account. The same
+  hole existed before this feature, with a password the sender chose; a
+  password reset could close it then.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Register with a código, then the fingerprint or face (Priority: P1)
@@ -355,9 +377,10 @@ the activation offered on a device that can verify the person.
 6. **Given** a key activated before this feature (US-S07), **Then** it keeps
    working.
 7. **Given** a person who used to sign in with a password, **When** they open
-   the sign-in screen, **Then** one line tells them passwords are no longer
-   used, next to the key and the código (FR-029); their old password opens
-   nothing.
+   the sign-in screen, **Then** they see the key and the código and no
+   password field; no line announces the change (Clarifications, Q4); their
+   old password opens nothing (FR-029). *(Rewritten 2026-10-02: this scenario
+   still asked for the announcement Q4 had removed.)*
 
 ---
 
@@ -404,9 +427,10 @@ An owner invites a colleague, and the colleague opens the invitation:
 - **They have an account but no key here.** They ask for a código, which goes
   to the invited address. They type it and they are inside, and the
   activation is offered.
-- **They have no account.** They type their name, confirm the device's
-  window, and they are inside. No código is needed: the invitation already
-  proved the inbox (better-auth D14).
+- **They have no account.** They type their name, then the código that
+  reaches the invited address, confirm the device's window, and they are
+  inside. The invitation alone does not prove the inbox: whoever sent it
+  holds its link too (Clarifications, Q5).
 
 **Why this priority**: the invitation is how a business's team grows. Today
 it is the one access screen without the fingerprint or face. After User
@@ -415,7 +439,8 @@ Story 2 it would be the last screen asking for a password.
 **Independent Test**: invite an address whose account holds a key. Open the
 invitation without a session, sign in with the key, and land in the business
 with the invited role. Then invite an address without an account: the name,
-the device's confirmation, inside — no código and no password.
+the código from the invited inbox, the device's confirmation, inside — no
+password.
 
 **Acceptance Scenarios**:
 
@@ -432,15 +457,22 @@ the device's confirmation, inside — no código and no password.
    as text and never typed (better-auth D14). Typing it accepts the
    invitation and lands them inside.
 4. **Given** an invitation for an address without an account, **When** the
-   invitee types their name and continues, **Then** the account is born
-   verified, the activation step follows on a device that can verify the
-   person, and they land inside the business with the invited role.
+   invitee types their name and continues, **Then** a código goes to the
+   invited address, shown as text and never typed; typing it births the
+   account verified and named, the activation step follows on a device that
+   can verify the person, and they land inside the business with the
+   invited role.
 5. **Given** a device without passkey support, **Then** the page offers the
-   código (with an account) or the name alone (without one), and never
-   mentions the fingerprint or face.
+   código (with an account) or the name and the código (without one), and
+   never mentions the fingerprint or face.
 6. **Given** an expired or gone invitation, or a session that already holds
    the invited address or another one, **Then** the page behaves as it does
    today.
+7. **Given** an invitation for an address without an account, **When**
+   anyone who cannot read the invited inbox — the person who sent it
+   included — tries to accept it, **Then** no account is born and no
+   session opens: without the código the page and the server accept
+   nothing (Clarifications, Q5).
 
 ---
 
@@ -606,8 +638,9 @@ member's account is still refused by the store app.
   previous código. Three wrong tries end it.
 - **FR-004**: Typing the right código MUST confirm the email and open the
   session, in one step. An account is born only when its email is proven
-  this way, or by an invitation (FR-019): a mistyped address leaves nothing
-  behind.
+  this way — at registration, at sign-in, or on the invitation page
+  (FR-019): a mistyped address leaves nothing behind, and holding an
+  invitation's link proves nothing (Clarifications, Q5).
 - **FR-005**: Registering with an address that already has an account MUST
   behave exactly as for a new address until the código is typed, and then
   open the existing account. No screen, message or answer may reveal whether
@@ -674,10 +707,12 @@ member's account is still refused by the store app.
 - **FR-018**: A key that belongs to another account MUST lead to today's
   "invitation sent to another email" state, with its switch, and accept
   nothing.
-- **FR-019**: For an address without an account, the page MUST ask only for
-  the name. The account is born verified by the invitation, with no código
-  (better-auth D14); then FR-006; then the person lands inside the business
-  with the invited role.
+- **FR-019**: For an address without an account, the page MUST ask for the
+  name, then send a código to the invited address (shown as text, never
+  typed) and ask for it. The código, and nothing less, births the account
+  verified and named (Clarifications, Q5): holding the invitation's link
+  is not proof of the inbox. Then FR-006; then the person lands inside the
+  business with the invited role.
 - **FR-020**: The invitation page MUST ask for no password, in any state. Its
   expired, gone, same-address and other-address states keep today's
   behavior.

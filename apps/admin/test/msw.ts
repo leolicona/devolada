@@ -1,6 +1,7 @@
 import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
 import { devoladaMethods, type DevoladaMethods } from "@devolada/api/integrations-schema";
+import { acceptInvitationNewRequest } from "@devolada/api/businesses-schema";
 
 export const businessActor = {
   type: "business",
@@ -37,23 +38,32 @@ export const fail = (code: string, status: number) =>
 export const baOk = () => HttpResponse.json({});
 export const baFail = (code: string, status: number) =>
   HttpResponse.json({ code }, { status });
+export const baStatus = (body: Record<string, unknown>) => HttpResponse.json(body);
+
+/* passwordless-access D1: `sign-in/email-otp`'s answer — the session token
+   and the user (the cookie is the browser's business, not the test's) */
+export const baSignedIn = (user: { id: string; name: string; email: string; emailVerified: boolean } = sessionUser) =>
+  HttpResponse.json({ token: "test-session-token", user });
+/* Better Auth's limiter answers 429 with its own body (D3, FR-027) */
+export const baTooMany = () => HttpResponse.json({ message: "Too many requests. Please try again later." }, { status: 429 });
 
 export const handlers = {
   session: (r: () => ReturnType<typeof ok | typeof fail>) => http.get("/auth/me", () => r()),
-  login: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/sign-in/email", () => r()),
-  signup: (r: () => ReturnType<typeof ok | typeof fail>) => http.post("/auth/business/signup", () => r()),
-  verifyEmail: (r: (info: { request: Request }) => ReturnType<typeof baOk | typeof baFail> | Promise<ReturnType<typeof baOk | typeof baFail>>) =>
-    http.post("/auth/email-otp/verify-email", ({ request }) => r({ request })),
-  sendCode: (r: (info: { request: Request }) => ReturnType<typeof baOk | typeof baFail> | Promise<ReturnType<typeof baOk | typeof baFail>>) =>
-    http.post("/auth/email-otp/send-verification-otp", ({ request }) => r({ request })),
+  /* passwordless-access D1, D11, D14: Better Auth's access endpoints, in
+     Better Auth's own shapes (envelope-exempt, as `baPost` expects). Each
+     handler hands the request over, so a test can read the body it sent. */
+  requestCode: (r: (body: Record<string, unknown>) => Response | Promise<Response> = () => baStatus({ success: true })) =>
+    http.post("/auth/email-otp/send-verification-otp", async ({ request }) => r((await request.json()) as Record<string, unknown>)),
+  signInCode: (r: (body: Record<string, unknown>) => Response | Promise<Response> = () => baSignedIn()) =>
+    http.post("/auth/sign-in/email-otp", async ({ request }) => r((await request.json()) as Record<string, unknown>)),
+  updateUser: (r: (body: Record<string, unknown>) => Response | Promise<Response> = () => baStatus({ status: true })) =>
+    http.post("/auth/update-user", async ({ request }) => r((await request.json()) as Record<string, unknown>)),
+  revokeOtherSessions: (r: () => Response | Promise<Response> = () => baStatus({ status: true })) =>
+    http.post("/auth/revoke-other-sessions", () => r()),
   /* better-auth D18: the passkey list and its "Quitar" */
   passkeyList: (r: () => Response) => http.get("/auth/passkey/list-user-passkeys", () => r()),
   passkeyDelete: (r: (body: unknown) => ReturnType<typeof baOk | typeof baFail>) =>
     http.post("/auth/passkey/delete-passkey", async ({ request }) => r(await request.json())),
-  requestReset: (r: () => ReturnType<typeof baOk | typeof baFail>) =>
-    http.post("/auth/email-otp/request-password-reset", () => r()),
-  resetPassword: (r: () => ReturnType<typeof baOk | typeof baFail>) =>
-    http.post("/auth/email-otp/reset-password", () => r()),
   feed: (r: (url: URL) => ReturnType<typeof ok | typeof fail>) =>
     http.get("/payments/feed", ({ request }) => r(new URL(request.url))),
   /* cobros-in-links D1: the Por cobrar view's blocks. The URL carries
@@ -133,8 +143,16 @@ export const handlers = {
   /* bug: invitee-lands-own-business: the invitations sent to me */
   myInvitations: (r: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/businesses/invitations/mine", () => r()),
-  acceptInvitationNew: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
-    http.post("/businesses/invitations/:id/accept-new", async ({ params, request }) => r(String(params.id), await request.json())),
+  /* passwordless-access D9 (amended 2026-10-03): the body is held to the
+     contract as the API holds it — `{name, otp}` — and one it refuses
+     answers 400 VALIDATION in the envelope without reaching the test's
+     answer. The test gets the body as sent, untrimmed. */
+  acceptInvitationNew: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail> | Promise<ReturnType<typeof ok | typeof fail>>) =>
+    http.post("/businesses/invitations/:id/accept-new", async ({ params, request }) => {
+      const body = await request.json();
+      if (!acceptInvitationNewRequest.safeParse(body).success) return fail("VALIDATION", 400);
+      return r(String(params.id), body);
+    }),
   resendInvitation: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/businesses/invitations/:id/resend", ({ params }) => r(String(params.id))),
   cancelInvitation: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>

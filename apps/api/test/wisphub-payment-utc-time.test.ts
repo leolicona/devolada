@@ -81,6 +81,15 @@ function mockPreamble(idServicio: number) {
     .reply(...json({ results: [{ id: 7, nombre: "efectivo" }] }));
 }
 
+/* bug: transferred-invoice-paid — an attempt that carries an invoice asks
+   about it before any money moves; still pending here (the detail route's
+   measured shape) */
+function mockInvoicePending(invoiceId: number) {
+  wh()
+    .intercept({ method: "GET", path: `/api/facturas/${invoiceId}/` })
+    .reply(...json({ id_factura: invoiceId, estado: "Pendiente de Pago" }));
+}
+
 /* registrar-pago, with the body WispHub received kept for the assertion */
 function mockRegisterPayment(invoiceId: number) {
   const sent: { fecha_pago?: string } = {};
@@ -162,6 +171,8 @@ describe("bug: wisphub-payment-utc-time — the queue registers on each ISP's cl
       wisphubInvoiceId: 13,
     });
 
+    mockInvoicePending(12);
+    mockInvoicePending(13);
     mockPreamble(6);
     mockPreamble(7);
     const toCentro = mockRegisterPayment(12);
@@ -288,6 +299,7 @@ describe("bug: wisphub-payment-utc-time — every door that registers writes the
   it("the verdict registers the payment on the business's clock", async () => {
     await seedSonoraLink();
     mockVerdictReads();
+    mockInvoicePending(42);
     mockPreamble(6);
     const sent = mockRegisterPayment(42);
     mockCustomerLookup("greyes@wifiplus", 6, "Activo");
@@ -303,6 +315,7 @@ describe("bug: wisphub-payment-utc-time — every door that registers writes the
     const [observed] = await drizzle(env.DB).select().from(payments);
     expect(observed.actionOutcome).toBe("observation");
 
+    mockInvoicePending(42);
     mockPreamble(6);
     const sent = mockRegisterPayment(42);
     mockCustomerLookup("greyes@wifiplus", 6, "Activo");

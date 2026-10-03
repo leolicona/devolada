@@ -68,9 +68,16 @@ export const invitationPreviewResponse = z.object({
   hasAccount: z.boolean(),
 });
 
+/* passwordless-access D9 (as amended 2026-10-03, spec Clarifications Q5):
+   the invitee without an account gives a name and the código sent to the
+   invited address — the invitation's id proves nothing, its sender holds
+   it too. No password exists. The name is 2–80 once trimmed, the
+   registration's rule (data-model.md); the código is six digits, and the
+   plugin checks the rest (as the store acceptance's, D10). A `password` a
+   stale client still sends is stripped by the object, never stored. */
 export const acceptInvitationNewRequest = z.object({
-  name: z.string().trim().min(2).max(120),
-  password: z.string().min(8),
+  name: z.string().trim().min(2).max(80),
+  otp: z.string().regex(/^\d{6}$/),
 });
 
 /* bug: invitee-lands-own-business — the invitations addressed to the

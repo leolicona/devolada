@@ -176,7 +176,16 @@ async function storeActorOf(
   if (row.status !== "active") {
     return { refusal: c.json({ success: false, error: { code: "WRONG_ACTOR" } }, 403) };
   }
-  return { store: { type: "store", storeId: row.id, userId: session.user.id, name: row.name, status: "active" } };
+  return {
+    store: {
+      type: "store",
+      storeId: row.id,
+      userId: session.user.id,
+      name: row.name,
+      email: session.user.email,
+      status: "active",
+    },
+  };
 }
 
 /* Session required (better-auth.spec.md D5): Better Auth resolves the

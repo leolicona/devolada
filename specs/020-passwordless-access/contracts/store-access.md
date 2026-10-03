@@ -8,10 +8,17 @@ The schemas live in `apps/api/src/routes/store/schema.ts`, exported as
 `@devolada/api/store-schema`. They are imported by `apps/red`, its MSW
 handlers and the Playwright stubs.
 
-Every answer wears the one envelope, with `UPPER_SNAKE` codes. These routes
-are browser-facing: no `message`, no `retryable` (constitution III). The
-códigos' error codes are the plugin's own, carried through the envelope:
-`INVALID_OTP`, `OTP_EXPIRED`, `TOO_MANY_ATTEMPTS`.
+Every answer wears the one envelope, with `UPPER_SNAKE` codes. A rejected
+body is `VALIDATION_ERROR`, the store area's word since cash-at-stores
+(written `VALIDATION` here until 2026-10-02, when the implementation kept
+the area's word). These routes
+are browser-facing: no `message`, no `retryable` (constitution III). Every
+refusal of a código — wrong, expired, or past its three tries — answers
+**400 `INVALID_OTP`** on every route (adversarial review, 2026-10-03): the
+plugin's `OTP_EXPIRED` and `TOO_MANY_ATTEMPTS` exist only for an address
+that holds a live código, and the phone door writes one only under the
+email of the store the phone names, so passing them through anywhere let a
+guessed email tell a store's phone from a stranger's (FR-033).
 
 None of these routes ever creates an account except the invitation's
 acceptance (FR-034).
@@ -38,7 +45,7 @@ Rate-limited 3 per 60 s per address (D3).
   A sign-in código goes to that address **whatever it holds**. A taken
   address is named only after its código (FR-032).
 - **400** `INVALID_INVITATION`: unknown, accepted, replaced, expired, or a
-  suspended store (cash-at-stores D4, unchanged). **400** `VALIDATION`: a
+  suspended store (cash-at-stores D4, unchanged). **400** `VALIDATION_ERROR`: a
   malformed address. **429**.
 
 ### `POST /store/invitations/:token/accept`: changed body
@@ -57,12 +64,17 @@ six digits.
   `shopkeeperName`. The phone becomes its username. The store becomes
   `active` and the invitation `accepted`, in one batch (D10,
   cash-at-stores T089).
-- **400** `INVALID_OTP`, `OTP_EXPIRED`; **403** `TOO_MANY_ATTEMPTS`.
+- **400** `INVALID_OTP`: a wrong, expired or spent código, alike.
 - **409** `EMAIL_TAKEN`: the address has an account, or is a platform
   operator's, **and the código was right** (FR-032). The invitation stays
-  `sent`.
+  `sent`. Also when another request takes the address between the plugin's
+  read and its insert (the race D10 guards, met inside the plugin).
 - **400** `INVALID_INVITATION`: as above, or a race lost to another
   acceptance (T089).
+- Any failure after the account is born and before the store is linked —
+  inside the plugin's own sign-in included — removes that account when it
+  holds nothing else, so the address stays free for the next try (D10, D5;
+  adversarial review, 2026-10-02).
 - **429**.
 
 ---
@@ -80,9 +92,11 @@ Rate-limited 3 per 60 s per address (D3).
 `nationalPhone` normalises the number to ten digits.
 
 - **200** `{ "success": true, "data": { "sent": true } }` for **every**
-  well-formed phone. A código goes to the store account's email only when a
-  store names that phone (FR-033, cash-at-stores D3).
-- **400** `VALIDATION`: not ten national digits. **429**.
+  well-formed phone, and as fast: the código is written and sent after the
+  answer (`waitUntil`), so timing cannot tell the phones apart either. A
+  código goes to the store account's email only when a store names that
+  phone (FR-033, cash-at-stores D3).
+- **400** `VALIDATION_ERROR`: not ten national digits. **429**.
 
 ### `POST /store/sign-in`: new
 
@@ -94,9 +108,19 @@ Rate-limited 5 per 60 s per address (D3).
 
 - **200** `{ "success": true, "data": { "storeName": "Abarrotes Lupita" } }`
   with the session cookie.
-- **400** `INVALID_OTP`, also for a phone that names no store, so the
-  answer cannot tell the two apart; `OTP_EXPIRED`; **403**
-  `TOO_MANY_ATTEMPTS`.
+- **400** `INVALID_OTP` for every refusal of the código — a wrong one, an
+  expired one, one past its three tries — and for a phone that names no
+  store, so the answer cannot tell them apart (FR-033). `OTP_EXPIRED` and
+  `TOO_MANY_ATTEMPTS` exist only for an address that holds a código, so
+  this route never carries them (adversarial review, 2026-10-02). The
+  store app reads all three alike anyway. **As fast, too**: a phone no
+  store names still runs the plugin's código check, against an address
+  nobody could predict (so it can never create an account), and every
+  refusal answers no sooner than a floor after the request began: at least
+  1 s (`STORE_SIGN_IN_FLOOR_MS`), and ten times the store lookup's own round
+  trip when the database is far, so a live código's extra statements (8
+  against a stranger's 5, measured 2026-10-03) cannot be timed either. A
+  right código is not held back.
 - **403** `STORE_SUSPENDED`: a suspended store, as `requireStore` answers
   today. No session is kept.
 - **429**.
@@ -144,7 +168,9 @@ today's "Demasiados intentos. Espera un momento.".
 
 **Step 1, "Bienvenido a Devolada, {tienda}":**
 - "Entrarás con tu huella o rostro, o con un código que te enviamos a tu
-  correo."
+  correo." Without passkey support: "Entrarás con un código que te enviamos
+  a tu correo." — no screen names the fingerprint or face on a device that
+  cannot use them (FR-015; adversarial review, 2026-10-02).
 - "Tu correo" and "Continuar".
 - Bad invitations read the same as today: "Esta invitación ya no funciona".
 
@@ -191,7 +217,13 @@ differences:
   with "Confirmar" and "Cancelar";
 - the list (new here, FR-036), "Quitar", and "Cerrar sesión en los demás
   dispositivos";
-- 48 px controls at full width, where the panel's are 40 px.
+- 48 px controls at full width, where the panel's are 40 px;
+- the step-up, the failed close and "Quitar" behave as the panel's
+  (panel-access, Seguridad, as amended by the adversarial review,
+  2026-10-02), with one word more: a lost signal, on the send or on the
+  try, says "Sin conexión. Revisa tu internet e intenta de nuevo." and
+  keeps the código. A store session holds no business, so there is none to
+  set again.
 
 The copy drops "Tu contraseña sigue funcionando" (FR-035).
 

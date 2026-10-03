@@ -3,30 +3,25 @@ import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { businesses, session as sessionTable, user as userTable } from "../src/db/schema";
-import {
-  app,
-  cookiesOf,
-  json,
-  lastCodeFor,
-  seedBusiness,
-  seedSession,
-  sessionCookieHeader,
-  sessionOf,
-  PASSWORD,
-} from "./helpers";
+import { app, cookiesOf, json, mintCode, seedBusiness, seedSession, sessionCookieHeader, sessionOf } from "./helpers";
 
 /* docs/legacy/auth/sessions.spec.md scenarios, rewritten for Better Auth
    (better-auth.spec.md D5): sessions live in our D1, no IdP to mock.
    The store-login scenarios retired with the store network
-   (devolada-red); the ISP is the only credentialed actor now. */
+   (devolada-red); the ISP is the only credentialed actor now.
 
-describe("US-S04: the ISP logs in with credentials", () => {
-  it("valid admin login (email) returns 200 and resolves the ISP actor", async () => {
+   passwordless-access US2: the sign-in is a código (D1). The wrong-password
+   and unknown-email cases left with the password door (their absence is
+   passwordless-sign-in.test.ts's 404), and "a reset revokes live sessions"
+   is `revoke-other-sessions` now (passwordless-keys-sessions.test.ts). */
+
+describe("US-S04: the ISP signs in", () => {
+  it("a sign-in código returns 200 and resolves the ISP actor (passwordless-access US2)", async () => {
     await seedBusiness();
 
     const res = await (await app()).request(
-      "/auth/sign-in/email",
-      json({ email: "demo@devolada.app", password: PASSWORD }),
+      "/auth/sign-in/email-otp",
+      json({ email: "demo@devolada.app", otp: await mintCode("demo@devolada.app") }),
       env,
     );
     expect(res.status).toBe(200);
@@ -47,27 +42,6 @@ describe("US-S04: the ISP logs in with credentials", () => {
     expect((await res.json()).error.code).toBe("EMAIL_NOT_VERIFIED");
     const again = await (await app()).request("/auth/me", { headers: { Cookie: cookie } }, env);
     expect(again.status).toBe(401);
-  });
-
-  it("wrong password returns 401 with no session cookie", async () => {
-    await seedBusiness();
-
-    const res = await (await app()).request(
-      "/auth/sign-in/email",
-      json({ email: "demo@devolada.app", password: "wrong-pass-1" }),
-      env,
-    );
-    expect(res.status).toBe(401);
-    expect(cookiesOf(res).find((c) => c.includes("session_token="))).toBeUndefined();
-  });
-
-  it("an unknown email answers exactly like a wrong password (no existence leak)", async () => {
-    const res = await (await app()).request(
-      "/auth/sign-in/email",
-      json({ email: "nadie@example.com", password: "wrong-pass-1" }),
-      env,
-    );
-    expect(res.status).toBe(401);
   });
 });
 
@@ -161,24 +135,5 @@ describe("US-S02/sessions rule 2: suspension revokes access immediately", () => 
 
     const me = await (await app()).request("/auth/me", { headers: { Cookie: cookie } }, env);
     expect(me.status).toBe(401);
-  });
-});
-
-describe("US-S06 / better-auth D17: a new password closes the doors the old one opened", () => {
-  it("the session that was alive before the reset answers 401 after it (scenario 18)", async () => {
-    await seedBusiness();
-    const before = await sessionCookieHeader("demo@devolada.app");
-    expect((await (await app()).request("/auth/me", { headers: { Cookie: before } }, env)).status).toBe(200);
-
-    await (await app()).request("/auth/email-otp/request-password-reset", json({ email: "demo@devolada.app" }), env);
-    const otp = await lastCodeFor("demo@devolada.app");
-    const reset = await (await app()).request(
-      "/auth/email-otp/reset-password",
-      json({ email: "demo@devolada.app", otp, password: "nueva-clave-9" }),
-      env,
-    );
-    expect(reset.status).toBe(200);
-
-    expect((await (await app()).request("/auth/me", { headers: { Cookie: before } }, env)).status).toBe(401);
   });
 });

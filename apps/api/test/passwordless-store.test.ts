@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { env, fetchMock } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { and, eq } from "drizzle-orm";
@@ -21,6 +21,7 @@ import {
   storeSignInCodeResponse,
   storeSignInResponse,
 } from "../src/routes/store/schema";
+import { REFUSAL_ROUND_TRIPS } from "../src/routes/store/handler";
 import { app, cookiesOf, json, mintCode, seedBusiness, seedLegacyUser, sentCode, sessionCookieHeader, sessionOf } from "./helpers";
 import { seedActiveStore, seedStore } from "./store-helpers";
 
@@ -48,6 +49,11 @@ const invitationRow = async () => (await db().select().from(storeInvitations))[0
 const storeRow = async (id: string) => (await db().select().from(stores).where(eq(stores.id, id)))[0];
 /* Every código the sender logged in this test (setup.ts keeps them) */
 const loggedCodes = () => (globalThis as { [k: symbol]: Map<string, string> })[Symbol.for("devolada.test.sentCodes")];
+
+/* passwordless-access D2: a código past its ten minutes, as the clock
+   would leave it */
+const ageCode = (email: string) =>
+  db().update(verification).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(verification.identifier, `sign-in-otp-${email}`));
 
 /* better-auth D11: the suite pins AUTH_RATE_LIMIT=off; these hand the app
    an env without the pin (rate-limit.test.ts's `armed`) */
@@ -163,6 +169,19 @@ describe("passwordless-access US6 — the acceptance, a new address (D10, cash-a
     expect((await invitationRow()).status).toBe("sent");
   });
 
+  it("a código past its ten minutes is OTP_EXPIRED, and writes nothing (D2)", async () => {
+    const { store, token } = await invite();
+    await askCode(token, "lupita@correo.mx");
+    await ageCode("lupita@correo.mx");
+    const res = await acceptWith(token, "lupita@correo.mx", sentCode("lupita@correo.mx"));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("OTP_EXPIRED");
+    expect(cookiesOf(res).some((c) => c.includes("session_token"))).toBe(false);
+    expect(await userOf("lupita@correo.mx")).toBeUndefined();
+    expect(await storeRow(store.id)).toMatchObject({ status: "invited", userId: null });
+    expect((await invitationRow()).status).toBe("sent");
+  });
+
   it("a malformed body is VALIDATION_ERROR: a password, or a código that is not six digits", async () => {
     const { token } = await invite();
     for (const body of [
@@ -223,6 +242,18 @@ describe("passwordless-access US6 — the acceptance, a taken address (D10, FR-0
     expect(await storeRow(store.id)).toMatchObject({ status: "invited", userId: null });
     expect((await invitationRow()).status).toBe("sent");
   });
+
+  it("a user's address with a código past its ten minutes is OTP_EXPIRED: the address is not named (D2, FR-032)", async () => {
+    const { store, token } = await invite();
+    await seedBusiness({ email: "tomado@correo.mx" });
+    await askCode(token, "tomado@correo.mx");
+    await ageCode("tomado@correo.mx");
+    const res = await acceptWith(token, "tomado@correo.mx", sentCode("tomado@correo.mx"));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("OTP_EXPIRED");
+    expect(await storeRow(store.id)).toMatchObject({ status: "invited", userId: null });
+    expect((await invitationRow()).status).toBe("sent");
+  });
 });
 
 /* The race D10 guards: the address gains an account between the taken
@@ -269,6 +300,36 @@ function racingDB(onChecked: () => Promise<void>, at: RegExp = TAKEN_CHECK): D1D
   });
 }
 
+/* D1 failing the statement `at` names, once, before it runs — a dropped
+   connection on that statement and nothing else. `hits` counts the
+   failures, so a test can see the statement was reached. */
+const PLUGIN_SESSION_INSERT = /^insert into "session"/;
+const PLUGIN_USER_READ = /^select "id", "name", "email", .* from "user" where "user"\."email" = \?/;
+function failingDB(at: RegExp, hits: { count: number }): D1Database {
+  const real = env.DB;
+  const fail = (stmt: D1PreparedStatement): D1PreparedStatement =>
+    new Proxy(stmt, {
+      get(target, prop) {
+        if (prop === "bind") return (...values: unknown[]) => fail(target.bind(...values));
+        if (prop === "all" || prop === "raw" || prop === "first" || prop === "run") {
+          return async () => {
+            hits.count++;
+            throw new Error("D1_ERROR: Network connection lost.");
+          };
+        }
+        const value = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  return new Proxy(real, {
+    get(target, prop) {
+      if (prop === "prepare") return (query: string) => (hits.count === 0 && at.test(query) ? fail(target.prepare(query)) : target.prepare(query));
+      const value = Reflect.get(target, prop);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
 describe("passwordless-access US6 — the race guard (D10)", () => {
   it("an address that gains a membership between the check and the sign-in is EMAIL_TAKEN, with no session left and no link written", async () => {
     const { business, store, token } = await invite();
@@ -301,6 +362,34 @@ describe("passwordless-access US6 — the race guard (D10)", () => {
 
     expect(await sessionsOf(racerId)).toHaveLength(0);
     /* the other person's account is theirs, untouched */
+    expect(await userOf("lupita@correo.mx")).toMatchObject({ id: racerId, name: "Otra Persona", username: null });
+    expect(await storeRow(store.id)).toMatchObject({ status: "invited", userId: null });
+    expect((await invitationRow()).status).toBe("sent");
+  });
+
+  it("an address taken between the plugin's own read and its insert is EMAIL_TAKEN, and the other account is kept whole (adversarial review, 2026-10-03)", async () => {
+    const { store, token } = await invite();
+    await askCode(token, "lupita@correo.mx");
+    let racerId = "";
+    const racing = {
+      ...(env as unknown as Bindings),
+      /* born with nothing yet — what the undo would remove were it ours */
+      DB: racingDB(async () => {
+        racerId = (
+          await (await makeAuth(env as unknown as Bindings).$context).internalAdapter.createUser({
+            name: "Otra Persona",
+            email: "lupita@correo.mx",
+            emailVerified: true,
+          })
+        ).id;
+      }, PLUGIN_USER_READ),
+    };
+
+    const res = await acceptWith(token, "lupita@correo.mx", sentCode("lupita@correo.mx"), racing);
+    expect(racerId).not.toBe("");
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("EMAIL_TAKEN");
+    expect(cookiesOf(res).some((c) => c.includes("session_token"))).toBe(false);
     expect(await userOf("lupita@correo.mx")).toMatchObject({ id: racerId, name: "Otra Persona", username: null });
     expect(await storeRow(store.id)).toMatchObject({ status: "invited", userId: null });
     expect((await invitationRow()).status).toBe("sent");
@@ -369,6 +458,59 @@ describe("passwordless-access US6 — the acceptance's rollback (D10, cash-at-st
     expect(kept).toBeDefined();
     expect((await sessionsOf(kept.id)).map((row) => row.token)).toEqual([otherToken]);
   });
+
+  it("an error between the user's birth and the store's link undoes the user: her own address still accepts (adversarial review, 2026-10-02)", async () => {
+    const { store, token } = await invite();
+    await askCode(token, "lupita@correo.mx");
+    /* D1 drops the connection on the race guard's store read */
+    const failing = {
+      ...(env as unknown as Bindings),
+      DB: racingDB(async () => {
+        throw new Error("D1_ERROR: Network connection lost.");
+      }, GUARD_STORE_READ),
+    };
+
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await acceptWith(token, "lupita@correo.mx", sentCode("lupita@correo.mx"), failing);
+    quiet.mockRestore();
+    expect(res.status).toBe(500);
+    expect(cookiesOf(res).some((c) => c.includes("session_token"))).toBe(false);
+    /* no verified orphan is left to read as someone else's account */
+    expect(await userOf("lupita@correo.mx")).toBeUndefined();
+    expect(await storeRow(store.id)).toMatchObject({ status: "invited", userId: null });
+    expect((await invitationRow()).status).toBe("sent");
+
+    await askCode(token, "lupita@correo.mx");
+    const retry = await acceptWith(token, "lupita@correo.mx", sentCode("lupita@correo.mx"));
+    expect(retry.status).toBe(201);
+    expect((await storeRow(store.id)).status).toBe("active");
+    expect((await invitationRow()).status).toBe("accepted");
+  });
+
+  it("an error on the plugin's own session insert, after it bore the user, undoes the user too: her own address still accepts (adversarial review, 2026-10-03)", async () => {
+    const { store, token } = await invite();
+    await askCode(token, "lupita@correo.mx");
+    /* D1 drops the connection on the session insert, inside signInEmailOTP */
+    const hits = { count: 0 };
+    const failing = { ...(env as unknown as Bindings), DB: failingDB(PLUGIN_SESSION_INSERT, hits) };
+
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await acceptWith(token, "lupita@correo.mx", sentCode("lupita@correo.mx"), failing);
+    quiet.mockRestore();
+    expect(hits.count).toBe(1);
+    expect(res.status).toBe(500);
+    expect(cookiesOf(res).some((c) => c.includes("session_token"))).toBe(false);
+    /* no verified orphan is left to read as someone else's account */
+    expect(await userOf("lupita@correo.mx")).toBeUndefined();
+    expect(await storeRow(store.id)).toMatchObject({ status: "invited", userId: null });
+    expect((await invitationRow()).status).toBe("sent");
+
+    await askCode(token, "lupita@correo.mx");
+    const retry = await acceptWith(token, "lupita@correo.mx", sentCode("lupita@correo.mx"));
+    expect(retry.status).toBe(201);
+    expect((await storeRow(store.id)).status).toBe("active");
+    expect((await invitationRow()).status).toBe("accepted");
+  });
 });
 
 describe("passwordless-access US6 — leaving before the código (FR-031, analysis G3)", () => {
@@ -395,6 +537,78 @@ describe("passwordless-access US6 — leaving before the código (FR-031, analys
     expect((await invitationRow()).status).toBe("accepted");
   });
 });
+
+/* FR-033's "as fast" (adversarial review, 2026-10-02), read from outside
+   the handler. `recordingDB` keeps the text of every statement a request
+   prepares, in order — the work it did, without its values. `gatedDB`
+   holds the statement `at` names until `gate` opens, so a test can see
+   whether the answer waited for it. */
+function recordingDB(log: string[]): D1Database {
+  const real = env.DB;
+  return new Proxy(real, {
+    get(target, prop) {
+      if (prop === "prepare") {
+        return (query: string) => {
+          log.push(query);
+          return target.prepare(query);
+        };
+      }
+      const value = Reflect.get(target, prop);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+function gatedDB(at: RegExp, gate: Promise<void>): D1Database {
+  const real = env.DB;
+  const hold = (stmt: D1PreparedStatement): D1PreparedStatement =>
+    new Proxy(stmt, {
+      get(target, prop) {
+        if (prop === "bind") return (...values: unknown[]) => hold(target.bind(...values));
+        if (prop === "all" || prop === "raw" || prop === "first" || prop === "run") {
+          return async (...args: unknown[]) => {
+            await gate;
+            return (target[prop] as (...a: unknown[]) => Promise<unknown>)(...args);
+          };
+        }
+        const value = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  return new Proxy(real, {
+    get(target, prop) {
+      if (prop === "prepare") return (query: string) => (at.test(query) ? hold(target.prepare(query)) : target.prepare(query));
+      const value = Reflect.get(target, prop);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+/* A D1 primary far from the Worker: every statement waits `ms` before it
+   runs. The refusals it times run no batch. */
+function slowDB(ms: number): D1Database {
+  const real = env.DB;
+  const slow = (stmt: D1PreparedStatement): D1PreparedStatement =>
+    new Proxy(stmt, {
+      get(target, prop) {
+        if (prop === "bind") return (...values: unknown[]) => slow(target.bind(...values));
+        if (prop === "all" || prop === "raw" || prop === "first" || prop === "run") {
+          return async (...args: unknown[]) => {
+            await new Promise((resolve) => setTimeout(resolve, ms));
+            return (target[prop] as (...a: unknown[]) => Promise<unknown>)(...args);
+          };
+        }
+        const value = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  return new Proxy(real, {
+    get(target, prop) {
+      if (prop === "prepare") return (query: string) => slow(target.prepare(query));
+      const value = Reflect.get(target, prop);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
 
 describe("passwordless-access US6 — the phone door (D10, FR-033, FR-034)", () => {
   it("sends the código to the store's email, and the código signs in — the cookie is the store's", async () => {
@@ -454,6 +668,119 @@ describe("passwordless-access US6 — the phone door (D10, FR-033, FR-034)", () 
       expect(await res.text()).toBe(strangerBody);
       expect(cookiesOf(res).some((c) => c.includes("session_token"))).toBe(false);
     }
+  });
+
+  it("a código past its ten minutes reads exactly as a stranger's phone (D2, FR-033)", async () => {
+    const { email } = await seedActiveStore({ phone: "5512345678" });
+    const strangerBody = await (await signIn("5599999999", "123456")).text();
+    await askPhoneCode("5512345678");
+    await ageCode(email);
+    const res = await signIn("5512345678", sentCode(email));
+    expect(res.status).toBe(400);
+    expect(await res.text()).toBe(strangerBody);
+    expect(cookiesOf(res).some((c) => c.includes("session_token"))).toBe(false);
+  });
+
+  it("a stranger's phone does the same work as a store's: both reach the plugin's código check (FR-033; adversarial review, 2026-10-02)", async () => {
+    await seedActiveStore({ phone: "5512345678" });
+    const stranger: string[] = [];
+    const store: string[] = [];
+    expect((await signIn("5599999999", "123456", { ...env, DB: recordingDB(stranger) })).status).toBe(400);
+    expect((await signIn("5512345678", "123456", { ...env, DB: recordingDB(store) })).status).toBe(400);
+    expect(stranger.filter((q) => q.includes('"verification"')).length).toBeGreaterThan(0);
+    expect(stranger).toEqual(store);
+    /* the address it checked holds nothing, before or after */
+    expect(await db().select().from(verification)).toHaveLength(0);
+  });
+
+  it("every refusal answers no sooner than the floor; a sign-in is not held (FR-033; adversarial review, 2026-10-02)", async () => {
+    const { email } = await seedActiveStore({ phone: "5512345678" });
+    const FLOOR = 500;
+    const floored = { ...env, STORE_SIGN_IN_FLOOR_MS: String(FLOOR) };
+    const timed = async (phone: string, otp: string) => {
+      const started = Date.now();
+      const res = await signIn(phone, otp, floored);
+      return { status: res.status, ms: Date.now() - started };
+    };
+
+    const stranger = await timed("5599999999", "123456");
+    expect(stranger.status).toBe(400);
+    expect(stranger.ms).toBeGreaterThanOrEqual(FLOOR);
+
+    await askPhoneCode("5512345678");
+    const right = sentCode(email);
+    const wrong = await timed("5512345678", right === "000000" ? "111111" : "000000");
+    expect(wrong.status).toBe(400);
+    expect(wrong.ms).toBeGreaterThanOrEqual(FLOOR);
+
+    const signedIn = await timed("5512345678", right);
+    expect(signedIn.status).toBe(200);
+    expect(signedIn.ms).toBeLessThan(FLOOR);
+  });
+
+  it("a far D1 primary raises the floor to ten of the store lookup's round trips, for a stranger's phone and a live código alike (FR-033; adversarial review, 2026-10-03)", async () => {
+    const { email } = await seedActiveStore({ phone: "5512345678" });
+    /* a base far under the work, and every statement held 40 ms: a live
+       código's wrong guess then works ~320 ms and a stranger's ~200 ms */
+    const STATEMENT_MS = 40;
+    const far = { ...env, STORE_SIGN_IN_FLOOR_MS: "50", DB: slowDB(STATEMENT_MS) };
+    const timed = async (phone: string, otp: string) => {
+      const started = Date.now();
+      const res = await signIn(phone, otp, far);
+      return { status: res.status, ms: Date.now() - started };
+    };
+
+    const stranger = await timed("5599999999", "123456");
+    expect(stranger.status).toBe(400);
+    expect(stranger.ms).toBeGreaterThanOrEqual(REFUSAL_ROUND_TRIPS * STATEMENT_MS);
+
+    await askPhoneCode("5512345678");
+    const right = sentCode(email);
+    const wrong = await timed("5512345678", right === "000000" ? "111111" : "000000");
+    expect(wrong.status).toBe(400);
+    expect(wrong.ms).toBeGreaterThanOrEqual(REFUSAL_ROUND_TRIPS * STATEMENT_MS);
+  });
+
+  it("a wrong guess on a live código runs fewer statements than the floor counts round trips, so the floor still covers it (FR-033; adversarial review, 2026-10-03)", async () => {
+    const { email } = await seedActiveStore({ phone: "5512345678" });
+    await askPhoneCode("5512345678");
+    const right = sentCode(email);
+    const log: string[] = [];
+    const res = await signIn("5512345678", right === "000000" ? "111111" : "000000", { ...env, DB: recordingDB(log) });
+    expect(res.status).toBe(400);
+    /* the live path: the guess rewrote the código's row with one more try */
+    expect(log.some((q) => q.startsWith('insert into "verification"'))).toBe(true);
+    /* measured 2026-10-03 with better-auth 1.6.29: 8 statements */
+    expect(log.length).toBeLessThan(REFUSAL_ROUND_TRIPS);
+  });
+
+  it("a store's phone is answered before its código is written: the send rides waitUntil (FR-033; adversarial review, 2026-10-02)", async () => {
+    const { email } = await seedActiveStore({ phone: "5512345678" });
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    const waits: Promise<unknown>[] = [];
+    const ctx = {
+      waitUntil: (work: Promise<unknown>) => void waits.push(work),
+      passThroughOnException: () => {},
+    } as unknown as ExecutionContext;
+    const gated = { ...env, DB: gatedDB(/^insert into "verification"/, gate) };
+
+    const pending = (await app()).request("/store/sign-in/code", json({ phone: "5512345678" }), gated, ctx);
+    try {
+      const answered = await Promise.race([pending, new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000))]);
+      /* the answer came while the código's write was still held */
+      expect(answered?.status).toBe(200);
+      expect(await answered!.json()).toEqual({ success: true, data: { sent: true } });
+      expect(loggedCodes().size).toBe(0);
+      expect(await codeRows(email)).toHaveLength(0);
+      expect(waits).toHaveLength(1);
+    } finally {
+      open();
+      await pending;
+    }
+    await Promise.all(waits);
+    expect([...loggedCodes().keys()]).toEqual([email]);
+    expect(await codeRows(email)).toHaveLength(1);
   });
 
   it("a phone that is not ten national digits is VALIDATION_ERROR on both calls", async () => {
@@ -544,10 +871,12 @@ describe("passwordless-access US6 — no account from the store app but the acce
     await askCode(token, "nueva@correo.mx");
     await askPhoneCode("5599999999");
     await signIn("5599999999", "123456");
-    /* the phone door never reaches the plugin with an address of its own:
-       even the address's right código, typed with a stranger's phone, opens nothing */
+    /* the phone door reaches the plugin only with an address a store names
+       or one nobody could predict: even the address's right código, typed
+       with a stranger's phone, opens nothing, and nothing is written */
     await signIn("5599999999", sentCode("nueva@correo.mx"));
     expect((await db().select().from(userTable)).length).toBe(before);
+    expect((await db().select().from(verification)).map((v) => v.identifier)).toEqual(["sign-in-otp-nueva@correo.mx"]);
 
     /* the acceptance is the one door that births one */
     expect((await acceptWith(token, "nueva@correo.mx", sentCode("nueva@correo.mx"))).status).toBe(201);
@@ -592,5 +921,13 @@ describe("passwordless-access US6 — the store routes' limits (D3)", () => {
     const { token } = await invite();
     for (let i = 0; i < 3; i++) expect((await askCode(token, "lupita@correo.mx", armed())).status).toBe(200);
     expect((await askCode(token, "lupita@correo.mx", armed())).status).toBe(429);
+  });
+
+  it("the sixth acceptance within 60 s answers 429: our own código check, which Better Auth's limiter never sees (FR-027)", async () => {
+    const { token } = await invite();
+    for (let i = 0; i < 5; i++) expect((await acceptWith(token, "lupita@correo.mx", "000000", armed())).status).toBe(400);
+    const sixth = await acceptWith(token, "lupita@correo.mx", "000000", armed());
+    expect(sixth.status).toBe(429);
+    expect(sixth.headers.get("x-retry-after")).toBeTruthy();
   });
 });

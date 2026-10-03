@@ -1,14 +1,24 @@
-import { Alert, Button, Input, PasskeyOffer, Pending, type PasskeyOfferState } from "@devolada/ui";
+import { Alert, Button, Input, ListError, PasskeyOffer, Pending, type PasskeyOfferState } from "@devolada/ui";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Fingerprint } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { ApiError } from "@/lib/api";
 import { canVerifyPerson, passkeysSupported } from "@/lib/auth-client";
+import { SuspendedScreen } from "../shell/SuspendedScreen";
 import { AccessLayout } from "./AccessLayout";
 import { CodeStep, OrWithCode } from "./CodeStep";
 import { accessProblem, activateKey, signInWithKey, TOO_MANY } from "./keys";
-import { sendCode, signInWithCode, updateName, useUser } from "./session";
+import {
+  sendCode,
+  signInWithCode,
+  updateName,
+  useSession,
+  useUser,
+  type BusinessActor,
+  type SessionUser,
+} from "./session";
 
 /* Access pages (better-auth.spec.md UI contract; passwordless-access D6).
    Controlled forms, plain es-MX copy, answers that never leak account
@@ -19,21 +29,30 @@ import { sendCode, signInWithCode, updateName, useUser } from "./session";
 
 /* passwordless-access D6: a request that sends a código, or saves a name.
    A 429 is the limiter's wait, said as such (FR-027); anything else is the
-   screen's own fallback. */
+   screen's own fallback — except an address Better Auth refuses
+   (adversarial review, 2026-10-02). Its check is zod's `z.email()`,
+   stricter than EMAIL_SHAPE below (a non-ASCII local part, a one-letter
+   ending, two dots in a row), and its 400 INVALID_EMAIL goes under the
+   field as `badEmail`: an edit fixes it, a "try again" never could. */
 function useSend(action: () => Promise<unknown>, onDone: () => void, fallback = "No pudimos enviar el código. Intenta de nuevo.") {
   const [error, setError] = useState<string | null>(null);
+  const [badEmail, setBadEmail] = useState(false);
   const [busy, setBusy] = useState(false);
   return {
     error,
     busy,
+    badEmail,
+    clearBadEmail: () => setBadEmail(false),
     async run() {
       setBusy(true);
       setError(null);
+      setBadEmail(false);
       try {
         await action();
         onDone();
       } catch (e) {
-        setError(accessProblem(e) === "tooMany" ? TOO_MANY : fallback);
+        if (e instanceof ApiError && e.code === "INVALID_EMAIL") setBadEmail(true);
+        else setError(accessProblem(e) === "tooMany" ? TOO_MANY : fallback);
       } finally {
         setBusy(false);
       }
@@ -45,16 +64,24 @@ function useSend(action: () => Promise<unknown>, onDone: () => void, fallback = 
    2026-09-02): the server's 400 used to be the first word the person
    heard about a one-letter name or a short password. The rules mirror
    the API's (name 2–80 once trimmed: passwordless-access analysis A3;
-   email). */
+   email). Both ends of the name, and the field stops at its maximum
+   (adversarial review, 2026-10-02): a longer name used to reach the
+   server first, whose INVALID_NAME read as a código that failed. */
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const nameProblem = (v: string) => (v.trim().length < 2 ? "Escribe tu nombre, al menos 2 letras." : null);
-const emailProblem = (v: string) => (EMAIL_SHAPE.test(v.trim()) ? null : "Escribe un correo válido, como nombre@dominio.com.");
+const EMAIL_HINT = "Escribe un correo válido, como nombre@dominio.com.";
+export const NAME_MAX = 80;
+export const nameProblem = (v: string) => {
+  const length = v.trim().length;
+  if (length < 2) return "Escribe tu nombre, al menos 2 letras.";
+  return length > NAME_MAX ? "Escribe tu nombre en 80 letras o menos." : null;
+};
+const emailProblem = (v: string) => (EMAIL_SHAPE.test(v.trim()) ? null : EMAIL_HINT);
 
 /* `next` is any same-app path the route already validated; the router's
    `to` wants a literal route name, so the string goes through unchecked. */
 const asRoute = (path: string) => path as "/";
 
-function FieldError({ id, children }: { id: string; children: string | null }) {
+export function FieldError({ id, children }: { id: string; children: string | null }) {
   if (!children) return null;
   return (
     <p id={id} role="alert" className="mt-1 text-sm font-medium text-error">
@@ -145,7 +172,19 @@ export function LoginPage() {
         >
           <div>
             <Label htmlFor="email">Correo</Label>
-            <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                send.clearBadEmail();
+              }}
+              aria-invalid={send.badEmail || undefined}
+              aria-describedby={send.badEmail ? "email-error" : undefined}
+            />
+            <FieldError id="email-error">{send.badEmail ? EMAIL_HINT : null}</FieldError>
           </div>
           {send.error && <Alert variant="destructive">{send.error}</Alert>}
           <Pending active={send.busy} label="Enviando el código.">
@@ -181,9 +220,10 @@ export function SignupPage() {
   const [email, setEmail] = useState("");
   const [touched, setTouched] = useState<{ name?: boolean; email?: boolean }>({});
   const problems = { name: nameProblem(name), email: emailProblem(email) };
-  const shown = (field: keyof typeof problems) => (touched[field] ? problems[field] : null);
   const address = email.trim();
   const send = useSend(() => sendCode(address), () => setStep("code"));
+  const shown = (field: keyof typeof problems) =>
+    (touched[field] ? problems[field] : null) ?? (field === "email" && send.badEmail ? EMAIL_HINT : null);
 
   if (step === "code") {
     return (
@@ -220,6 +260,7 @@ export function SignupPage() {
           <Input
             id="name"
             autoComplete="name"
+            maxLength={NAME_MAX}
             value={name}
             onChange={(e) => setName(e.target.value)}
             onBlur={() => setTouched((t) => ({ ...t, name: true }))}
@@ -235,7 +276,10 @@ export function SignupPage() {
             type="email"
             autoComplete="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              send.clearBadEmail();
+            }}
             onBlur={() => setTouched((t) => ({ ...t, email: true }))}
             aria-invalid={Boolean(shown("email")) || undefined}
             aria-describedby={shown("email") ? "email-error" : undefined}
@@ -272,46 +316,114 @@ const OUTCOME_BEAT_MS = 1200;
    2. a device that can verify the person itself (`canVerifyPerson`, not
       merely `passkeysSupported`: D7) is offered the key, with "Ahora no".
    When neither applies it navigates before painting: nobody sees a flash
-   of it. */
+   of it.
+   Adversarial review, 2026-10-02: it reads the actor the way the shell
+   does, and an account the panel refuses is never asked or offered
+   anything first — the panel would promise a key, then refuse the
+   account. A session with no business yet, none chosen or a revoked
+   membership is the panel's person still, and is offered as any other.
+   A suspended business is told here, on /welcome itself: the server
+   deletes the session in the same answer that says ACCOUNT_SUSPENDED
+   (the API's businessActorOf, auth/middleware.ts), so the shell's own
+   read, one step on, would hear only "no session" and send the person
+   back to /login — a loop of códigos that never named the suspension.
+   Every other refusal (a store's account, WRONG_ACTOR: cash-at-stores D2;
+   a suspended store; no session) goes on unoffered, and `next` answers it
+   as it did before /welcome read the actor. */
+const OFFERED_STILL = ["NO_BUSINESS", "NO_ACTIVE_BUSINESS", "MEMBERSHIP_REVOKED"];
+
+/* Adversarial review, 2026-10-02: a read that got no answer — the network,
+   a 5xx, a body that is not the envelope — is the only failure a retry can
+   mend. A 4xx is the server's answer, and offering «Reintentar» on it
+   (a suspended store's, whose session is already gone) promised what no
+   retry could give. */
+const unanswered = (e: unknown) => !(e instanceof ApiError) || e.status >= 500;
+
+/* D8: the plugin registers a key only on a session younger than Better
+   Auth's `freshAge`, one day (measured 2026-10-02, M2). Every door hands
+   /welcome a session born seconds before; the nameless guards do not — a
+   tab closed at "¿Cómo te llamas?" comes back days later (adversarial
+   review, 2026-10-02) — and an older session is not offered what only
+   Seguridad's step-up can give it. */
+const FRESH_AGE_MS = 24 * 60 * 60 * 1000;
+
 export function WelcomePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { next } = useSearch({ from: "/welcome" });
   const user = useUser();
+  const actor = useSession();
   const [phase, setPhase] = useState<"deciding" | "name" | "offer">("deciding");
   const [offer, setOffer] = useState<PasskeyOfferState>("idle");
   const [name, setName] = useState("");
   const [touched, setTouched] = useState(false);
+  /* State, not the read: the next refetch of a suspended session answers
+     401, and the screen must not leave with it (adversarial review,
+     2026-10-02). */
+  const [suspended, setSuspended] = useState(false);
   const decided = useRef(false);
   const goOn = () => void navigate({ to: next ? asRoute(next) : "/", replace: true });
 
+  /* Adversarial review, 2026-10-02: a read that failed is not "no
+     session". Right after a código the cookie is valid, and sending the
+     person to /login would read as a código that did not work; the
+     failure is said, with a retry, and nothing is decided until a read
+     answers. Only get-session answering null is "signed out". */
+  const actorCode = actor.error?.code;
+  const unread = user.isError || (Boolean(user.data) && actor.isError && unanswered(actor.error));
+
   async function decideOffer() {
-    if (await canVerifyPerson()) setPhase("offer");
+    const bornAt = user.data?.sessionBornAt;
+    const fresh = bornAt === undefined || Date.now() - bornAt < FRESH_AGE_MS;
+    if (fresh && (await canVerifyPerson())) setPhase("offer");
     else goOn();
   }
 
   /* Decided once, like the shell's bounce (better-auth D12's lesson) */
   useEffect(() => {
-    if (user.isPending || decided.current) return;
-    decided.current = true;
+    if (decided.current || user.isPending || unread) return;
     if (!user.data) {
+      decided.current = true;
       void navigate({ to: "/login", search: { next }, replace: true });
       return;
     }
-    if (!user.data.name.trim()) setPhase("name");
+    if (actor.isPending) return;
+    decided.current = true;
+    if (actorCode === "ACCOUNT_SUSPENDED") {
+      setSuspended(true);
+      return;
+    }
+    if (actor.isError && !OFFERED_STILL.includes(actorCode ?? "")) goOn();
+    else if (!user.data.name.trim()) setPhase("name");
     else void decideOffer();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- decided once, on the first answer
-  }, [user.isPending, user.data]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- decided once, on the first answers
+  }, [user.isPending, user.data, unread, actor.isPending, actorCode]);
 
   const save = useSend(
     () => updateName(name.trim()),
     () => {
-      void queryClient.invalidateQueries({ queryKey: ["user"] });
-      void queryClient.invalidateQueries({ queryKey: ["session"] });
+      /* Adversarial review, 2026-10-02: the guard that sent the person here
+         (the shell's, the wizard's) mounts again on `next` and reads the
+         cache before any refetch answers. A name only marked stale read
+         there as no name, and sent the person straight back to be asked
+         again. The saved name goes into both cached copies first. */
+      const saved = name.trim();
+      queryClient.setQueryData<SessionUser | null>(["user"], (u) => (u ? { ...u, name: saved } : u));
+      queryClient.setQueryData<BusinessActor>(["session"], (a) => (a ? { ...a, userName: saved } : a));
       void decideOffer();
     },
     "No pudimos guardar tu nombre. Intenta de nuevo.",
   );
+
+  if (suspended) return <SuspendedScreen />;
+
+  if (phase === "deciding" && unread) {
+    return (
+      <AccessLayout>
+        <ListError what="tu sesión" onRetry={() => Promise.all([user.refetch(), actor.refetch()])} />
+      </AccessLayout>
+    );
+  }
 
   if (phase === "name") {
     const problem = touched ? nameProblem(name) : null;
@@ -333,6 +445,7 @@ export function WelcomePage() {
               id="name"
               autoComplete="name"
               autoFocus
+              maxLength={NAME_MAX}
               value={name}
               onChange={(e) => setName(e.target.value)}
               onBlur={() => setTouched(true)}
@@ -359,7 +472,9 @@ export function WelcomePage() {
           deviceWord="este dispositivo"
           state={offer}
           /* D7: the ceremony starts inside this click — Safari refuses a
-             WebAuthn call without a user gesture */
+             WebAuthn call without a user gesture. Nothing is awaited before
+             activateKey(), which calls the client before its own first
+             await (welcome.test proves it inside the click's dispatch). */
           onActivate={() => {
             setOffer("busy");
             void activateKey().then((outcome) => {
@@ -367,6 +482,11 @@ export function WelcomePage() {
                 setOffer(outcome);
                 void queryClient.invalidateQueries({ queryKey: ["passkeys"] });
                 setTimeout(goOn, OUTCOME_BEAT_MS);
+              } else if (outcome === "notFresh") {
+                /* D8 (adversarial review, 2026-10-02): a session that turned
+                   a day old while the offer was open. No retry here can
+                   work; Seguridad's step-up can, so the way on is `next` */
+                goOn();
               } else {
                 /* FR-009: one line, and both ways on */
                 setOffer("failed");

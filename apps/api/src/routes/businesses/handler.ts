@@ -2,8 +2,9 @@ import type { Context } from "hono";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { Bindings, Variables } from "../../env";
-import { businesses, invitation, member, organization, user as userTable, verification } from "../../db/schema";
+import { businesses, invitation, member, organization, user as userTable } from "../../db/schema";
 import { isStoreUser, makeAuth } from "../../auth/better";
+import { codeOf, otpRefusal } from "../../auth/otp-refusal";
 import { findActor } from "../../auth/middleware";
 import { grantableRoles, isRole, roleCan, ROLE_RANK, type Role } from "../../auth/roles";
 import { grantWelcomeBonus } from "../../credit";
@@ -353,49 +354,87 @@ export async function myInvitations(c: Ctx) {
 }
 
 /* The cookies Better Auth just set, as a request header — for calling
-   its own API on behalf of the user it just created. */
+   its own API on behalf of the user it just signed in. */
 function cookieHeadersFrom(from: Headers): Headers {
   const cookies = (from as Headers & { getSetCookie(): string[] }).getSetCookie();
   return new Headers({ Cookie: cookies.map((c) => c.split(";")[0]).join("; ") });
 }
 
 /* D14: the invitee without an account creates it here — the email is the
-   invitation's — and lands inside the business. The invitation proves the
-   address (it arrived in that inbox), so the user is born verified and no
-   código goes out.
-   passwordless-access D9: a name, and no password. The account is born
-   through the email-OTP plugin's own door rather than by hand: a código is
-   minted on the server (`createVerificationOTP`, server-only) and consumed
-   at once by `signInEmailOTP`, which creates the user verified and named
-   and opens its session — signing Better Auth's cookie ourselves would
-   couple us to its format. */
+   invitation's, never typed — and lands inside the business.
+
+   passwordless-access D9, as amended 2026-10-03 (spec Clarifications Q5,
+   FR-004, FR-019): the invitation does NOT prove the inbox. Its id is this
+   route's key, and the panel hands it to the inviter (`inviteMember`'s
+   answer) and to every owner and admin (`listMembers`' pending list). Born
+   from the id alone, the account was anyone's who could send an
+   invitation: open it, add a key, keep it after the real person arrived,
+   with no password reset left to shut them out (adversarial review,
+   2026-10-02). The proof is the código sent to the invited address, which
+   the page asks for through `send-verification-otp` (the address shown as
+   text, never typed). In this order:
+     1. the invitation, pending and alive — else INVITATION_NOT_FOUND;
+     2. an address with an account is EMAIL_TAKEN, before any código is
+        checked: the page's `hasAccount` branch (the key, or a código and
+        the plugin's acceptance) is its door, and the preview already says
+        so to the link's holder;
+     3. `signInEmailOTP` with the invited address, the código and the name:
+        the user is born verified, named, with a session. A refusal of the
+        código is the plugin's own word, and nothing is born;
+     4. the acceptance and the active business, on the new session;
+     5. the cookies, forwarded.
+   No race guard as the store's (D10) and no undo: whoever typed the
+   código holds the inbox, so the account is theirs whatever follows. An
+   account the address gained between steps 2 and 3 is opened instead (the
+   plugin signs into it); one the plugin left without a session when its
+   insert failed meets step 2 at the retry, whose door is the account
+   branch; and when the invitation dies between steps 1 and 4, the account
+   stays with its session, as a registration's would, and the answer is
+   INVITATION_NOT_FOUND. No separate refusal of an operator's address
+   either (D9's amendment): the código proves its holder, and an operator
+   may be a business's member. */
 export async function acceptInvitationAsNewUser(c: Ctx, invitationId: string, body: AcceptInvitationNewRequest) {
   const db = drizzle(c.env.DB);
   const [row] = await db.select().from(invitation).where(eq(invitation.id, invitationId));
   if (!row || row.status !== "pending" || row.expiresAt.getTime() < Date.now()) {
     return c.json({ success: false, error: { code: "INVITATION_NOT_FOUND" } }, 404);
   }
-  const [existing] = await db.select({ id: userTable.id }).from(userTable).where(eq(userTable.email, row.email));
+  const email = row.email.toLowerCase();
+  const [existing] = await db.select({ id: userTable.id }).from(userTable).where(eq(userTable.email, email));
   if (existing) return c.json({ success: false, error: { code: "EMAIL_TAKEN" } }, 409);
 
   const auth = makeAuth(c.env);
-  const email = row.email.toLowerCase();
-  /* D9 step 1: a live sign-in código for this address (the invitee asked
-     for one on /login, say) goes first. The plugin keeps one live row per
-     address (D2), and a stray one would be the row the next step checks. */
-  await db.delete(verification).where(eq(verification.identifier, `sign-in-otp-${email}`));
-  const otp = await auth.api.createVerificationOTP({ body: { email, type: "sign-in" } });
-  const { headers, response } = await auth.api.signInEmailOTP({
-    body: { email, otp, name: body.name },
-    returnHeaders: true,
-  });
-  const user = response.user;
+  let signedIn: { headers: Headers; response: { user: { id: string; name: string; email: string } } };
+  try {
+    signedIn = await auth.api.signInEmailOTP({
+      body: { email, otp: body.otp, name: body.name },
+      returnHeaders: true,
+    });
+  } catch (e) {
+    const refused = otpRefusal(c, e);
+    if (refused) return refused;
+    throw e;
+  }
+  const { headers, response } = signedIn;
+  /* Step 5 first: from here on, every answer carries the session the
+     código proved */
+  for (const cookie of (headers as Headers & { getSetCookie(): string[] }).getSetCookie()) {
+    c.header("set-cookie", cookie, { append: true });
+  }
+
   const asNewUser = cookieHeadersFrom(headers);
-  await auth.api.acceptInvitation({ headers: asNewUser, body: { invitationId } });
+  try {
+    await auth.api.acceptInvitation({ headers: asNewUser, body: { invitationId } });
+  } catch (e) {
+    /* The invitation died after step 1 — cancelled, accepted, or past its
+       48 hours: the plugin's own check, at its own moment */
+    if (codeOf(e) === "INVITATION_NOT_FOUND") {
+      return c.json({ success: false, error: { code: "INVITATION_NOT_FOUND" } }, 404);
+    }
+    throw e;
+  }
   await auth.api.setActiveOrganization({ headers: asNewUser, body: { organizationId: row.organizationId } });
 
-  const cookies = (headers as Headers & { getSetCookie(): string[] }).getSetCookie();
-  for (const cookie of cookies) c.header("set-cookie", cookie, { append: true });
-  const actor = await findActor(c.env, { ...user, emailVerified: true }, row.organizationId);
+  const actor = await findActor(c.env, { ...response.user, emailVerified: true }, row.organizationId);
   return c.json({ success: true, data: actor }, 201);
 }

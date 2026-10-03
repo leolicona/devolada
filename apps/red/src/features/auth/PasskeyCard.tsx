@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeysCard, type KeysCardKey, type KeysCardStepUp } from "@devolada/ui";
+import { KeysCard, type KeysCardKey, type KeysCardProps, type KeysCardStepUp } from "@devolada/ui";
 import { canVerifyPerson } from "@/lib/auth-client";
 import { baGet, baPost } from "@/lib/api";
 import { useWide } from "@/lib/wide";
@@ -39,7 +39,7 @@ export function PasskeyCard() {
   /* cash-at-stores D32: on a computer at the counter the device is not a phone */
   const deviceWord = useWide() ? "esta computadora" : "este teléfono";
   const [canActivate, setCanActivate] = useState(false);
-  const [activation, setActivation] = useState<"idle" | "busy" | "done" | "failed">("idle");
+  const [activation, setActivation] = useState<KeysCardProps["activation"]>("idle");
   const [removeFailed, setRemoveFailed] = useState(false);
   const [stepUp, setStepUp] = useState<Omit<KeysCardStepUp, "email" | "onCodeChange" | "onSubmit" | "onCancel"> | null>(null);
   const [others, setOthers] = useState<"idle" | "busy" | "done" | "failed">("idle");
@@ -68,14 +68,24 @@ export function PasskeyCard() {
       return;
     }
     if (outcome === "notFresh" && email) {
-      setActivation("idle");
-      setStepUp({ code: "", busy: false, error: null });
+      /* The step-up opens once its código is on its way, never before: a
+         send that fails — a lost signal above all, at a counter — says why
+         beside "Activar", which asks again (adversarial review,
+         2026-10-02). The button holds as "Enviando el código…" meanwhile:
+         the ceremony is over, so "Esperando a tu teléfono…" would have the
+         shopkeeper watch a phone that asks for nothing, for as long as a
+         weak signal keeps the send open. A second press cannot meet the
+         stale session. */
+      setActivation("sending");
       try {
         await sendStepUpCode(email);
       } catch (e) {
-        /* the step-up stays open: "Cancelar", then "Activar", asks again */
-        setStepUp({ code: "", busy: false, error: accessProblem(e) === "tooMany" ? "tooMany" : null });
+        const problem = accessProblem(e);
+        setActivation(problem === "tooMany" || problem === "offline" ? problem : "notSent");
+        return;
       }
+      setActivation("idle");
+      setStepUp({ code: "", busy: false, error: null });
       return;
     }
     /* FR-035: one line, and no password to fall back on */
@@ -88,7 +98,16 @@ export function PasskeyCard() {
     try {
       await confirmStepUpCode(email, stepUp.code);
     } catch (e) {
-      setStepUp({ ...stepUp, busy: false, error: accessProblem(e) === "tooMany" ? "tooMany" : "invalid" });
+      /* Only a refused código is a wrong one. A lost signal is said as
+         such (cash-at-stores T074), and it and anything else keep the
+         código for "Confirmar" to try again (adversarial review,
+         2026-10-02) */
+      const problem = accessProblem(e);
+      setStepUp({
+        ...stepUp,
+        busy: false,
+        error: problem === "code" ? "invalid" : problem === "other" ? "failed" : problem,
+      });
       return;
     }
     setStepUp(null);
@@ -108,6 +127,11 @@ export function PasskeyCard() {
         setRemoveFailed(false);
         try {
           await baPost("/auth/passkey/delete-passkey", { id });
+          /* "Listo. Este teléfono ya puede entrar…" may have named the key
+             just removed, so it gives way to "Activar" again; on a phone
+             that still holds a key, "Activar" answers "Listo." once more
+             (adversarial review, 2026-10-02) */
+          setActivation((now) => (now === "done" ? "idle" : now));
           refresh();
         } catch {
           setRemoveFailed(true);

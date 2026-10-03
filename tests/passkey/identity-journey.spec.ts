@@ -11,11 +11,14 @@ import { expect, test, type Browser, type Page } from "@playwright/test";
 
    passwordless-access US1, US4: no password anywhere. The owner registers
    with a name, an email and its código, and turns on the key on /welcome;
-   the invitee gives a name, and the key; a second invitation, to an
-   account that holds a key, is accepted with the key alone. Códigos are
-   hashed (D2), so the journey mints one with `POST /dev/code` (D14). Each
-   person has their own context, with its own virtual authenticator: a
-   device that can verify the person (D7). */
+   the invitee gives a name and the código sent to the invited address —
+   the invitation's id proves nothing, the owner holds it too (D9 as
+   amended 2026-10-03, spec Clarifications Q5), so six other digits are
+   refused first and birth nothing — then the key; a second
+   invitation, to an account that holds a key, is accepted with the key
+   alone. Códigos are hashed (D2), so the journey mints one with
+   `POST /dev/code` (D14). Each person has their own context, with its own
+   virtual authenticator: a device that can verify the person (D7). */
 
 const API = "http://localhost:8794";
 const ADMIN = "http://localhost:5174";
@@ -54,7 +57,7 @@ async function withAuthenticator(page: Page) {
   });
 }
 
-test("US-B01/US-B03: register by código, turn on the key, name the business, add the CLABE, invite, join by name and key, change role, remove", async ({ browser }) => {
+test("US-B01/US-B03, passwordless-access US1, US4: register by código, turn on the key, name the business, add the CLABE, invite, join by name, código and key, change role, remove", async ({ browser }) => {
   const stamp = Date.now().toString(36);
   const owner = `owner-${stamp}@journey.invalid`;
   const invitee = `ana-${stamp}@journey.invalid`;
@@ -116,8 +119,9 @@ test("US-B01/US-B03: register by código, turn on the key, name the business, ad
   await expect(ownerPage.getByText(new RegExp(`invitación enviada a ${invitee}`, "i"))).toBeVisible();
   await expect(users.getByRole("list", { name: /invitaciones pendientes/i })).toContainText(/vence en/i);
 
-  /* The invitee: the address fixed, a name, the key — inside as operator
-     (passwordless-access D9). No código, no password. */
+  /* The invitee: the address fixed, a name, the código sent to the invited
+     address, the key — inside as operator. No password (passwordless-access
+     D9 as amended 2026-10-03, US4 scenario 4). */
   const { id } = await devRead<{ id: string }>(browser, `/dev/last-invitation?email=${encodeURIComponent(invitee)}`);
   expect(id).toBeTruthy();
   const inviteeContext = await browser.newContext();
@@ -129,13 +133,38 @@ test("US-B01/US-B03: register by código, turn on the key, name the business, ad
   await expect(inviteePage.getByText(invitee)).toBeVisible();
   await expect(inviteePage.getByLabel(/contraseña/i)).toHaveCount(0);
   await inviteePage.getByLabel("Tu nombre").fill("Ana Journey");
-  await inviteePage.getByRole("button", { name: /crear cuenta y entrar/i }).click();
+  await inviteePage.getByRole("button", { name: "Continuar" }).click();
+  /* The código step opens only once the page's own send answered, and the
+     plugin stores the código before it answers — only the email waits
+     (better-auth 1.6.29 `resolveOTP`). So one mint after the step opens is
+     the live código, as on the owner's /signup above: no second try, which
+     would hide a page that sent again behind the person's back */
+  await expect(inviteePage.getByText(`Te enviamos un código a ${invitee}. Vence en 10 minutos.`)).toBeVisible();
+  const code = await devCode(browser, invitee);
+  /* Six digits that are not the inbox's open nothing: the real server
+     refuses them, the real page says so, and no account is born
+     (passwordless-access US4 scenario 7, spec Clarifications Q5). One
+     wrong try stays under the plugin's three and the door's five a minute */
+  await inviteePage.getByLabel("Código").fill(code.replace(/\d$/, (d) => String((Number(d) + 1) % 10)));
+  await inviteePage.getByRole("button", { name: "Crear cuenta", exact: true }).click();
+  await expect(inviteePage.getByText("El código no es válido o ya venció. Reenvíalo e intenta otra vez.")).toBeVisible();
+  expect(
+    await devRead<{ status: string; hasAccount: boolean }>(browser, `/businesses/invitations/${id}/preview`),
+  ).toMatchObject({ status: "pending", hasAccount: false });
+  await inviteePage.getByLabel("Código").fill(code);
+  await inviteePage.getByRole("button", { name: "Crear cuenta", exact: true }).click();
   await expect(inviteePage.getByRole("heading", { name: "Entra la próxima vez con tu huella o rostro" })).toBeVisible();
   await inviteePage.getByRole("button", { name: "Activar huella o rostro" }).click();
   await expect(inviteePage.getByRole("heading", { name: "Pagos" })).toBeVisible();
   await expect(inviteePage.getByText("Operador").first()).toBeVisible();
-  /* Born verified: no código screen for the invitee */
-  await expect(inviteePage.getByRole("heading", { name: "Escribe tu código" })).toHaveCount(0);
+  /* The código proved the inbox: the account was born verified and named
+     (passwordless-access D9 as amended 2026-10-03, FR-019). The context's
+     request carries the page's cookies; the session cookie is localhost's,
+     whatever the port */
+  const born = (await (await inviteeContext.request.get(`${API}/auth/get-session`)).json()) as {
+    user: { email: string; name: string; emailVerified: boolean };
+  };
+  expect(born.user).toMatchObject({ email: invitee, name: "Ana Journey", emailVerified: true });
 
   /* The owner changes the role without re-inviting, then removes */
   await ownerPage.reload();

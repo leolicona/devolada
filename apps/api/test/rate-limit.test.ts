@@ -14,7 +14,8 @@ import { app, json } from "./helpers";
    mistyped twice can still paste it. The password door's cases left with
    the door (D4), and the store's verification code check (`verify-email`)
    with its own in passwordless-access US6 — the store routes' limits are
-   proven in passwordless-store.test.ts. */
+   proven in passwordless-store.test.ts, and accept-new's in
+   passwordless-invitation.test.ts. */
 
 const armed = () => {
   const { AUTH_RATE_LIMIT: _off, ...rest } = env as unknown as Record<string, unknown>;

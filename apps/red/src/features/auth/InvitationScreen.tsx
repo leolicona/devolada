@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MailCheck, TriangleAlert } from "lucide-react";
 import { Alert, Button, Field, Input, Pending, Skeleton } from "@devolada/ui";
 import { ApiError } from "@/lib/api";
-import { canVerifyPerson } from "@/lib/auth-client";
+import { canVerifyPerson, passkeysSupported } from "@/lib/auth-client";
 import { AccessLayout, EMAIL_SHAPE, FieldError } from "./AccessLayout";
 import { CodeStep } from "./CodeStep";
 import { sendProblemLine } from "./keys";
@@ -106,7 +106,15 @@ export function InvitationScreen() {
 
   return (
     <AccessLayout title={`Bienvenido a Devolada, ${storeName}`}>
-      <p className="text-base text-ink-soft">Entrarás con tu huella o rostro, o con un código que te enviamos a tu correo.</p>
+      {/* FR-015: a browser without passkeys hears of the código alone — no
+          screen names the fingerprint or face on a device that cannot use
+          them (adversarial review, 2026-10-02). The same test as /entrar's
+          key button (FR-016). */}
+      <p className="text-base text-ink-soft">
+        {passkeysSupported()
+          ? "Entrarás con tu huella o rostro, o con un código que te enviamos a tu correo."
+          : "Entrarás con un código que te enviamos a tu correo."}
+      </p>
       <form
         className="space-y-4"
         noValidate

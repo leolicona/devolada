@@ -2,11 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { and, eq } from "drizzle-orm";
-import { account, passkey, session as sessionTable, stores, topUps, user as userTable } from "../src/db/schema";
+import { account, member, passkey, session as sessionTable, stores, topUps, user as userTable } from "../src/db/schema";
+import { makeAuth } from "../src/auth/better";
 import { eraseLegacyCredentials } from "../src/auth/credentials-sweep";
 import worker from "../src/index";
 import type { Bindings } from "../src/env";
-import { seedBusiness, seedLegacyUser, seedMember, seedSession } from "./helpers";
+import { mintCode, seedBusiness, seedLegacyUser, seedMember, seedSession } from "./helpers";
 import { seedStore } from "./store-helpers";
 
 /* passwordless-access US2 (FR-029, research D5): the passwords that exist
@@ -104,6 +105,83 @@ describe("passwordless-access US2 — the sweep erases the legacy unverified acc
     /* every password goes, the shopkeeper's too (US6, T064) */
     expect(await credentialsOf(shopkeeper)).toHaveLength(0);
     expect(await credentialsOf(submitter)).toHaveLength(0);
+  });
+});
+
+/* The sweep's two round trips with something landing between them: the
+   moment its SELECT has read the ids, `between` runs (adversarial review,
+   2026-10-02) */
+function gapDB(between: () => Promise<void>): D1Database {
+  const real = env.DB;
+  const wrap = (stmt: D1PreparedStatement): D1PreparedStatement =>
+    new Proxy(stmt, {
+      get(target, prop) {
+        if (prop === "bind") return (...values: unknown[]) => wrap(target.bind(...values));
+        if (prop === "all") {
+          return async (...args: unknown[]) => {
+            const result = await (target.all as (...a: unknown[]) => Promise<unknown>)(...args);
+            await between();
+            return result;
+          };
+        }
+        const value = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  return new Proxy(real, {
+    get(target, prop) {
+      if (prop === "prepare") {
+        return (query: string) => (query.startsWith('SELECT u.id AS id FROM "user" u') ? wrap(target.prepare(query)) : target.prepare(query));
+      }
+      const value = Reflect.get(target, prop);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+describe("passwordless-access US2 — the sweep deletes only what is still unclaimed when it deletes (D5)", () => {
+  it("a user who types a código, or whom a membership comes to name, after the read is kept, with what they gained (adversarial review, 2026-10-02)", async () => {
+    const signedIn = await withPassword("Legado", "legado@negocio.mx", false);
+    const joined = await withPassword("Socio", "socio@negocio.mx", false);
+    const business = await seedBusiness({ email: "dueno@negocio.mx" });
+    const otp = await mintCode("legado@negocio.mx");
+    let token = "";
+
+    const report = await eraseLegacyCredentials(
+      {
+        ...bindings,
+        DB: gapDB(async () => {
+          /* the código door: the plugin verifies them and opens a session */
+          const { token: opened } = await makeAuth(bindings).api.signInEmailOTP({ body: { email: "legado@negocio.mx", otp } });
+          token = opened;
+          /* an invitation accepted: a membership names them */
+          await db().insert(member).values({
+            id: crypto.randomUUID(),
+            organizationId: business.orgId,
+            userId: joined,
+            role: "operator",
+            createdAt: new Date(),
+          });
+        }),
+      },
+      later(),
+    );
+
+    expect(token).not.toBe("");
+    expect(report.users).toBe(0);
+    expect(await db().select().from(userTable).where(eq(userTable.id, signedIn))).toMatchObject([{ emailVerified: true }]);
+    expect((await db().select().from(sessionTable).where(eq(sessionTable.userId, signedIn))).map((s) => s.token)).toEqual([token]);
+    expect(await db().select().from(userTable).where(eq(userTable.id, joined))).toHaveLength(1);
+    expect(await db().select().from(member).where(eq(member.userId, joined))).toHaveLength(1);
+  });
+
+  it("more legacy users than one statement can bind go in chunks, each binding the grace too (D1's cap, setup.ts)", async () => {
+    const adapter = (await makeAuth(bindings).$context).internalAdapter;
+    for (let i = 0; i < 101; i++) {
+      await adapter.createUser({ name: `Legado ${i}`, email: `legado-${i}@negocio.mx`, emailVerified: false });
+    }
+    expect(await eraseLegacyCredentials(bindings, later())).toEqual({ credentials: 0, users: 101 });
+    expect(await db().select().from(userTable)).toHaveLength(0);
   });
 });
 

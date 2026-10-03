@@ -9,7 +9,8 @@ import { businessActor, feed, stubAdminApi } from "../e2e/stubs";
    passwordless-access T052: the password screens left — the recovery, the
    código screen of its own, the password error — and the doors without a
    password came in: the código step, /welcome's two questions and
-   Seguridad's keys card. Run just this file:
+   Seguridad's keys card; the new person's invitation in its two steps.
+   Run just this file:
    pnpm exec playwright test --config playwright.review.config.ts tests/design/review-identity.spec.ts */
 
 const OUT = ".design/devolada/screenshots";
@@ -36,6 +37,7 @@ const sessionUser = { id: "user-1", name: "Leo Licona", email: "leo@wifiplus.mx"
 const signedIn = (page: Page, user = sessionUser) =>
   raw(page, "**/auth/get-session", 200, { user, session: { id: "s-1", userId: user.id } });
 const signedOut = (page: Page) => raw(page, "**/auth/get-session", 200, null);
+const newPersonInvitation = { status: "pending", businessName: "WifiPlus", role: "operator", email: "ana@wifiplus.mx", hasAccount: false };
 
 const settings = {
   serviceFeeCents: 1500,
@@ -197,12 +199,36 @@ const shots: Shot[] = [
       await expect(page.getByRole("heading", { name: /tu negocio está listo/i })).toBeVisible();
     },
   },
+  /* Signed out, the invited address without an account: the new person's
+     two steps (passwordless-access D9 as amended 2026-10-03, spec
+     Clarifications Q5) — the name, then the código sent to the invited
+     address. The page reads the invitation before it shows anything
+     (better-auth D14), so the preview is stubbed. */
   {
     slug: "invitation-signed-out",
     path: "/invitaciones/inv-1",
     widths: [1280, 375],
-    arrange: (page) => signedOut(page),
-    ready: heading(/te invitaron a un negocio/i),
+    arrange: async (page) => {
+      await signedOut(page);
+      await ok(page, "**/businesses/invitations/*/preview", newPersonInvitation);
+    },
+    ready: heading(/te invitaron a wifiplus/i),
+  },
+  {
+    slug: "invitation-signed-out-code",
+    path: "/invitaciones/inv-1",
+    widths: [1280, 375],
+    arrange: async (page) => {
+      await signedOut(page);
+      await ok(page, "**/businesses/invitations/*/preview", newPersonInvitation);
+      await raw(page, "**/auth/email-otp/send-verification-otp", 200, { success: true });
+    },
+    ready: heading(/te invitaron a wifiplus/i),
+    act: async (page) => {
+      await page.getByLabel("Tu nombre").fill("Ana Torres");
+      await page.getByRole("button", { name: "Continuar" }).click();
+      await expect(page.getByText("Te enviamos un código a ana@wifiplus.mx. Vence en 10 minutos.")).toBeVisible();
+    },
   },
   {
     slug: "invitation-wrong-email",

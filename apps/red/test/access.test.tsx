@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse } from "msw";
 import {
@@ -57,6 +57,7 @@ beforeEach(() => {
 afterEach(() => server.events.removeAllListeners());
 
 const TOO_MANY = "Demasiados intentos. Espera un momento e intenta de nuevo.";
+const OFFLINE = "Sin conexión. Revisa tu internet e intenta de nuevo.";
 const SAME_FOR_ANY_PHONE = "Si ese teléfono es de una tienda, te enviamos un código al correo de la tienda. Vence en 10 minutos.";
 
 /* Signed out until a door says otherwise */
@@ -77,6 +78,33 @@ async function askCode(phone: string) {
 async function typeCode(code: string) {
   await userEvent.type(await screen.findByLabelText("Código"), code);
   await userEvent.click(screen.getByRole("button", { name: "Entrar" }));
+}
+
+/* passwordless-access D7: Safari refuses a WebAuthn call outside a user
+   gesture. What is asserted is WHEN the ceremony starts — while the click
+   is still travelling through the document, between the window's capture
+   listener and its bubble listener (packages/ui/test/passkey-offer.test.tsx).
+   userEvent.click resolves only after a timer tick, so a screen that
+   awaited anything before the ceremony would still pass a "was it called"
+   check (adversarial review, 2026-10-02). */
+function pressRecordingDispatch(button: HTMLElement): boolean[] {
+  let dispatching = false;
+  const begin = () => void (dispatching = true);
+  const end = () => void (dispatching = false);
+  const calls: boolean[] = [];
+  device.addPasskey.mockImplementation(async () => {
+    calls.push(dispatching);
+    return { data: {}, error: null };
+  });
+  window.addEventListener("click", begin, true);
+  window.addEventListener("click", end);
+  try {
+    fireEvent.click(button);
+  } finally {
+    window.removeEventListener("click", begin, true);
+    window.removeEventListener("click", end);
+  }
+  return calls;
 }
 
 describe("passwordless-access US6 — /entrar step 1", () => {
@@ -337,6 +365,7 @@ describe("passwordless-access US6 — /entrar step 2: the código", () => {
 describe("passwordless-access US6 — the invitation's three steps (D10)", () => {
   it("the email, its código, then the key; each step's body is what the contract says", async () => {
     const state = signedOutUntil();
+    device.supported.mockReturnValue(true);
     device.canVerifyPerson.mockResolvedValue(true);
     const asked: unknown[] = [];
     const accepted: unknown[] = [];
@@ -503,6 +532,53 @@ describe("passwordless-access US6 — the invitation's three steps (D10)", () =>
     await waitFor(() => expect(router.state.location.pathname).toBe("/"));
     expect(screen.queryByRole("button", { name: "Activar huella o rostro" })).not.toBeInTheDocument();
   });
+
+  it("without passkey support no step names the fingerprint or face: the código alone (FR-015; adversarial review, 2026-10-02)", async () => {
+    const state = signedOutUntil();
+    server.use(
+      handlers.invitation(() => ok(invitation("open"))),
+      handlers.invitationCode(),
+      handlers.accept(() => {
+        state.in = true;
+        return ok(invitationAccepted, 201);
+      }),
+    );
+    const { router, container } = renderApp("/invitacion/tok123");
+    expect(await screen.findByRole("heading", { name: "Bienvenido a Devolada, Abarrotes Lupita" })).toBeInTheDocument();
+    expect(screen.getByText("Entrarás con un código que te enviamos a tu correo.")).toBeInTheDocument();
+    /* innerHTML, not textContent: an aria-label is copy too */
+    expect(container.innerHTML).not.toMatch(/huella|rostro/i);
+
+    await userEvent.type(screen.getByLabelText("Tu correo"), "lupita@correo.mx");
+    await userEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(await screen.findByRole("heading", { name: "Escribe el código" })).toBeInTheDocument();
+    expect(container.innerHTML).not.toMatch(/huella|rostro/i);
+
+    await typeCode("482913");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+  });
+
+  it("the offer starts the ceremony inside the click itself (D7)", async () => {
+    const state = signedOutUntil();
+    device.supported.mockReturnValue(true);
+    device.canVerifyPerson.mockResolvedValue(true);
+    server.use(
+      handlers.invitation(() => ok(invitation("open"))),
+      handlers.invitationCode(),
+      handlers.accept(() => {
+        state.in = true;
+        return ok(invitationAccepted, 201);
+      }),
+    );
+    const { router } = renderApp("/invitacion/tok123");
+    await userEvent.type(await screen.findByLabelText("Tu correo"), "lupita@correo.mx");
+    await userEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await typeCode("482913");
+
+    const activate = await screen.findByRole("button", { name: "Activar huella o rostro" });
+    expect(pressRecordingDispatch(activate)).toEqual([true]);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+  });
 });
 
 describe("passwordless-access US6 — /recuperar (D10)", () => {
@@ -573,6 +649,39 @@ describe("passwordless-access US6 — Caja's keys card (D8, D11, D12; FR-036)", 
     expect(await screen.findByText("Listo. Este teléfono ya puede entrar con huella o rostro.")).toBeInTheDocument();
   });
 
+  it("«Activar» starts the ceremony inside the click itself (D7)", async () => {
+    device.canVerifyPerson.mockResolvedValue(true);
+    server.use(...caja());
+    renderApp("/caja");
+    const activate = await screen.findByRole("button", { name: "Activar en este teléfono" });
+    expect(pressRecordingDispatch(activate)).toEqual([true]);
+    expect(await screen.findByText("Listo. Este teléfono ya puede entrar con huella o rostro.")).toBeInTheDocument();
+  });
+
+  it("«Quitar» on the key just added takes back «Listo» and offers «Activar» again (adversarial review, 2026-10-02)", async () => {
+    device.canVerifyPerson.mockResolvedValue(true);
+    let list: { id: string; name: string; createdAt: string; backedUp: boolean }[] = [];
+    device.addPasskey.mockImplementation(async () => {
+      list = [{ id: "pk-new", name: "Tienda", createdAt: "2026-10-02T18:00:00.000Z", backedUp: false }];
+      return { data: {}, error: null };
+    });
+    server.use(
+      ...caja(() => list),
+      handlers.passkeyDelete(() => {
+        list = [];
+        return baOk();
+      }),
+    );
+    renderApp("/caja");
+    await userEvent.click(await screen.findByRole("button", { name: "Activar en este teléfono" }));
+    expect(await screen.findByText("Listo. Este teléfono ya puede entrar con huella o rostro.")).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole("button", { name: /quitar tienda/i }));
+    expect(await screen.findByText(/ningún dispositivo tiene acceso/i)).toBeInTheDocument();
+    expect(screen.queryByText(/ya puede entrar con huella o rostro/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Activar en este teléfono" })).toBeEnabled();
+  });
+
   it("on a computer it says «esta computadora» (cash-at-stores D32)", async () => {
     atWidth(1280);
     device.canVerifyPerson.mockResolvedValue(true);
@@ -623,6 +732,35 @@ describe("passwordless-access US6 — Caja's keys card (D8, D11, D12; FR-036)", 
     expect(device.addPasskey).toHaveBeenCalledTimes(2);
   });
 
+  it("while the step-up's código is on its way the button says «Enviando el código…», never that the phone is asked: the ceremony is over (adversarial review, 2026-10-02)", async () => {
+    device.canVerifyPerson.mockResolvedValue(true);
+    device.addPasskey.mockResolvedValue({ data: null, error: { code: "SESSION_NOT_FRESH", status: 403 } });
+    /* a weak signal at the counter: the send stays open until released */
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    server.use(
+      ...caja(),
+      handlers.stepUpCode(async () => {
+        await held;
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    renderApp("/caja");
+    await userEvent.click(await screen.findByRole("button", { name: "Activar en este teléfono" }));
+
+    const sending = await screen.findByRole("button", { name: "Enviando el código…" });
+    expect(sending).toBeDisabled();
+    expect(screen.queryByText(/Esperando a tu teléfono/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Código")).not.toBeInTheDocument();
+    /* held: a press reaches no second ceremony against the stale session */
+    fireEvent.click(sending);
+    expect(device.addPasskey).toHaveBeenCalledTimes(1);
+    release();
+
+    expect(await screen.findByText(`Confirma que eres tú: te enviamos un código a ${storeMe.email}.`)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Enviando el código…" })).not.toBeInTheDocument();
+  });
+
   it("«Cancelar» closes the step-up and brings «Activar» back", async () => {
     device.canVerifyPerson.mockResolvedValue(true);
     device.addPasskey.mockResolvedValue({ data: null, error: { code: "SESSION_NOT_FRESH", status: 403 } });
@@ -641,10 +779,13 @@ describe("passwordless-access US6 — Caja's keys card (D8, D11, D12; FR-036)", 
     renderApp("/caja");
     await userEvent.click(await screen.findByRole("button", { name: "Activar en este teléfono" }));
     expect(await screen.findByText(TOO_MANY)).toBeInTheDocument();
+    /* No código left, so no step-up opened, and none says one did: "Activar"
+       asks again (adversarial review, 2026-10-02) */
+    expect(screen.queryByLabelText("Código")).not.toBeInTheDocument();
+    expect(screen.queryByText(/te enviamos un código/)).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     server.use(handlers.stepUpCode(), handlers.stepUpSignIn(() => baFail("INVALID_OTP", 400)));
-    await userEvent.click(await screen.findByRole("button", { name: "Activar en este teléfono" }));
+    await userEvent.click(screen.getByRole("button", { name: "Activar en este teléfono" }));
     await userEvent.type(await screen.findByLabelText("Código"), "000000");
     await userEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     expect(await screen.findByText("El código no es válido o ya venció. Pide uno nuevo.")).toBeInTheDocument();
@@ -654,6 +795,41 @@ describe("passwordless-access US6 — Caja's keys card (D8, D11, D12; FR-036)", 
     await userEvent.type(screen.getByLabelText("Código"), "111111");
     await userEvent.click(screen.getByRole("button", { name: "Confirmar" }));
     expect(await screen.findByText(TOO_MANY)).toBeInTheDocument();
+  });
+
+  it("a lost signal is said as such at the step-up's send and at its try, and a failed try keeps the código (cash-at-stores T074; adversarial review, 2026-10-02)", async () => {
+    const notFresh = { data: null, error: { code: "SESSION_NOT_FRESH", status: 403 } };
+    device.canVerifyPerson.mockResolvedValue(true);
+    device.addPasskey
+      .mockResolvedValueOnce(notFresh)
+      .mockResolvedValueOnce(notFresh)
+      .mockResolvedValueOnce({ data: {}, error: null });
+    server.use(...caja(), handlers.stepUpCode(() => HttpResponse.error()));
+    renderApp("/caja");
+
+    /* the send: nothing left, so no step-up, and "Activar" asks again */
+    await userEvent.click(await screen.findByRole("button", { name: "Activar en este teléfono" }));
+    expect(await screen.findByText(OFFLINE)).toBeInTheDocument();
+    expect(screen.queryByText(/te enviamos un código/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Código")).not.toBeInTheDocument();
+
+    /* the try: the código was not judged, so the field keeps it */
+    server.use(handlers.stepUpCode(), handlers.stepUpSignIn(() => HttpResponse.error()));
+    await userEvent.click(screen.getByRole("button", { name: "Activar en este teléfono" }));
+    await userEvent.type(await screen.findByLabelText("Código"), "482913");
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(OFFLINE)).toBeInTheDocument();
+    expect(screen.queryByText(/no es válido/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Código")).toHaveValue("482913");
+    expect(screen.getByLabelText("Código")).not.toHaveAttribute("aria-invalid");
+
+    server.use(handlers.stepUpSignIn(() => baFail("INTERNAL_SERVER_ERROR", 500)));
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText("No pudimos revisar el código. Intenta de nuevo.")).toBeInTheDocument();
+
+    server.use(handlers.stepUpSignIn());
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText("Listo. Este teléfono ya puede entrar con huella o rostro.")).toBeInTheDocument();
   });
 
   it("«Cerrar sesión en los demás dispositivos» posts revoke-other-sessions and says what it did (D11)", async () => {

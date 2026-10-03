@@ -86,14 +86,20 @@ export const updateName = (name: string) => baPost("/auth/update-user", { name }
 export const revokeOtherSessions = () => baPost("/auth/revoke-other-sessions");
 
 /* The user behind the session, business or not — the wizard and the
-   invitation page need it before any membership exists (US-B01/B02). */
-export type SessionUser = { id: string; name: string; email: string; emailVerified: boolean };
+   invitation page need it before any membership exists (US-B01/B02).
+   `sessionBornAt` (ms) is when the session itself began: /welcome reads it
+   before offering a key, which the plugin registers only on a session
+   younger than a day (passwordless-access D8; adversarial review,
+   2026-10-02). Absent when the answer does not say. */
+export type SessionUser = { id: string; name: string; email: string; emailVerified: boolean; sessionBornAt?: number };
 export function useUser() {
   return useQuery<SessionUser | null, ApiError>({
     queryKey: ["user"],
     queryFn: async () => {
-      const s = await baGet<{ user: SessionUser } | null>("/auth/get-session");
-      return s?.user ?? null;
+      const s = await baGet<{ user: SessionUser; session?: { createdAt?: string } } | null>("/auth/get-session");
+      if (!s?.user) return null;
+      const bornAt = s.session?.createdAt ? Date.parse(s.session.createdAt) : Number.NaN;
+      return Number.isNaN(bornAt) ? s.user : { ...s.user, sessionBornAt: bornAt };
     },
     retry: false,
   });
@@ -119,7 +125,12 @@ export const acceptInvitation = async (invitationId: string) => {
   return { organizationId: res.invitation.organizationId };
 };
 
-/* better-auth D14: the session-less door for an invitee without an account */
+/* better-auth D14: the session-less door for an invitee without an account.
+   passwordless-access D9 (amended 2026-10-03, spec Clarifications Q5): it
+   carries the name and the código sent to the invited address — the
+   invitation's id alone proves no inbox. The answer sets the new session's
+   cookie; a refused código (INVALID_OTP, OTP_EXPIRED, TOO_MANY_ATTEMPTS)
+   comes back in the envelope, and nothing is born. */
 export const acceptInvitationAsNewUser = (invitationId: string, body: AcceptInvitationNewRequest) =>
   api<BusinessActor>(`/businesses/invitations/${invitationId}/accept-new`, { method: "POST", body: JSON.stringify(body) });
 

@@ -315,9 +315,12 @@ export function sentCode(email: string): string {
 }
 
 /* passwordless-access D14: a fresh código for an address, through the
-   plugin's own server-only door (the one D9 uses). The address's live
-   sign-in código goes first, as T005's hook does for a request, so the
-   minted código is the only one. For tests whose subject is not the email. */
+   plugin's own server-only door (the one /dev/code uses). The address's
+   live sign-in código goes first, as T005's hook does for a request, so
+   the minted código is the only one. For tests whose subject is not the
+   email — never for the invitation page, whose proof is that the código
+   reached the invited inbox (D9 as amended, spec Clarifications Q5): those
+   tests ask through `send-verification-otp` and read `sentCode`. */
 export async function mintCode(email: string): Promise<string> {
   await drizzle(env.DB).delete(verification).where(eq(verification.identifier, `sign-in-otp-${email.toLowerCase()}`));
   return auth().api.createVerificationOTP({ body: { email, type: "sign-in" } });

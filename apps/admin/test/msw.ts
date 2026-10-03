@@ -1,6 +1,7 @@
 import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
 import { devoladaMethods, type DevoladaMethods } from "@devolada/api/integrations-schema";
+import { acceptInvitationNewRequest } from "@devolada/api/businesses-schema";
 
 export const businessActor = {
   type: "business",
@@ -142,8 +143,16 @@ export const handlers = {
   /* bug: invitee-lands-own-business: the invitations sent to me */
   myInvitations: (r: () => ReturnType<typeof ok | typeof fail>) =>
     http.get("/businesses/invitations/mine", () => r()),
-  acceptInvitationNew: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail>) =>
-    http.post("/businesses/invitations/:id/accept-new", async ({ params, request }) => r(String(params.id), await request.json())),
+  /* passwordless-access D9 (amended 2026-10-03): the body is held to the
+     contract as the API holds it — `{name, otp}` — and one it refuses
+     answers 400 VALIDATION in the envelope without reaching the test's
+     answer. The test gets the body as sent, untrimmed. */
+  acceptInvitationNew: (r: (id: string, body: unknown) => ReturnType<typeof ok | typeof fail> | Promise<ReturnType<typeof ok | typeof fail>>) =>
+    http.post("/businesses/invitations/:id/accept-new", async ({ params, request }) => {
+      const body = await request.json();
+      if (!acceptInvitationNewRequest.safeParse(body).success) return fail("VALIDATION", 400);
+      return r(String(params.id), body);
+    }),
   resendInvitation: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>
     http.post("/businesses/invitations/:id/resend", ({ params }) => r(String(params.id))),
   cancelInvitation: (r: (id: string) => ReturnType<typeof ok | typeof fail>) =>

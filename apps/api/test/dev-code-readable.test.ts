@@ -43,13 +43,18 @@ describe("bug: dev-code-readable — /dev/code mints only for a test address (pa
     expect(await drizzle(env.DB).select().from(verification)).toHaveLength(0);
   });
 
-  it("matches the address whole: `.invalid` inside a real address never reaches its account", async () => {
+  it("matches the address whole: `.invalid` inside a real address is refused, and its live código is left as it was", async () => {
+    /* The request the substring bug would answer (adversarial review,
+       2026-10-02): a real address that merely contains `.invalid` */
     const real = await mintCode("ana.invalid@gmail.com");
-    const res = await devCode({ email: "ana.invalid", type: "sign-in" });
-    expect(res.status).toBe(200);
-    const minted = ((await res.json()) as { data: { code: string } }).data.code;
-    if (minted !== real) expect((await enter("ana.invalid@gmail.com", minted)).status).toBe(400);
-    /* the real address's own código was never touched */
+    const res = await devCode({ email: "ana.invalid@gmail.com", type: "sign-in" });
+    expect(res.status).toBe(403);
+    const body = await res.text();
+    expect(JSON.parse(body)).toEqual(REFUSED);
+    expect(body).not.toContain(real);
+    expect(
+      await drizzle(env.DB).select().from(verification).where(eq(verification.identifier, "sign-in-otp-ana.invalid@gmail.com")),
+    ).toHaveLength(1);
     expect((await enter("ana.invalid@gmail.com", real)).status).toBe(200);
   });
 
@@ -92,6 +97,7 @@ describe("bug: dev-code-readable — /dev/last-invitation answers only for a tes
         inviterId: owner.id,
       });
     await invite("inv-real", "luis@negocio.mx");
+    await invite("inv-inside", "luis.invalid@negocio.mx");
     await invite("inv-test", "luis@journey.invalid");
 
     const real = await get("/dev/last-invitation?email=luis%40negocio.mx");
@@ -99,6 +105,11 @@ describe("bug: dev-code-readable — /dev/last-invitation answers only for a tes
     const body = await real.text();
     expect(JSON.parse(body)).toEqual(REFUSED);
     expect(body).not.toContain("inv-real");
+
+    /* matched whole: `.invalid` inside a real address is refused too */
+    const inside = await get("/dev/last-invitation?email=luis.invalid%40negocio.mx");
+    expect(inside.status).toBe(403);
+    expect(await inside.text()).not.toContain("inv-inside");
 
     expect(await (await get("/dev/last-invitation?email=luis%40journey.invalid")).json()).toEqual({ success: true, data: { id: "inv-test" } });
   });

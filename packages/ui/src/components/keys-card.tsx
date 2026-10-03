@@ -37,7 +37,16 @@ export interface KeysCardStepUp {
   /* "Cancelar": closes the step-up and brings back the activate button */
   onCancel: () => void;
   busy: boolean;
-  error: null | "invalid" | "tooMany";
+  /* What the try came to. Only "invalid" judged the código; a lost signal
+     or a server that failed keeps it in the field, and "Confirmar" tries
+     it again — never told as a wrong código, which would send the person
+     for a new one they do not need (adversarial review, 2026-10-02):
+     - "invalid": wrong, expired, or spent after three tries;
+     - "tooMany": the limiter's wait (FR-027);
+     - "offline": the signal dropped (the store app's word for it,
+       cash-at-stores T074);
+     - "failed": anything else. */
+  error: null | "invalid" | "tooMany" | "offline" | "failed";
 }
 
 export interface KeysCardProps {
@@ -52,13 +61,24 @@ export interface KeysCardProps {
      browser would otherwise open a window asking for a phone or a security
      key in the middle of a registration. */
   canActivate: boolean;
-  activation: "idle" | "busy" | "done" | "failed";
+  /* "failed": the ceremony did not finish (FR-009). "notSent", "tooMany"
+     and "offline": the step-up's código could not be sent (D8). The
+     step-up opens only once its código is on its way, so a send that
+     fails says why beside "Activar", which asks again: the card has no
+     resend, and a field waiting for a código that never left would wait
+     forever (adversarial review, 2026-10-02).
+     "sending": the step-up's código on its way. The ceremony has already
+     ended by then — SESSION_NOT_FRESH answers before any system prompt
+     opens — so the button holds with the panel's código words, never
+     "Esperando a tu teléfono…", which would send the person looking at a
+     device that asks for nothing (adversarial review, 2026-10-02). */
+  activation: "idle" | "busy" | "sending" | "done" | "failed" | "notSent" | "tooMany" | "offline";
   onActivate: () => void;
   onRemove: (id: string) => void;
   removeFailed?: boolean;
   /* passwordless-access D8: a key needs a session younger than a day. When
-     the server answers SESSION_NOT_FRESH, the app sends a código and opens
-     this; null, the activate button is back. */
+     the server answers SESSION_NOT_FRESH, the app sends a código and, once
+     it is on its way, opens this; null, the activate button is back. */
   stepUp: null | KeysCardStepUp;
   /* "failed" says so and keeps the button (adversarial review,
      2026-10-02): a person shutting out a lost phone must never read a
@@ -96,6 +116,27 @@ const SIZES = {
 
 const KEY_NAME = "Llave de acceso";
 
+/* Each app's own words for these (the store app's keys.ts; the panel's
+   código step), so the card reads like the doors around it */
+const TOO_MANY = "Demasiados intentos. Espera un momento e intenta de nuevo.";
+const OFFLINE = "Sin conexión. Revisa tu internet e intenta de nuevo.";
+
+const STEP_UP_PROBLEM: Record<NonNullable<KeysCardStepUp["error"]>, string> = {
+  /* the card has no resend: "Cancelar", then "Activar" asks again (the design canvas) */
+  invalid: "El código no es válido o ya venció. Pide uno nuevo.",
+  tooMany: TOO_MANY,
+  offline: OFFLINE,
+  failed: "No pudimos revisar el código. Intenta de nuevo.",
+};
+
+/* FR-030: no password to fall back on, so each line offers only the retry */
+const ACTIVATION_PROBLEM: Partial<Record<KeysCardProps["activation"], string>> = {
+  failed: "No se pudo activar. Intenta de nuevo.",
+  notSent: "No pudimos enviar el código. Intenta de nuevo.",
+  tooMany: TOO_MANY,
+  offline: OFFLINE,
+};
+
 const dateOf = (value: KeysCardKey["createdAt"]) => {
   if (!value) return null;
   const date = new Date(value);
@@ -124,6 +165,9 @@ export function KeysCard({
 }: KeysCardProps) {
   const s = SIZES[size];
   const noun = deviceNoun(deviceWord);
+  /* Either wait holds the button: a second press while the step-up's código
+     is on its way would meet the same stale session (D8) */
+  const waiting = activation === "busy" || activation === "sending";
   const stepUpErrorId = useId();
 
   const confirm = (event: FormEvent<HTMLFormElement>) => {
@@ -226,12 +270,7 @@ export function KeysCard({
                 {stepUp.error && (
                   <Alert id={stepUpErrorId} variant="destructive" layout="icon">
                     <CircleX aria-hidden />
-                    <span>
-                      {stepUp.error === "tooMany"
-                        ? "Demasiados intentos. Espera un momento e intenta de nuevo."
-                        : /* the card has no resend: "Cancelar", then "Activar" asks again (the design canvas) */
-                          "El código no es válido o ya venció. Pide uno nuevo."}
-                    </span>
+                    <span>{STEP_UP_PROBLEM[stepUp.error]}</span>
                   </Alert>
                 )}
                 <div className={s.actions}>
@@ -268,28 +307,33 @@ export function KeysCard({
               </Alert>
             </Reveal>
           ) : (
-            <Pending active={activation === "busy"} label={`Esperando a tu ${noun}.`}>
+            <Pending
+              active={waiting}
+              label={activation === "sending" ? "Enviando el código." : `Esperando a tu ${noun}.`}
+            >
               <Button
                 size={size}
                 variant="secondary"
                 className={cn(s.wrap, s.block)}
-                disabled={activation === "busy"}
+                disabled={waiting}
                 /* passwordless-access D7: the WebAuthn call must start inside
                    this click — Safari refuses one outside a user gesture */
                 onClick={() => onActivate()}
               >
                 <Fingerprint className="size-5" aria-hidden />
-                {activation === "busy" ? `Esperando a tu ${noun}…` : `Activar en ${deviceWord}`}
+                {activation === "sending"
+                  ? "Enviando el código…"
+                  : activation === "busy"
+                    ? `Esperando a tu ${noun}…`
+                    : `Activar en ${deviceWord}`}
               </Button>
             </Pending>
           )}
-          {!stepUp && activation === "failed" && (
-            /* FR-030: no password to fall back on, so the line offers only
-               the retry */
+          {!stepUp && ACTIVATION_PROBLEM[activation] && (
             <Reveal>
               <Alert variant="destructive" layout="icon">
                 <CircleX aria-hidden />
-                <span>No se pudo activar. Intenta de nuevo.</span>
+                <span>{ACTIVATION_PROBLEM[activation]}</span>
               </Alert>
             </Reveal>
           )}

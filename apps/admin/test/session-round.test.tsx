@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { HttpResponse } from "msw";
-import { screen, waitFor, within } from "@testing-library/react";
+import { HttpResponse, http } from "msw";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { settingsResponse } from "@devolada/api/settings-schema";
 import { expectNoViolations } from "./a11y";
@@ -122,6 +122,29 @@ describe("US-S07 / D18 + passwordless-access US5: the keys card lists every key 
     expect(screen.getByRole("button", { name: "Cerrar sesión en los demás dispositivos" })).toBeInTheDocument();
   });
 
+  it("«Quitar» on the key just added takes back «Listo» and offers «Activar» again (adversarial review, 2026-10-02)", async () => {
+    let list: { id: string; name: string | null; createdAt: string; backedUp: boolean }[] = [];
+    device.addPasskey.mockImplementation(async () => {
+      list = [{ id: "pk-new", name: null, createdAt: "2026-10-02T18:00:00.000Z", backedUp: false }];
+      return { data: {}, error: null };
+    });
+    server.use(
+      ...security(() => list),
+      handlers.passkeyDelete(() => {
+        list = [];
+        return baOk();
+      }),
+    );
+    renderApp("/settings/security");
+    await userEvent.click(await screen.findByRole("button", { name: "Activar en este dispositivo" }));
+    expect(await screen.findByText(/Listo\. Este dispositivo ya puede entrar/)).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole("button", { name: /quitar llave de acceso/i }));
+    expect(await screen.findByText(/ningún dispositivo tiene acceso/i)).toBeInTheDocument();
+    expect(screen.queryByText(/ya puede entrar con huella o rostro/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Activar en este dispositivo" })).toBeEnabled();
+  });
+
   it("a cancelled activation says so, and no password is offered instead", async () => {
     device.addPasskey.mockResolvedValue({ data: null, error: { code: "ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY" } });
     server.use(...security());
@@ -139,6 +162,7 @@ describe("passwordless-access US5 — an old session confirms with a código bef
       .mockResolvedValueOnce({ data: {}, error: null });
     let asked: unknown = null;
     let entered: unknown = null;
+    const switched: unknown[] = [];
     server.use(
       ...security(),
       handlers.requestCode((body) => {
@@ -148,6 +172,10 @@ describe("passwordless-access US5 — an old session confirms with a código bef
       handlers.signInCode((body) => {
         entered = body;
         return baSignedIn();
+      }),
+      handlers.setActive((body) => {
+        switched.push(body);
+        return baOk();
       }),
     );
     renderApp("/settings/security");
@@ -165,6 +193,126 @@ describe("passwordless-access US5 — an old session confirms with a código bef
     expect(await screen.findByText(/Listo\. Este dispositivo ya puede entrar con huella o rostro\./)).toBeInTheDocument();
     expect(entered).toEqual({ email: sessionUser.email, otp: "482913" });
     expect(device.addPasskey).toHaveBeenCalledTimes(2);
+    /* One business: the new session is born with it, and the ceremony waits for nothing more */
+    expect(switched).toEqual([]);
+  });
+
+  it("a person with two businesses keeps the one they were in: the new session gets it back before the ceremony (adversarial review, 2026-10-02)", async () => {
+    const twoBusinesses = {
+      ...businessActor,
+      id: "business-2",
+      orgId: "org_business-2",
+      name: "Fibra Norte",
+      businesses: [...businessActor.businesses, { id: "business-2", orgId: "org_business-2", name: "Fibra Norte", role: "owner" }],
+    };
+    const steps: string[] = [];
+    device.addPasskey.mockImplementation(async () => {
+      steps.push("ceremony");
+      return steps.length === 1
+        ? { data: null, error: { code: "SESSION_NOT_FRESH", status: 403 } }
+        : { data: {}, error: null };
+    });
+    /* The switch is held open, to see what the card offers meanwhile. Inline:
+       the shared handler takes no async answer. */
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    server.use(
+      /* first: the earliest handler in one `use` wins */
+      handlers.session(() => ok(twoBusinesses)),
+      ...security(),
+      handlers.requestCode(),
+      handlers.signInCode(() => {
+        steps.push("código");
+        return baSignedIn();
+      }),
+      http.post("/auth/organization/set-active", async ({ request }) => {
+        steps.push(`business ${((await request.json()) as { organizationId: string }).organizationId}`);
+        await held;
+        return baOk();
+      }),
+    );
+    renderApp("/settings/security");
+
+    await userEvent.click(await screen.findByRole("button", { name: "Activar en este dispositivo" }));
+    await userEvent.type(await screen.findByLabelText("Código"), "482913");
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    /* While the business comes back the step-up still confirms: no «Activar»
+       to press, which would run a second ceremony beside the first */
+    await waitFor(() => expect(steps).toContain("business org_business-2"));
+    await act(() => new Promise((r) => setTimeout(r, 20)));
+    expect(screen.queryByRole("button", { name: "Activar en este dispositivo" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirmando…" })).toBeDisabled();
+    release();
+
+    expect(await screen.findByText(/Listo\. Este dispositivo ya puede entrar con huella o rostro\./)).toBeInTheDocument();
+    expect(steps).toEqual(["ceremony", "código", "business org_business-2", "ceremony"]);
+  });
+
+  it("while the step-up's código is on its way the button says so, not that the device is asked: the ceremony is over (adversarial review, 2026-10-02)", async () => {
+    device.addPasskey.mockResolvedValue({ data: null, error: { code: "SESSION_NOT_FRESH", status: 403 } });
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    server.use(
+      ...security(),
+      handlers.requestCode(async () => {
+        await held;
+        return baStatus({ success: true });
+      }),
+    );
+    renderApp("/settings/security");
+    await userEvent.click(await screen.findByRole("button", { name: "Activar en este dispositivo" }));
+
+    expect(await screen.findByRole("button", { name: "Enviando el código…" })).toBeDisabled();
+    expect(screen.queryByText(/Esperando a tu dispositivo/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Código")).not.toBeInTheDocument();
+    expect(device.addPasskey).toHaveBeenCalledTimes(1);
+    release();
+
+    expect(await screen.findByText(`Confirma que eres tú: te enviamos un código a ${sessionUser.email}.`)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Enviando el código…" })).not.toBeInTheDocument();
+  });
+
+  it("a código that could not be sent opens no step-up: «Activar» is back, with why (adversarial review, 2026-10-02)", async () => {
+    device.addPasskey.mockResolvedValue({ data: null, error: { code: "SESSION_NOT_FRESH", status: 403 } });
+    server.use(...security(), handlers.requestCode(() => baFail("INTERNAL_SERVER_ERROR", 500)));
+    renderApp("/settings/security");
+    await userEvent.click(await screen.findByRole("button", { name: "Activar en este dispositivo" }));
+
+    expect(await screen.findByText("No pudimos enviar el código. Intenta de nuevo.")).toBeInTheDocument();
+    expect(screen.queryByText(/te enviamos un código/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Código")).not.toBeInTheDocument();
+
+    /* "Activar" asks again, and this time the código goes out */
+    server.use(handlers.requestCode(() => baTooMany()));
+    await userEvent.click(screen.getByRole("button", { name: "Activar en este dispositivo" }));
+    expect(await screen.findByText("Demasiados intentos. Espera un momento e intenta de nuevo.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Código")).not.toBeInTheDocument();
+
+    server.use(handlers.requestCode(() => baStatus({ success: true })));
+    await userEvent.click(screen.getByRole("button", { name: "Activar en este dispositivo" }));
+    expect(await screen.findByText(`Confirma que eres tú: te enviamos un código a ${sessionUser.email}.`)).toBeInTheDocument();
+    expect(screen.queryByText(/No pudimos enviar|Demasiados intentos/)).not.toBeInTheDocument();
+  });
+
+  it("a try that fails on the way is not a wrong código: the field keeps it, and «Confirmar» tries again (adversarial review, 2026-10-02)", async () => {
+    device.addPasskey
+      .mockResolvedValueOnce({ data: null, error: { code: "SESSION_NOT_FRESH", status: 403 } })
+      .mockResolvedValueOnce({ data: {}, error: null });
+    server.use(...security(), handlers.requestCode(), handlers.signInCode(() => baFail("INTERNAL_SERVER_ERROR", 500)));
+    renderApp("/settings/security");
+    await userEvent.click(await screen.findByRole("button", { name: "Activar en este dispositivo" }));
+    await userEvent.type(await screen.findByLabelText("Código"), "482913");
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    expect(await screen.findByText("No pudimos revisar el código. Intenta de nuevo.")).toBeInTheDocument();
+    expect(screen.queryByText(/no es válido/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Código")).toHaveValue("482913");
+    expect(screen.getByLabelText("Código")).not.toHaveAttribute("aria-invalid");
+
+    server.use(handlers.signInCode(() => baSignedIn()));
+    await userEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+    expect(await screen.findByText(/Listo\. Este dispositivo ya puede entrar con huella o rostro\./)).toBeInTheDocument();
   });
 
   it("«Cancelar» closes the step-up and brings «Activar» back", async () => {

@@ -13,6 +13,7 @@ import {
 import { paymentRequestsResponse } from "../../apps/api/src/routes/payment-requests/schema";
 import { devoladaMethods } from "../../apps/api/src/routes/integrations/schema";
 import {
+  acceptInvitationNewRequest,
   invitationPreviewResponse as memberInvitationPreviewResponse,
   myInvitationsResponse,
 } from "../../apps/api/src/routes/businesses/schema";
@@ -1125,12 +1126,50 @@ export async function stubAccessApi(
   await setAccessDevice(page, opts.device ?? "verifies");
   const user = opts.user === undefined ? null : opts.user;
   await baRoute(page, "**/auth/get-session", user ? { user, session: { id: "s-1", userId: user.id } } : null);
+  /* /welcome reads the business actor beside the session before it
+     decides, and says a read that got no answer instead of deciding on it
+     (adversarial review, 2026-10-02): a signed-in person here is a member
+     of the business */
+  if (user) await apiRoute(page, "**/auth/me", { ...businessActor, userId: user.id, userName: user.name });
   await baRoute(page, "**/auth/email-otp/send-verification-otp", { success: true });
   await baRoute(page, "**/auth/sign-in/email-otp", { token: "t", user: accessUser });
   await baRoute(page, "**/auth/update-user", { status: true });
   await baRoute(page, "**/auth/revoke-other-sessions", { status: true });
   await baRoute(page, "**/auth/passkey/list-user-passkeys", accessKeys);
   await apiRoute(page, "**/businesses/invitations/*/preview", memberInvitation(opts.hasAccount ?? true));
+  await stubAcceptAsNew(page);
+}
+
+/* The new person, inside the business the invitation names: the business
+   actor accept-new answers with, as /auth/me's */
+export const inviteeActor = {
+  ...businessActor,
+  name: "WifiPlus Norte",
+  role: "operator",
+  userId: accessUser.id,
+  userName: accessUser.name,
+  businesses: [{ id: "business-1", orgId: "org_business-1", name: "WifiPlus Norte", role: "operator" }],
+};
+
+/* passwordless-access D9 as amended 2026-10-03 (spec Clarifications Q5;
+   contracts/panel-access.md § accept-new): the new person's second step
+   posts the name and the código sent to the invited address. The body is
+   read through the request's own contract, so a page that posts no código
+   — the retired name-and-id-alone shape — meets the server's VALIDATION
+   (400, in the envelope), never a welcome. A good one answers 201 with the
+   business actor. */
+async function stubAcceptAsNew(page: Page): Promise<void> {
+  await page.route("**/businesses/invitations/*/accept-new", (route) => {
+    if (route.request().resourceType() === "document") return route.fallback();
+    if (!acceptInvitationNewRequest.safeParse(route.request().postDataJSON()).success) {
+      return route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({ success: false, error: { code: "VALIDATION" } }),
+      });
+    }
+    return route.fulfill({ ...envelope(inviteeActor), status: 201 });
+  });
 }
 
 /* Seguridad: the panel around the keys card */
@@ -1156,6 +1195,11 @@ const askCode = async (page: Page) => {
 const register = async (page: Page) => {
   await page.getByLabel("Tu nombre").fill("Ana López");
   await page.getByLabel("Correo").fill("ana@negocio.mx");
+  await page.getByRole("button", { name: "Continuar" }).click();
+};
+/* the invitation's address is text, never typed (better-auth D14) */
+const joinAsNew = async (page: Page) => {
+  await page.getByLabel("Tu nombre").fill("Ana López");
   await page.getByRole("button", { name: "Continuar" }).click();
 };
 
@@ -1189,11 +1233,22 @@ export const accessScreens = (ADMIN: string): AccessScreen[] => [
     ready: "Reenviar código",
     touch: true,
   },
+  /* A new person's two steps (D9 as amended 2026-10-03): the name, then
+     the código sent to the invited address, which opens only once it was
+     sent */
   {
     name: "Invitación · persona nueva",
     url: `${ADMIN}/invitaciones/inv-1`,
     stub: (p) => stubAccessApi(p, { hasAccount: false }),
-    ready: "Crear cuenta y entrar",
+    ready: "Continuar",
+    touch: true,
+  },
+  {
+    name: "Invitación · persona nueva · código",
+    url: `${ADMIN}/invitaciones/inv-1`,
+    stub: (p) => stubAccessApi(p, { hasAccount: false }),
+    open: joinAsNew,
+    ready: "Reenviar código",
     touch: true,
   },
   { name: "Seguridad", url: `${ADMIN}/settings/security`, stub: stubSecurityApi, ready: "Cerrar sesión en los demás dispositivos", touch: false },

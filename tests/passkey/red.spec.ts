@@ -1,4 +1,4 @@
-import { expect, request, test, type Browser, type Page } from "@playwright/test";
+import { expect, request, test, type Browser, type Locator, type Page } from "@playwright/test";
 import { createStoreResponse } from "../../apps/api/src/routes/platform/schema";
 
 /* cash-at-stores US3 (FR-010, FR-011; research D3, D26) and
@@ -30,6 +30,26 @@ async function devCode(browser: Browser, email: string): Promise<string> {
   await ctx.close();
   expect(code).toMatch(/^\d{6}$/);
   return code;
+}
+
+/* Types what the email would carry and presses "Entrar", until `next`
+   shows. The phone door answers before its own send has landed (the API
+   defers it past the answer, so a stranger's phone and a store's answer
+   alike: FR-033), and that send deletes the address's código before
+   writing its own. A mint that lands first is wiped, and the código typed
+   is refused. The refusal comes a whole round trip later, with the send
+   long done, so one more mint holds (adversarial review, 2026-10-02). The
+   invitation door awaits its send, and needs no second try. */
+async function enterMintedCode(page: Page, browser: Browser, email: string, next: Locator) {
+  const refused = page.getByText("El código no es válido o ya venció. Pide uno nuevo.");
+  await page.getByLabel("Código").fill(await devCode(browser, email));
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
+  await expect(next.or(refused)).toBeVisible();
+  if (await refused.isVisible()) {
+    await page.getByLabel("Código").fill(await devCode(browser, email));
+    await page.getByRole("button", { name: "Entrar", exact: true }).click();
+  }
+  await expect(next).toBeVisible();
 }
 
 /* A device with a built-in authenticator that verifies the person */
@@ -115,11 +135,9 @@ test("passwordless-access US6: a shopkeeper accepts by email and código, turns 
   await expect(
     page.getByText("Si ese teléfono es de una tienda, te enviamos un código al correo de la tienda. Vence en 10 minutos."),
   ).toBeVisible();
-  await page.getByLabel("Código").fill(await devCode(browser, email));
-  await page.getByRole("button", { name: "Entrar", exact: true }).click();
   /* The device can verify the person, so the código door offers the key
      again (D7); this one already holds it, and "Ahora no" goes on */
-  await expect(page.getByRole("heading", { name: "Entra la próxima vez con tu huella o rostro" })).toBeVisible();
+  await enterMintedCode(page, browser, email, page.getByRole("heading", { name: "Entra la próxima vez con tu huella o rostro" }));
   await page.getByRole("button", { name: "Ahora no" }).click();
   await expect(page.getByRole("heading", { name: "Cobrar" })).toBeVisible();
 });

@@ -75,27 +75,37 @@ export async function eraseLegacyCredentials(env: Bindings, now = new Date()): P
   const unnamed = NAMED_BY.map(([table, column]) => `AND NOT EXISTS (SELECT 1 FROM ${table} WHERE ${column} = u.id)`).join(
     "\n         ",
   );
-  const { results } = await env.DB.prepare(
-    `SELECT u.id AS id FROM "user" u
-       WHERE u.email_verified = 0
+  /* Read by the SELECT, and read AGAIN by every DELETE (adversarial
+     review, 2026-10-02): between the two round trips a legacy user can
+     type a código — the plugin verifies them and opens a session — or a
+     row can come to name them. A delete by the ids alone would erase that
+     fresh session and the now-verified user, and a `member` row written in
+     the gap would go with them by cascade. `?1` is the grace. */
+  const unclaimed = `u.email_verified = 0
          AND u.created_at < ?1
-         ${unnamed}`,
-  )
+         ${unnamed}`;
+  const { results } = await env.DB.prepare(`SELECT u.id AS id FROM "user" u WHERE ${unclaimed}`)
     .bind(bornBefore)
     .all<{ id: string }>();
   const ids = results.map((r) => r.id);
 
   /* Their sessions, accounts and keys do not cascade: they go first, in
-     one batch with the users, so a user is never left half-erased */
-  for (let i = 0; i < ids.length; i += D1_MAX_PARAMS) {
-    const chunk = ids.slice(i, i + D1_MAX_PARAMS);
-    const marks = chunk.map((_, n) => `?${n + 1}`).join(", ");
-    await env.DB.batch(
+     one batch with the users, so a user is never left half-erased. A
+     batch is one transaction, so its four statements read the same rows.
+     One bind is the grace; the rest of D1's cap holds the chunk's ids. */
+  let users = 0;
+  const chunkSize = D1_MAX_PARAMS - 1;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const marks = chunk.map((_, n) => `?${n + 2}`).join(", ");
+    const still = `SELECT u.id FROM "user" u WHERE u.id IN (${marks}) AND ${unclaimed}`;
+    const done = await env.DB.batch(
       ["session", "account", "passkey"]
-        .map((table) => env.DB.prepare(`DELETE FROM ${table} WHERE user_id IN (${marks})`).bind(...chunk))
-        .concat(env.DB.prepare(`DELETE FROM "user" WHERE id IN (${marks})`).bind(...chunk)),
+        .map((table) => env.DB.prepare(`DELETE FROM ${table} WHERE user_id IN (${still})`).bind(bornBefore, ...chunk))
+        .concat(env.DB.prepare(`DELETE FROM "user" WHERE id IN (${still})`).bind(bornBefore, ...chunk)),
     );
+    users += done.at(-1)?.meta.changes ?? 0;
   }
 
-  return { credentials: credentials.meta.changes ?? 0, users: ids.length };
+  return { credentials: credentials.meta.changes ?? 0, users };
 }

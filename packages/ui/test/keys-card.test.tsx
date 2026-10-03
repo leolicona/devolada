@@ -11,9 +11,11 @@ import { expectNoViolations } from "./a11y";
    what the card shows and which callback a press reaches. The requests
    themselves are the apps' tests. */
 
-/* Noon UTC, so the calendar day is the same in every timezone a developer
-   runs this from; October, because its short form is "oct" in every ICU
-   build (September reads "sep" or "sept" depending on the build). */
+/* The suite runs in Mexico City's zone (vitest.config.ts), where noon UTC
+   is the same calendar day; noon alone would not hold it from UTC+12 on
+   (adversarial review, 2026-10-02). October, because its short form is
+   "oct" in every ICU build (September reads "sep" or "sept" depending on
+   the build). */
 const ACTIVATED = "2026-10-02T12:00:00.000Z";
 
 const KEYS: KeysCardKey[] = [
@@ -87,6 +89,12 @@ describe("passwordless-access US5: the card says what it is for", () => {
       { activation: "done", signOutOthers: "done" },
       { stepUp: stepUp({ error: "invalid" }) },
       { stepUp: stepUp({ error: "tooMany", busy: true }), signOutOthers: "busy" },
+      { stepUp: stepUp({ error: "offline" }) },
+      { stepUp: stepUp({ error: "failed" }) },
+      { activation: "sending" },
+      { activation: "notSent" },
+      { activation: "tooMany" },
+      { activation: "offline" },
       { signOutOthers: "failed" },
     ];
     for (const state of states) {
@@ -214,11 +222,51 @@ describe("passwordless-access US5: activating this device", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Esperando a tu dispositivo.");
   });
 
+  it("while the step-up's código is on its way, says it is sending, never that the device is asked (adversarial review, 2026-10-02)", async () => {
+    vi.useFakeTimers();
+    const { container, onActivate } = card({ activation: "sending" });
+
+    const button = screen.getByRole("button", { name: "Enviando el código…" });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(onActivate).not.toHaveBeenCalled();
+    /* The ceremony is over; nothing on the device will ask for anything */
+    expect(screen.queryByText(/Esperando a tu/)).not.toBeInTheDocument();
+    /* No field and no line claims a código left before it has */
+    expect(screen.queryByLabelText("Código")).not.toBeInTheDocument();
+    expect(screen.queryByText(/te enviamos/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    act(() => void vi.advanceTimersByTime(200));
+    expect(screen.getByRole("status")).toHaveTextContent("Enviando el código.");
+    vi.useRealTimers();
+    await expectNoViolations(container);
+  });
+
   it("failed: one line, the button still there to try again, nothing to fall back on", () => {
     card({ activation: "failed" });
 
     expect(screen.getByRole("alert")).toHaveTextContent("No se pudo activar. Intenta de nuevo.");
     expect(screen.getByRole("button", { name: ACTIVATE })).toBeEnabled();
+  });
+
+  it("a step-up código that could not be sent says why beside the button, which asks again (adversarial review, 2026-10-02)", async () => {
+    /* No field waits for a código that never left, and no line claims one did */
+    const lines = [
+      ["notSent", "No pudimos enviar el código. Intenta de nuevo."],
+      ["tooMany", "Demasiados intentos. Espera un momento e intenta de nuevo."],
+      ["offline", "Sin conexión. Revisa tu internet e intenta de nuevo."],
+    ] as const;
+    for (const [activation, line] of lines) {
+      const { container, onActivate, unmount } = card({ activation });
+
+      expect(screen.getByRole("alert")).toHaveTextContent(line);
+      expect(screen.queryByText(/te enviamos/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Código")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: ACTIVATE }));
+      expect(onActivate).toHaveBeenCalledTimes(1);
+      await expectNoViolations(container);
+      unmount();
+    }
   });
 
   it("done: the confirmation takes the button's place", async () => {
@@ -328,6 +376,27 @@ describe("passwordless-access US5: the step-up, when the session is older than a
     );
     /* The código itself was not judged: the field is not marked wrong */
     expect(screen.getByLabelText("Código")).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("a lost signal or a failed check is never told as a wrong código: the field keeps it, and «Confirmar» tries again (adversarial review, 2026-10-02)", () => {
+    const lines = [
+      ["offline", "Sin conexión. Revisa tu internet e intenta de nuevo."],
+      ["failed", "No pudimos revisar el código. Intenta de nuevo."],
+    ] as const;
+    for (const [error, line] of lines) {
+      const step = stepUp({ code: "482913", error });
+      const { unmount } = card({ stepUp: step });
+
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent(line);
+      expect(alert).not.toHaveTextContent(/no es válido/);
+      const field = screen.getByLabelText("Código");
+      expect(field).not.toHaveAttribute("aria-invalid");
+      expect(field).toHaveAttribute("aria-describedby", alert.id);
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+      expect(step.onSubmit).toHaveBeenCalledTimes(1);
+      unmount();
+    }
   });
 
   it("has no axe violations", async () => {

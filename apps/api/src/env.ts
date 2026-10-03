@@ -152,6 +152,16 @@ export type Bindings = {
      so tests can make a mock destination hang cheaply, exactly like
      APICEP_DEADLINE_MS; no wrangler environment sets it. */
   WEBHOOK_DELIVERY_TIMEOUT_MS?: string;
+  /* passwordless-access D10 (FR-033; adversarial review, 2026-10-02): the
+     base of the least time, in ms, a refusal of POST /store/sign-in takes,
+     so the clock cannot tell a store's phone from a stranger's. The floor
+     is the larger of this and ten of the store lookup's own round trips,
+     so a far D1 primary raises it (`refusalFloor` in
+     routes/store/handler.ts; adversarial review, 2026-10-03). Unset →
+     1000 ms. 0 → no floor at all. A test knob — never set by a deploy: the
+     suite pins it to 0 so its many wrong códigos stay fast, and the
+     floor's own tests hand the app a value. */
+  STORE_SIGN_IN_FLOOR_MS?: string;
   /* operator-panel D2: comma-separated emails of the platform operators.
      Never grantable from a screen; changing it is a deploy.
      landing-page D10: also where the landing page's access requests are

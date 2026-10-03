@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpResponse } from "msw";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expectNoViolations } from "./a11y";
-import { baFail, baStatus, baTooMany, handlers, server, sessionUser } from "./msw";
+import { baFail, baStatus, baTooMany, fail, handlers, server, sessionUser } from "./msw";
 import { renderApp } from "./render";
 
 /* passwordless-access US1 (contracts/panel-access.md § /signup): name and
@@ -55,8 +55,11 @@ describe("passwordless-access US1 — step 1: name and email", () => {
       }),
     );
     renderApp("/signup");
-    expect(screen.queryByText(/ISP/)).not.toBeInTheDocument();
     expect(await screen.findByText("Cobra por transferencia con validación automática.")).toBeInTheDocument();
+    /* asked of the rendered page: before the router's first load the
+       document is empty, and the check could not fail (adversarial review,
+       2026-10-02) */
+    expect(screen.queryByText(/ISP/)).not.toBeInTheDocument();
     await expectNoViolations(document.body);
 
     await fillData("Ana López", "ana@negocio.mx");
@@ -74,6 +77,49 @@ describe("passwordless-access US1 — step 1: name and email", () => {
     expect(await screen.findByText("Demasiados intentos. Espera un momento e intenta de nuevo.")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Escribe tu código" })).not.toBeInTheDocument();
   });
+
+  it("a name over 80 letters is named under its field before any request (adversarial review, 2026-10-02)", async () => {
+    let requests = 0;
+    server.use(
+      handlers.requestCode(() => {
+        requests += 1;
+        return baStatus({ success: true });
+      }),
+    );
+    renderApp("/signup");
+    const field = await screen.findByLabelText("Tu nombre");
+    expect(field).toHaveAttribute("maxLength", "80");
+    /* the field stops at 80; a value set past it (autofill) still meets the rule */
+    fireEvent.change(field, { target: { value: "A".repeat(81) } });
+    await userEvent.type(screen.getByLabelText("Correo"), "ana@negocio.mx");
+    await userEvent.click(screen.getByRole("button", { name: "Continuar" }));
+
+    expect(await screen.findByText("Escribe tu nombre en 80 letras o menos.")).toBeInTheDocument();
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(requests).toBe(0);
+  });
+
+  it("an address the server's check refuses is named under its field, not as a failure to retry (adversarial review, 2026-10-02)", async () => {
+    let requests = 0;
+    server.use(
+      handlers.requestCode(() => {
+        requests += 1;
+        return baFail("INVALID_EMAIL", 400);
+      }),
+    );
+    renderApp("/signup");
+    await fillData("José López", "josé@negocio.mx");
+
+    expect(await screen.findByText("Escribe un correo válido, como nombre@dominio.com.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Correo")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.queryByText("No pudimos enviar el código. Intenta de nuevo.")).not.toBeInTheDocument();
+    expect(requests).toBe(1);
+
+    /* an edit clears it */
+    await userEvent.clear(screen.getByLabelText("Correo"));
+    await userEvent.type(screen.getByLabelText("Correo"), "jose@negocio.mx");
+    expect(screen.queryByText("Escribe un correo válido, como nombre@dominio.com.")).not.toBeInTheDocument();
+  });
 });
 
 describe("passwordless-access US1 — step 2: the código", () => {
@@ -86,6 +132,8 @@ describe("passwordless-access US1 — step 2: the código", () => {
         return HttpResponse.json({ token: "t", user: { ...sessionUser, name: "Ana López", email: "ana@negocio.mx" } });
       }),
       handlers.getSession(() => HttpResponse.json({ user: { ...sessionUser, name: "Ana López", email: "ana@negocio.mx" } })),
+      /* a new account has no business yet; /welcome reads it as the shell does */
+      handlers.session(() => fail("NO_BUSINESS", 403)),
     );
     const router = renderApp("/signup?next=/links");
     await fillData("Ana López", "ana@negocio.mx");

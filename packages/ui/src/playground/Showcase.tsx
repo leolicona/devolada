@@ -246,6 +246,9 @@ type KeysScenario =
   | "stepUp"
   | "stepUpInvalid"
   | "stepUpTooMany"
+  | "stepUpOffline"
+  | "sending"
+  | "notSent"
   | "failed"
   | "done";
 
@@ -265,7 +268,13 @@ function KeysCardDemo() {
         onCancel: () => setScenario("keys"),
         busy: false,
         error:
-          scenario === "stepUpInvalid" ? "invalid" : scenario === "stepUpTooMany" ? "tooMany" : null,
+          scenario === "stepUpInvalid"
+            ? "invalid"
+            : scenario === "stepUpTooMany"
+              ? "tooMany"
+              : scenario === "stepUpOffline"
+                ? "offline"
+                : null,
       }
     : null;
 
@@ -287,6 +296,9 @@ function KeysCardDemo() {
           { value: "stepUp", label: "Pide código" },
           { value: "stepUpInvalid", label: "Código incorrecto" },
           { value: "stepUpTooMany", label: "Demasiados intentos" },
+          { value: "stepUpOffline", label: "Sin conexión" },
+          { value: "sending", label: "Enviando código" },
+          { value: "notSent", label: "Código no enviado" },
           { value: "failed", label: "No se pudo activar" },
           { value: "done", label: "Activada" },
         ]}
@@ -307,7 +319,11 @@ function KeysCardDemo() {
         keys={scenario === "empty" ? [] : scenario === "loading" ? undefined : keys}
         loading={scenario === "loading"}
         canActivate
-        activation={scenario === "failed" ? "failed" : scenario === "done" ? "done" : "idle"}
+        activation={
+          scenario === "failed" || scenario === "notSent" || scenario === "done" || scenario === "sending"
+            ? scenario
+            : "idle"
+        }
         onActivate={() => setScenario("stepUp")}
         onRemove={(id) => setKeys((all) => all.filter((key) => key.id !== id))}
         stepUp={stepUp}

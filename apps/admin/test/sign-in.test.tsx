@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpResponse } from "msw";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expectNoViolations } from "./a11y";
 import { baFail, baStatus, baTooMany, businessActor, fail, handlers, ok, server, sessionUser } from "./msw";
@@ -87,6 +87,21 @@ describe("passwordless-access US2 — /login step 1", () => {
     await askCode("ana@negocio.mx");
     expect(await screen.findByText("Demasiados intentos. Espera un momento e intenta de nuevo.")).toBeInTheDocument();
   });
+
+  it("an address the server's check refuses is named under the field, not as a failure to retry (adversarial review, 2026-10-02)", async () => {
+    server.use(handlers.requestCode(() => baFail("INVALID_EMAIL", 400)));
+    renderApp("/login");
+    await askCode("ana..b@negocio.mx");
+    expect(await screen.findByText("Escribe un correo válido, como nombre@dominio.com.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Correo")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.queryByText("No pudimos enviar el código. Intenta de nuevo.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Escribe tu código" })).not.toBeInTheDocument();
+
+    /* an edit clears it */
+    await userEvent.type(screen.getByLabelText("Correo"), "x");
+    expect(screen.queryByText("Escribe un correo válido, como nombre@dominio.com.")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Correo")).not.toHaveAttribute("aria-invalid");
+  });
 });
 
 describe("passwordless-access US2 — /login step 2: the código", () => {
@@ -127,7 +142,14 @@ describe("passwordless-access US2 — /login step 2: the código", () => {
   });
 
   it("a wrong código is named; «Reenviar código» confirms; «Usar otro correo» keeps the address", async () => {
-    server.use(handlers.requestCode(() => baStatus({ success: true })), handlers.signInCode(() => baFail("INVALID_OTP", 400)));
+    const asked: unknown[] = [];
+    server.use(
+      handlers.requestCode((body) => {
+        asked.push(body);
+        return baStatus({ success: true });
+      }),
+      handlers.signInCode(() => baFail("INVALID_OTP", 400)),
+    );
     renderApp("/login");
     await askCode("ana@negocoi.mx");
     await userEvent.type(await screen.findByLabelText("Código"), "000000");
@@ -136,6 +158,15 @@ describe("passwordless-access US2 — /login step 2: the código", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Reenviar código" }));
     expect(await screen.findByRole("button", { name: "Código reenviado" })).toBeInTheDocument();
+    /* the label flips at the click, before any request: what proves the
+       resend is the second request, to the same address (adversarial
+       review, 2026-10-02) */
+    await waitFor(() =>
+      expect(asked).toEqual([
+        { email: "ana@negocoi.mx", type: "sign-in" },
+        { email: "ana@negocoi.mx", type: "sign-in" },
+      ]),
+    );
 
     await userEvent.click(screen.getByRole("button", { name: "Usar otro correo" }));
     expect(await screen.findByLabelText("Correo")).toHaveValue("ana@negocoi.mx");

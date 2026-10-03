@@ -302,7 +302,8 @@ for (const theme of ["light", "dark"] as const) {
 
 /* passwordless-access T051 (constitution IV): the access screens — both
    steps of /login and /signup, /welcome's two questions, the invitation's
-   three states and Seguridad's keys card — measured where their colours
+   two steps for an account and two for a new person (D9 as amended
+   2026-10-03) and Seguridad's keys card — measured where their colours
    actually land, in both themes. The devices without passkey support are
    among them (US3). */
 for (const theme of ["light", "dark"] as const) {

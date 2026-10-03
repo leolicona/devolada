@@ -12,7 +12,9 @@ import { businessActor, feed, stubAdminApi } from "../e2e/stubs";
    list (D18) and the Sesión card (BUG-016).
    passwordless-access T052: the código screen of its own, the recovery and
    the password field left; the código is a step of /login and /signup now,
-   and a wrong one is named there. Run just this file:
+   and a wrong one is named there. The new person's invitation has two
+   steps since D9's amendment (2026-10-03, spec Clarifications Q5): the
+   name, then the código sent to the invited address. Run just this file:
    pnpm exec playwright test --config playwright.review.config.ts tests/design/review-identidad-2.spec.ts */
 
 const OUT = ".design/devolada/screenshots";
@@ -169,6 +171,24 @@ const shots: Shot[] = [
       await ok(page, "**/businesses/invitations/*/preview", preview());
     },
     ready: heading(/te invitaron a wifiplus/i),
+  },
+  {
+    /* the second step: the código sent to the invited address, which
+       opens only once it was sent (D9 as amended 2026-10-03) */
+    slug: "invitation-new-code",
+    path: "/invitaciones/inv-1",
+    widths: [1280, 768, 375],
+    arrange: async (page) => {
+      await signedOut(page);
+      await ok(page, "**/businesses/invitations/*/preview", preview());
+      await raw(page, "**/auth/email-otp/send-verification-otp", 200, { success: true });
+    },
+    ready: heading(/te invitaron a wifiplus/i),
+    act: async (page) => {
+      await page.getByLabel("Tu nombre").fill("Ana Torres");
+      await page.getByRole("button", { name: "Continuar" }).click();
+      await expect(page.getByText("Te enviamos un código a ana@wifiplus.mx. Vence en 10 minutos.")).toBeVisible();
+    },
   },
   {
     slug: "invitation-existing",

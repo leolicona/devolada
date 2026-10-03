@@ -102,29 +102,38 @@ route, its zod input and its rate rule (better-auth D15) leave in PR 1.
 
 ### Changed: `POST /businesses/invitations/:invitationId/accept-new`
 
-Session-less; the random id is the key (better-auth D14). Rate-limited 5
-per 60 s per address (unchanged).
+Session-less. The random id finds the invitation, but it is not a proof:
+the inviter and every owner and admin hold it too. The código sent to the
+invited address is the proof (D9 as amended 2026-10-03; spec
+Clarifications Q5). Rate-limited 5 per 60 s per address (unchanged).
 
 ```json
-{ "name": "Ana López" }
+{ "name": "Ana López", "otp": "482913" }
 ```
 
 `AcceptInvitationNewRequest` (`@devolada/api/businesses-schema`) loses
-`password`. `name` is trimmed, 2–80 characters.
+`password` and gains `otp`, six digits. `name` is trimmed, 2–80 characters.
+The código was asked for by the page through `send-verification-otp`, with
+the invited address.
 
 The server (D9):
 1. checks the invitation (pending, unexpired);
 2. refuses an address that already has an account;
-3. deletes any live sign-in código for the address;
-4. mints one (`createVerificationOTP`) and consumes it (`signInEmailOTP`
-   with the name);
-5. accepts the invitation and activates its business;
-6. forwards the session cookies.
+3. signs in with `signInEmailOTP` (the invited address, the typed código,
+   the name): the user is born verified, named, with a session;
+4. accepts the invitation and activates its business;
+5. forwards the session cookies.
 
 - **201** the business actor (as today), with the session cookie.
-- **404** `INVITATION_NOT_FOUND` (gone, accepted or expired);
-  **409** `EMAIL_TAKEN` (the address has an account: the page's
-  `hasAccount` branch is the right door); **400** `VALIDATION`; **429**.
+- **400** `INVALID_OTP`, `OTP_EXPIRED`; **403** `TOO_MANY_ATTEMPTS` — the
+  plugin's words, as on the store acceptance. Nothing is born.
+- **404** `INVITATION_NOT_FOUND` (gone, accepted or expired). When the
+  invitation dies between steps 1 and 4, the account the código proved
+  stays, with its session cookie: it is its owner's, as a registration's
+  would be.
+- **409** `EMAIL_TAKEN` (the address has an account: the page's
+  `hasAccount` branch is the right door); **400** `VALIDATION` (in the
+  envelope); **429**.
 
 ### Unchanged
 
@@ -246,7 +255,7 @@ The states the page has today stay. The changes:
 | State | Shows |
 | --- | --- |
 | No session, the address has an account | "Te invitaron a {negocio}", "Como {rol}.", "Correo: {email}" as text; "Entrar con huella o rostro" (where supported), then "o con un código"; "Enviarme un código" → `CodeInput` + "Entrar"; no password; no "Olvidé mi contraseña" |
-| No session, no account | "Tu nombre" + "Crear cuenta y entrar" → `accept-new` → `/welcome?next=/` |
+| No session, no account | Step 1: "Correo: {email}" as text, "Tu nombre" + "Continuar", which sends a código to the invited address. Step 2: "Te enviamos un código a {email}. Vence en 10 minutos.", `CodeInput` + "Crear cuenta" → `accept-new {name, otp}` → `/welcome?next=/`; "Reenviar código" (confirms with "Código reenviado"); "Corregir mi nombre" back to step 1 with the name kept. A wrong, expired or exhausted código reads as on every door; `EMAIL_TAKEN` reloads the preview, which then shows the account branch (D9 as amended 2026-10-03) |
 | Signed in with the invited address | accepts on sight (unchanged) |
 | Signed in with another address, including after a key of another account | "Entraste como {email}, y esta invitación fue enviada a otro correo." + "Entrar con el correo invitado" (unchanged, FR-018) |
 | Expired, gone | unchanged |

@@ -421,27 +421,52 @@ unchanged: status, business, role, email and `hasAccount`.
     text, never typed), then `sign-in/email-otp`, then the same acceptance.
   - Both end in `acceptInvitation` and `setActiveBusiness`, as today, then
     `/welcome?next=/`, so the activation is offered after a código.
-- **Without an account.** `POST /businesses/invitations/:id/accept-new`
-  takes `{name}` and no password. The invitation proves the inbox (D14), so
-  the server:
-  1. deletes any live sign-in código for that address (the plugin consumes
-     one row per identifier, and a stray row would make the next step fail —
-     the same care as better-auth D16's code);
-  2. mints a código with `auth.api.createVerificationOTP` (server-only,
-     routes.mjs line 121);
-  3. consumes it at once with `auth.api.signInEmailOTP({email, otp, name},
-     returnHeaders)`. The user is born verified and holds a session;
-  4. accepts and activates with those cookies, as today;
-  5. forwards the cookies.
+- **Without an account** (amended 2026-10-03, spec Clarifications Q5).
+  The page asks for the name, then sends a código to the invited address
+  (`send-verification-otp`, shown as text, never typed — the same call as
+  the account branch) and asks for it.
+  `POST /businesses/invitations/:id/accept-new` takes `{name, otp}`, and the
+  server:
+  1. checks the invitation (pending, unexpired), then refuses an address
+     that has an account (`EMAIL_TAKEN`: the page's `hasAccount` branch is
+     the right door — the preview already says so to the link's holder);
+  2. signs in with `auth.api.signInEmailOTP({email, otp, name},
+     returnHeaders)`. The user is born verified, named, and holds a
+     session; the plugin's refusals (`INVALID_OTP`, `OTP_EXPIRED`,
+     `TOO_MANY_ATTEMPTS`) are carried through the envelope, as the store
+     acceptance does (D10);
+  3. accepts and activates with those cookies, as before. If the
+     invitation died in between, the account stays — its owner proved the
+     inbox, so it is theirs, as a registration's would be — the cookies are
+     forwarded, and the answer is `INVITATION_NOT_FOUND`;
+  4. forwards the cookies.
   The page then goes to `/welcome?next=/`, where the name is already set.
+
+  *Why the amendment*: the first version minted a código on the server
+  (`createVerificationOTP`) and consumed it at once, because "the invitation
+  proves the inbox (D14)". It does not: the invitation's id is the route's
+  key, and the panel hands it to the inviter (`inviteMember`'s answer) and
+  to every owner and admin (`listMembers`' pending list), as does Better
+  Auth's `list-invitations`. Anyone who could send an invitation could open
+  the account of any address without one, add a key, and keep it after the
+  real person registered — FR-005 opens the existing account without a
+  word, and no password reset is left to end the sessions (adversarial
+  review, 2026-10-02, reproduced with this feature's own tests). A código
+  makes the inbox the proof. With it, no separate refusal of an operator's
+  address is needed either: whoever types the código holds that inbox, and
+  an operator may be a business's member.
 - **"Olvidé mi contraseña" leaves.** The bug fix `invitee-lands-own-business`
   keeps its point: the código is asked here, so the invitee never leaves.
 
 **Alternatives considered**:
 - Create the user and the session through `internalAdapter` and set the
   cookie by hand. Rejected: signing Better Auth's cookie ourselves couples us
-  to its cookie format. Minting a código and consuming it goes through the
-  plugin's own door.
+  to its cookie format.
+- (2026-10-03) Keep the page to one step with a secret carried only by the
+  invitation email's link, stored hashed and never shown to the sender.
+  Rejected by the creator (Q5): a new stored secret per invitation, and
+  every invitation already sent would stop working for a new account; the
+  código is the door every other screen already has.
 
 ---
 

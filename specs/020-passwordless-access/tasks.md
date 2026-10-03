@@ -747,6 +747,54 @@ and their tests pass.
 
 ---
 
+## Phase 11: The adversarial review's fixes (2026-10-02/03)
+
+**Purpose**: an adversarial review of the whole feature (five dimensions,
+each finding challenged by a skeptic) confirmed 38 findings. One changed the
+design (T086, spec Clarifications Q5); the rest fix what the build got
+wrong. The creator chose, on 2026-10-03, one PR for the whole feature: the
+split into PR 1 and PR 2 only waited on the notice to the pilot's
+shopkeepers (T056), which is given.
+
+- [ ] T078 [US6] `POST /store/sign-in` answers as fast for every phone
+  (FR-033, SC-006): a phone no store names still runs the plugin's código
+  check against an address nobody could predict, and every refusal waits
+  for a floor before it answers. `sendSignInCode` builds the auth instance
+  in both branches. Contract updated (`contracts/store-access.md`).
+- [ ] T079 [US6] The store acceptance undoes the user it bore on any error
+  before the store is linked, not only when the link fails (D10, D5).
+- [ ] T080 The sweep's deletes carry their own predicates, so a user
+  verified between its read and its delete keeps everything (D5).
+- [ ] T081 [US4] `accept-new`'s rejected body answers in the envelope
+  (`VALIDATION`), and its test reads the code.
+- [ ] T082 [US5] [US6] Both apps' step-up: it opens only once the código
+  was sent, and says a failed send, a lost signal and an unknown failure
+  as such; the panel's keeps the active business; "Quitar" on the key just
+  activated brings "Activar" back. `KeysCard` grows those states.
+- [ ] T083 [US6] The store invitation names the fingerprint or face only
+  where the device supports it (FR-015).
+- [ ] T084 [US1] [US2] [US4] The panel's screens: a name over 80
+  characters is named on screen; an address the plugin refuses is named;
+  `/welcome` does not send a just-named person back to itself, skips the
+  offer on a session older than a day or for a store or suspended account,
+  and does not read a failed session read as signed out; the invitation
+  page is never stuck after a failed acceptance.
+- [ ] T085 The tests the review found vacuous or missing: FR-006 on the
+  invitation page, the stored hash's shape, `/dev/code` on a real address
+  with `.invalid` inside, the limiters of the two código-checking routes of
+  ours, `OTP_EXPIRED` on the store routes, the deferred send, resends that
+  must send, the ceremony inside the click, assertions that ran before the
+  router rendered, the ui suite's timezone, and the passkey layer's phone
+  door racing the deferred send.
+- [ ] T086 [US4] The invitee without an account proves the inbox with a
+  código (spec Clarifications Q5, FR-019; research D9 as amended;
+  `contracts/panel-access.md`): `accept-new {name, otp}` signs in through
+  `signInEmailOTP` with the typed código; the page asks for the name, sends
+  the código to the invited address, and asks for it; the API, component,
+  browser, design and passkey layers follow.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -858,6 +906,11 @@ sweep leaves store passwords alone.
 
 Each PR leaves `dev` whole when it merges. Merge to `main` deploys dev, and
 a tag deploys prod (CLAUDE.md). Nothing ships from a local machine.
+
+*Amended 2026-10-03*: the creator chose one PR for the whole feature. The
+notice was given (T056) before PR 1 was opened, so nothing is left to wait
+on, and the review's fixes (Phase 11) touch both halves. PR 1's gate (T055)
+stays recorded as run; T076 is the gate of the one PR.
 
 ---
 

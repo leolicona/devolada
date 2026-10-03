@@ -809,6 +809,16 @@ shopkeepers (T056), which is given.
   one refusal, and reads the account born verified and named. The código
   refusals of both doors live in `auth/otp-refusal.ts`.
 
+- [ ] T087 The final review of the fixes (2026-10-03, three dimensions, two
+  skeptics each; eight findings, none above minor): the public código door
+  folds its refusals (research D10's residual recorded for the creator); the
+  floor's timing test holds on the clock the floor reads; the invitation
+  page names a failure after the account's birth as an acceptance failure,
+  keeps the last good preview on a failed refetch, and goes on when the
+  business is already the person's; `ListError` declares its size, and
+  `/welcome`'s retry is 48 px; the step-up's failed business switch is
+  tested.
+
 ---
 
 ## Dependencies & Execution Order

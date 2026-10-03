@@ -42,10 +42,16 @@ account does not exist yet (D1).
 
 - **200** `{ "token": "…", "user": { "id", "email", "name", "emailVerified": true, … } }`
   and the session cookie. When no account existed, one is born verified.
-- **400** `INVALID_OTP` (wrong, or no live código), `OTP_EXPIRED` (older than
-  ten minutes); **403** `TOO_MANY_ATTEMPTS` (the third wrong try killed it).
-  The screens show one message for the three: "El código no es válido o ya
+- **400** `INVALID_OTP` for every refusal of the código: a wrong one, none
+  live, one older than ten minutes, one whose three tries are spent. The
+  plugin's own `OTP_EXPIRED` and `TOO_MANY_ATTEMPTS` are folded into it at
+  our `/auth/*` mount (adversarial review, 2026-10-03): they exist only for
+  an address that holds a código, and the store's phone door writes one
+  under the store's email, so passing them through let four tries here
+  confirm which phone belongs to which store (FR-033, SC-006). The screens
+  already showed one message for the three: "El código no es válido o ya
   venció. Reenvíalo e intenta otra vez." (better-auth's UI contract).
+  Server calls (`accept-new`, the store acceptance) keep the plugin's words.
 - **429**: 5 per 60 s per address (D3).
 
 ### `POST /auth/update-user`

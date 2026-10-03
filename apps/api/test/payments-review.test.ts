@@ -31,6 +31,11 @@ const json = (body: unknown) => [200, JSON.stringify(body), { headers: { "Conten
 /* PATCH + formas + registrar + the verify lookup: the reconnection the
    accepted hypothesis dispatches */
 function mockDispatch() {
+  /* bug: transferred-invoice-paid — the stored invoice is asked about
+     before any money moves (the detail route's measured shape) */
+  wh()
+    .intercept({ method: "GET", path: "/api/facturas/42/" })
+    .reply(...json({ id_factura: 42, estado: "Pendiente de Pago" }));
   wh()
     .intercept({ method: "PATCH", path: "/api/clientes/6/" })
     .reply(...json({ id_servicio: 6, auto_activar_servicio: true }));

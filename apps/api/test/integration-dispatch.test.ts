@@ -70,6 +70,11 @@ function mockPendingInvoices(times = 1) {
    when the router was actually asked. */
 function mockDispatch(opts: { verify?: boolean; formas?: boolean } = {}) {
   const captured: { accion?: number; totalCobrado?: number } = {};
+  /* bug: transferred-invoice-paid — the invoice is asked about before any
+     money moves (the detail route's measured shape) */
+  wh()
+    .intercept({ method: "GET", path: "/api/facturas/42/" })
+    .reply(...json({ id_factura: 42, estado: "Pendiente de Pago" }));
   wh()
     .intercept({ method: "PATCH", path: "/api/clientes/6/" })
     .reply(...json({ id_servicio: 6, auto_activar_servicio: true }));

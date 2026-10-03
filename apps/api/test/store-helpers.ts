@@ -235,6 +235,12 @@ export function mockAction(
 ) {
   const captured: { accion?: number; totalCobrado?: number; formaPago?: number; referencia?: string } = {};
   const invoiceId = opts.invoiceId ?? 42;
+  /* bug: transferred-invoice-paid — the invoice the record chose is asked
+     about before any money moves (the detail route's measured shape) */
+  fetchMock
+    .get(WISPHUB)
+    .intercept({ method: "GET", path: `/api/facturas/${invoiceId}/` })
+    .reply(...json({ id_factura: invoiceId, estado: "Pendiente de Pago" }));
   fetchMock
     .get(WISPHUB)
     .intercept({ method: "PATCH", path: (p) => /^\/api\/clientes\/\d+\/$/.test(p) })

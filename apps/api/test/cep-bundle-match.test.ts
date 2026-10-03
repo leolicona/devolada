@@ -111,6 +111,9 @@ function mockConfirmation(usuario = "cliente@wifiplus", opts: { again?: boolean 
   wh()
     .intercept({ method: "GET", path: (p) => p.startsWith("/api/facturas/?") && p.includes("estado=1") })
     .reply(...json({ next: null, count: 1, results: [{ id_factura: 42, cliente: { usuario }, total: 1.5 }] }));
+  /* bug: transferred-invoice-paid — the invoice is asked about before any
+     money moves (the detail route's measured shape) */
+  wh().intercept({ method: "GET", path: "/api/facturas/42/" }).reply(...json({ id_factura: 42, estado: "Pendiente de Pago" }));
   wh().intercept({ method: "PATCH", path: "/api/clientes/6/" }).reply(...json({ id_servicio: 6, auto_activar_servicio: true }));
   if (!opts.again) {
     wh()

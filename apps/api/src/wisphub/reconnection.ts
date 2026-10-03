@@ -39,6 +39,29 @@ export type RecordContext = {
   methodsSeenAt: number | null;
 };
 
+/* bug: transferred-invoice-paid — the invoice a payment should land on,
+   given the one chosen earlier. The chosen one stays while WispHub says
+   it can take the payment: pending, paid (D8's 422 then says "already
+   landed") or unknown (the old behaviour). When the debt is gone from
+   it, the payment follows the debt to the customer's oldest open invoice
+   — the rule `debtOf` picks by — read fresh through the balance door
+   (cobros-in-links D10), which lists open invoices only, never a moved
+   one (measured 2026-10-01). The chosen id is left out whatever the door
+   says: WispHub just said it no longer carries the debt. None open is
+   null, debt-truth D15's empty vehicle, as for a customer with nothing
+   pending. The door is asked with the id of the record read now, as
+   `customerDebt` asks it: a stored id is a cache (direct-payment D5). */
+async function invoiceToPay(wisphub: WispHub, usuario: string, invoiceId: number): Promise<number | null> {
+  if ((await wisphub.invoiceState(invoiceId)) !== "gone") return invoiceId;
+  const record = await wisphub.getCustomer(usuario);
+  /* Gone from WispHub as well: there is nowhere to send the money. The
+     queue retries and ends `failed` for the business to see — never a
+     payment on an invoice that no longer carries the debt. */
+  if (!record) throw new WispHubError("WISPHUB_UNAVAILABLE", "customer gone while its invoice moved");
+  const open = (await wisphub.openInvoicesOf(record.wisphubId, record.usuario)).filter((f) => f.invoiceId !== invoiceId);
+  return open.length ? Math.min(...open.map((f) => f.invoiceId)) : null;
+}
+
 export async function attemptReconnection(
   wisphub: WispHub,
   /* The tenant: its id keys the payment-method cache (provider-latency
@@ -62,6 +85,24 @@ export async function attemptReconnection(
   let { invoiceId, paymentRegistered } = state;
   try {
     if (!paymentRegistered) {
+      /* bug: transferred-invoice-paid — a stored invoice is asked about
+         before anything is written: WispHub takes a payment on an invoice
+         whose debt moved to another (no 422 stops it, unlike a paid one).
+         When the debt left it, the new id reaches the row BEFORE any money
+         is registered on it: this attempt writes nothing and answers
+         `queued` with that id, every caller keeps the id an attempt
+         answers, and the queue's next attempt pays it — a minute later
+         when this was the first. A retry after a lost answer then meets
+         that same invoice, paid, and D8's 422 keeps its meaning. Measured
+         2026-10-01: WispHub never moves a paid invoice, so a moved one is
+         never a payment of Devolada's own. */
+      if (invoiceId !== null) {
+        const payable = await invoiceToPay(wisphub, customer.usuario, invoiceId);
+        if (payable !== invoiceId) {
+          return { status: "queued", invoiceId: payable, paymentRegistered: false, error: null };
+        }
+      }
+
       /* bug: wisphub-payment-utc-time — on the ISP's wall clock, because
          WispHub reads a date without a zone as its tenant's local time.
          This assumes the tenant's WispHub runs in the zone the ISP saved
@@ -93,8 +134,8 @@ export async function attemptReconnection(
       const method = devolada ?? cashMethodOf(methods);
 
       /* D1 (pays TD-009): reuse before creating. The id we already
-         stored wins; otherwise ask WispHub for a pending one; only then
-         create. */
+         stored wins — while the debt is still on it (above); otherwise ask
+         WispHub for a pending one; only then create. */
       if (invoiceId === null) {
         invoiceId = await wisphub.findPendingInvoiceId(customer.usuario, now);
       }

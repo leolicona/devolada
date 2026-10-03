@@ -120,12 +120,23 @@ function mockPendingInvoices(results: unknown[] = [{ id_factura: 42, cliente: { 
 const mockAutoActivate = () =>
   wh().intercept({ method: "PATCH", path: "/api/clientes/6/" }).reply(...json({ id_servicio: 6, auto_activar_servicio: true }));
 
-/* A recording that lands and reconnects: the opt-in, the methods, the
-   payment, the verify */
+/* bug: transferred-invoice-paid — an attempt that starts from a stored
+   invoice asks about it first, once per attempt; still pending here (the
+   detail route's measured shape) */
+function mockInvoiceOpen(invoiceId: number, times = 1) {
+  wh()
+    .intercept({ method: "GET", path: `/api/facturas/${invoiceId}/` })
+    .reply(...json({ id_factura: invoiceId, estado: "Pendiente de Pago" }))
+    .times(times);
+}
+
+/* A recording that lands and reconnects: the invoice's own look, the
+   opt-in, the methods, the payment, the verify */
 function mockRecording(
   methods: Method[],
   opts: { invoiceId?: number; verify?: boolean; answers?: { status: number; body: unknown }[]; calls?: number } = {},
 ) {
+  mockInvoiceOpen(opts.invoiceId ?? 42);
   mockAutoActivate();
   mockMethods(methods);
   const sent = mockRegister(opts.invoiceId ?? 42, opts.answers, opts.calls);
@@ -325,6 +336,7 @@ describe("payment-method-per-channel US1: the business downloads what came in by
 
   it("D6: a 400 naming another field is not a missing method — one call, and the action stays queued", async () => {
     const { row } = await seedQueued();
+    mockInvoiceOpen(42);
     mockAutoActivate();
     mockMethods([EFECTIVO, SPEI]);
     const sent = mockRegister(42, [{ status: 400, body: { total_cobrado: ["Monto inválido."] } }]);
@@ -470,6 +482,8 @@ describe("payment-method-per-channel US2: the business downloads what its networ
     const south = await seedStore({ status: "active", name: "Tienda Sur" });
     await queuedStorePayment(business, north);
     await queuedStorePayment(business, south);
+    /* two attempts, each asking about its invoice first */
+    mockInvoiceOpen(42, 2);
     /* one list read: the second payment is answered by the cache (D3) */
     mockAutoActivate();
     mockAutoActivate();
@@ -594,6 +608,7 @@ describe("payment-method-per-channel US3: each recorded payment says where it ca
     const store = await seedStore({ status: "active" });
     await queuedStorePayment(business, store);
     await seedQueued({ customerName: "Janely Reyes", customerPhone: "5518264039" }, business);
+    mockInvoiceOpen(42, 2);
     mockAutoActivate();
     mockAutoActivate();
     mockMethods([EFECTIVO, SPEI, NETWORK]);
@@ -720,6 +735,7 @@ describe("payment-method-per-channel US4: the business sets up its methods befor
 
       /* the next payment: the list the screen read, under its new stamp */
       await seedQueued({}, business);
+      mockInvoiceOpen(42);
       mockAutoActivate();
       const next = mockRegister(42);
       mockCustomerLookup("Activo");
@@ -902,6 +918,7 @@ describe("payment-method-per-channel US4: the business sets up its methods befor
          it here under the new stamp — or, elsewhere, the next payment
          reads it: either way never the old account's ids */
       await seedQueued({}, business);
+      mockInvoiceOpen(42);
       mockAutoActivate();
       const next = mockRegister(42);
       mockCustomerLookup("Activo");

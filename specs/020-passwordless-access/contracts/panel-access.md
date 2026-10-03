@@ -223,8 +223,15 @@ No message ever says an address is taken (FR-005).
 
 ### `/welcome?next=`
 
-A session is required; without one, it goes to `/login?next=…`. The screen
-decides before it paints:
+A session is required; without one, it goes to `/login?next=…`. A session
+read that fails (a lost signal, a server error) is not "no session": it
+says "No pudimos cargar tu sesión." with "Reintentar", and never sends a
+person who just typed their código back to `/login`. The screen reads the
+actor as the Shell does: a store's account (`WRONG_ACTOR`) or a suspended
+one (`ACCOUNT_SUSPENDED`) goes straight on to `next`, where the Shell's own
+screens answer, and is never offered a key; `NO_BUSINESS`,
+`NO_ACTIVE_BUSINESS` and `MEMBERSHIP_REVOKED` are offered as usual
+(adversarial review, 2026-10-02). It then decides before it paints:
 
 1. **The user has no name.** "¿Cómo te llamas?", with "Tu nombre" and
    "Continuar" (`update-user`). Then it goes on to 2.
@@ -247,6 +254,12 @@ decides before it paints:
    - On success: "Listo." for a beat, then it goes on.
 3. Otherwise, or after 2, it goes to `next` (validated, better-auth D12) or
    `/`.
+
+A session a day old or older is not offered the key — its ceremony would
+answer `SESSION_NOT_FRESH`, and only Seguridad has the step-up (D8) — and
+if the server answers that anyway, the screen goes on. After the name is
+saved, the person's cached data carries it before the screen moves on, so
+the Shell never sends a just-named person back here.
 
 ### `/invitaciones/:invitationId`
 
@@ -275,8 +288,22 @@ The states the page has today stay. The changes:
   Este dispositivo ya puede entrar con huella o rostro.", and the new key
   joins the list. On a cancel or failure: "No se pudo activar. Intenta de
   nuevo.", with no password to fall back on (FR-030).
+  The step-up (adversarial review, 2026-10-02):
+  - opens only once its código was sent; while it goes, the button says it
+    is sending it, inside a pending region. A failed send keeps «Activar»
+    and says "No pudimos enviar el código. Intenta de nuevo." (or the 429's
+    "Demasiados intentos. Espera un momento e intenta de nuevo.");
+  - a try that fails for another reason than the código says "No pudimos
+    revisar el código. Intenta de nuevo." and keeps the digits; only a
+    refused código reads "El código no es válido o ya venció…";
+  - the código opens a new session, so the business the person was working
+    in is set again on it before the ceremony: a member of several
+    businesses stays where they were.
+  - "Quitar" on the key this device just activated brings «Activar» back.
 - **"Cerrar sesión en los demás dispositivos"**, a secondary button. After
-  it: "Listo. Solo este dispositivo sigue con tu sesión abierta." (D11).
+  it: "Listo. Solo este dispositivo sigue con tu sesión abierta." (D11). A
+  close that fails says "No pudimos cerrar las demás sesiones. Intenta de
+  nuevo." and keeps the button (adversarial review, 2026-10-02).
 
 Cuenta's identity card now says: "Para cambiar tu nombre, escríbenos. Pronto
 podrás hacerlo desde aquí." (FR-030). Its rail row "Entrar con huella o

@@ -206,7 +206,13 @@ differences:
   with "Confirmar" and "Cancelar";
 - the list (new here, FR-036), "Quitar", and "Cerrar sesión en los demás
   dispositivos";
-- 48 px controls at full width, where the panel's are 40 px.
+- 48 px controls at full width, where the panel's are 40 px;
+- the step-up, the failed close and "Quitar" behave as the panel's
+  (panel-access, Seguridad, as amended by the adversarial review,
+  2026-10-02), with one word more: a lost signal, on the send or on the
+  try, says "Sin conexión. Revisa tu internet e intenta de nuevo." and
+  keeps the código. A store session holds no business, so there is none to
+  set again.
 
 The copy drops "Tu contraseña sigue funcionando" (FR-035).
 

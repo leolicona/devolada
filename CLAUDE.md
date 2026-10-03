@@ -115,7 +115,7 @@ suffixed copies). The API's optional secrets, each degrading when unset
 | `WEBHOOK_SIGNING_KEYS` | webhook deliveries are recorded but never attempted (`SIGNING_KEY_MISSING` on the row, empty JWKS); mint one with the one-liner in `specs/003-automated-collections-api/quickstart.md` |
 | `RESEND_API_KEY` | the OTP is logged instead of emailed |
 | `WISPHUB_API_KEY` | the dev seed connects no provider |
-| `APICEP_DEADLINE_MS`, `WEBHOOK_DELIVERY_TIMEOUT_MS`, `READER_TIMEOUT_MS` | 25 s, 10 s and 8 s — test knobs, never set by a deploy |
+| `APICEP_DEADLINE_MS`, `WEBHOOK_DELIVERY_TIMEOUT_MS`, `READER_TIMEOUT_MS`, `STORE_SIGN_IN_FLOOR_MS` | 25 s, 10 s, 8 s and 1 s (the least a refused store sign-in waits, so timing cannot tell a store's phone from a stranger's — passwordless-access FR-033) — test knobs, never set by a deploy |
 
 `BETTER_AUTH_SECRET` is the one exception — CI refuses to deploy without it.
 
